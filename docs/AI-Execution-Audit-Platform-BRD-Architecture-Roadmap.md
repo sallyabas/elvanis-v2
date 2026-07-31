@@ -70,6 +70,12 @@ This is a genuinely distinct module from Tender Readiness, not a duplicate — w
 
 **Sequencing:** research now (cheap, externally documented — same logic as Tender Readiness and AI Reliability Audit), build alongside or shortly after those two in V1/V2, since it reuses the same intake/reviewer/report infrastructure. Not gated on a live client trigger, for the same reason those two aren't.
 
+**Confirmed design (2026-07-31) — branches by applicable regulation, not one flat checklist:** the module must read `companies.registration_country`/`uae_free_zone`/`customer_market_countries` (§1.8c) and branch its checklist/report logic accordingly, since a company can be subject to more than one regime simultaneously:
+- **GDPR** (build first — relevant now to UK/NL customer markets) — triggered by `customer_market_countries` including an EU/UK market.
+- **Saudi PDPL** — triggered by `customer_market_countries` including Saudi Arabia (extraterritorial, same as GDPR/EU AI Act).
+- **UAE's layered regime** — triggered by `registration_country` = UAE: federal PDPL always applies, and DIFC Regulation 10 additionally applies only if `uae_free_zone` = difc. ADGM-registered companies get ADGM DPR 2021 instead.
+Assuming a single law applies (e.g. building only a GDPR checklist and treating it as universal) would misrepresent a genuinely multi-jurisdiction company's actual exposure — the whole reason the schema was split in the first place.
+
 ### 1.8c Multi-Jurisdiction Regulatory Landscape (research pass, 2026-07-31)
 Feeds the Tender Readiness, AI & Governance, and Data Protection Compliance frameworks. Verified against primary/secondary sources as of this date — Saudi content in particular is actively evolving; re-verify before Gulf entry rather than treating it as settled.
 

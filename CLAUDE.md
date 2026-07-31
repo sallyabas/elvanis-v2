@@ -35,9 +35,9 @@ Cash Flow/Margin Efficiency · Growth/Revenue Efficiency · Churn/Retention · E
 Built on the shared core engine (evidence intake, reviewer workspace, report generator) once it's stable — not before, not in parallel:
 - **Tender Readiness** — AI Act risk classification, procurement questionnaire prep
 - **AI Reliability Audit** — adversarial testing against documented real-world AI failure patterns
-- **Data Protection Compliance** — GDPR first (current UK/NL market), PDPL extension deferred until Gulf entry is real
+- **Data Protection Compliance** — standalone, same commercial pattern as Tender Readiness (post-audit by default, standalone if externally triggered). GDPR first (current UK/NL market), build in that order. Confirmed design (2026-07-31): branches by applicable regulation using `companies.registration_country`/`uae_free_zone`/`customer_market_countries` (§1.8c) — GDPR, Saudi PDPL, and UAE's layered regime (federal PDPL + DIFC Reg 10 if DIFC-registered) — never a single flat checklist assuming one law applies. A company can be subject to more than one regime at once.
 
-Each has its own intake, findings schema, report template, and standalone entry page.
+Each has its own intake, findings schema, report template, and standalone entry page. Not started yet — still queued behind the two remaining core lenses (Commercial/Market, Product/Customer) per the explicit sequencing rule: these three modules wait until the five-lens core engine is fully done, not built in parallel.
 
 ## Information architecture — four separate pages, not one
 - **Account Settings** — the person (name/email/password/notifications/billing)
