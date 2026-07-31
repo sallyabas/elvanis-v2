@@ -70,6 +70,30 @@ This is a genuinely distinct module from Tender Readiness, not a duplicate — w
 
 **Sequencing:** research now (cheap, externally documented — same logic as Tender Readiness and AI Reliability Audit), build alongside or shortly after those two in V1/V2, since it reuses the same intake/reviewer/report infrastructure. Not gated on a live client trigger, for the same reason those two aren't.
 
+### 1.8c Multi-Jurisdiction Regulatory Landscape (research pass, 2026-07-31)
+Feeds the Tender Readiness, AI & Governance, and Data Protection Compliance frameworks. Verified against primary/secondary sources as of this date — Saudi content in particular is actively evolving; re-verify before Gulf entry rather than treating it as settled.
+
+**EU (current market, UK/NL sequencing):**
+- EU AI Act entered into force 1 August 2024, fully applicable 2 August 2026. Four-tier risk classification: unacceptable (prohibited practices, applicable since 2 February 2025) / high-risk (8 Annex III categories: biometric ID, critical infrastructure, education, employment, essential services access, law enforcement, migration/border control, administration of justice) / limited / minimal.
+- GPAI (general-purpose AI model) provider obligations applicable since 2 August 2025.
+- High-risk Annex III systems' compliance deadline deferred from 2 August 2026 to 2 December 2027 under the Digital Omnibus (provisional agreement 7 May 2026, pending formal adoption — not yet finalized).
+- GDPR is already fully in force — drives the Data Protection Compliance module's GDPR-first build (§1.8a).
+
+**UAE (Gulf entry, third in sequencing):** no single "UAE AI Act" — a layered, jurisdiction-dependent regime. Do not build around the idea of one unified law.
+- Federal PDPL: binding UAE-wide, full compliance deadline 1 January 2027.
+- DIFC Regulation 10 (AI-specific): applies only to DIFC-registered entities, full enforcement since January 2026.
+- ADGM Data Protection Regulations 2021: separate free zone, GDPR-aligned, general privacy regime — no AI-specific equivalent to DIFC Reg 10, but existing privacy-by-design/impact-assessment requirements apply to AI systems.
+- UAE AI Charter (June 2024): non-binding, principles-based reference point, not enforceable law.
+- Federal Authority for AI and Data, established 14 June 2026: consolidates the UAE AI Office, TDRA's digital-government sector, and the Emirates Data Office under one body reporting to Cabinet. Watch for binding rules to emerge from here before Gulf entry.
+
+**Saudi Arabia (Gulf entry, third in sequencing):**
+- SDAIA AI Ethics Principles (September 2023, v1.0): 7 principles — Fairness, Privacy & Security, Humanity, Social & Environmental Benefits, Reliability & Safety, Transparency & Explainability, Accountability & Responsibility. Enforcement is indirect: via PDPL when personal data is involved, sectoral regulators, and government procurement consequences — not a standalone AI statute with its own penalty regime.
+- April 2026: SDAIA published a National AI Risk Management Framework (live, not draft) — the first national-level guide for identifying/assessing/treating/monitoring AI risk.
+- Separately, a draft "Responsible AI Policy" (public consultation via the Istitlaa platform, closed 3 May 2026, not yet final) introduces its own 4-tier risk framework: critical/high/limited/low.
+- These two SDAIA artifacts are related but distinct, and how they'll ultimately combine isn't fully resolved from available sources — re-verify before Gulf entry. This is layered on top of, not a replacement for, Saudi PDPL (§1.8 forward-looking note).
+
+**Architecture implication — jurisdiction is two signals, not one:** EU AI Act, GDPR, and Saudi PDPL are extraterritorial (triggered by where the company's *customers/end-users* are). UAE's DIFC Regulation 10 and ADGM rules are triggered by where the *company itself is registered*. Both can apply simultaneously to the same company. `companies.country` was split into `registration_country` (+ `uae_free_zone` sub-field for mainland/DIFC/ADGM) and `customer_market_countries` (multi-select) — see §3 schema. Tender Readiness / AI & Governance / Data Protection Compliance checklist logic should read registration jurisdiction for UAE-specific rules and customer market countries for EU AI Act/GDPR/Saudi PDPL.
+
 ### 1.9 Service Layer (human touchpoints alongside the software)
 The product is software-first, but several human-delivered moments are part of the actual offer, not incidental to it:
 - **Guided onboarding** — helping a client frame their goal and gather better evidence
@@ -140,8 +164,12 @@ users
 
 companies
   id, user_id (fk), name, website_url, social_links (jsonb), industry, business_model (B2B/B2C),
-  country, employee_count, stage, revenue_range_band, customer_type, main_tools_stack (jsonb),
-  team_structure_summary, created_at, updated_at, privacy_acknowledged_at
+  registration_country, uae_free_zone (mainland/difc/adgm, only meaningful when registration_country = UAE),
+  customer_market_countries (text[]), employee_count, stage, revenue_range_band, customer_type,
+  main_tools_stack (jsonb), team_structure_summary, created_at, updated_at, privacy_acknowledged_at
+  -- country split into two independent jurisdiction signals (§1.8c): registration_country drives
+  -- UAE DIFC/ADGM-style rules, customer_market_countries drives extraterritorial regimes
+  -- (EU AI Act/GDPR/Saudi PDPL) — both can apply to the same company simultaneously
 
 company_profile_history
   id, company_id (fk), changed_field, old_value, new_value, changed_at
