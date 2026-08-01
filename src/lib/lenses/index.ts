@@ -1,5 +1,4 @@
 import { financialLens } from "./financial";
-import { commercialLens } from "./commercial";
 import { executionLens } from "./execution";
 import { productLens } from "./product";
 import type { LensModule, LensType } from "./types";
@@ -14,6 +13,7 @@ export type {
   CompanyProfileForLens,
   EvidenceFieldInput,
   FinancialImpact,
+  FindingOrigin,
   LensFinding,
   LensDraftResult,
   LensDraftInput,
@@ -35,15 +35,20 @@ export {
 } from "./ai-governance-framework";
 export type { GovernanceDimensionKey, ComputedDimensionScore } from "./ai-governance-framework";
 
+export { commercialLens } from "./commercial";
+export type { CommercialSelfReport, CommercialDraftInput, CommercialDraftResult } from "./commercial";
+export { runCompetitorResearch } from "./commercial-research";
+export type { IndependentResearchFinding } from "./commercial-research";
+
 /**
- * Financial, Commercial, Execution, and Product share one pure evidence-in
- * shape (LensModule/LensDraftInput). AI & Governance does not — it branches
- * on mode and has its own input/output types (see ./ai-governance) — so
- * it's exported separately above rather than forced into this registry.
+ * Financial, Execution, and Product share one pure evidence-in shape
+ * (LensModule/LensDraftInput). AI & Governance and Commercial do not — both
+ * branch/hybridize and have their own input/output types (see
+ * ./ai-governance and ./commercial) — so they're exported separately above
+ * rather than forced into this registry.
  */
-export const lensRegistry: Record<Exclude<LensType, "ai_governance">, LensModule> = {
+export const lensRegistry: Record<Exclude<LensType, "ai_governance" | "commercial">, LensModule> = {
   financial: financialLens,
-  commercial: commercialLens,
   execution: executionLens,
   product: productLens,
 };

@@ -77,6 +77,9 @@ export interface FinancialImpact {
   assumptions: string[];
 }
 
+/** Client-facing source tag (spec §2.3a, confirmed 2026-07-31) — currently used by Commercial/Market. */
+export type FindingOrigin = "client_reported" | "ai_independent";
+
 export interface LensFinding {
   findingId: string;
   title: string;
@@ -88,6 +91,8 @@ export interface LensFinding {
   financialImpact: FinancialImpact | null;
   confidenceLevel: ConfidenceLevel;
   isMissingDataFinding: boolean;
+  /** Undefined for lenses where the client-reported-vs-AI-found distinction doesn't apply. */
+  origin?: FindingOrigin;
 }
 
 export interface LensDraftResult {

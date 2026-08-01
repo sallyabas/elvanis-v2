@@ -8,6 +8,7 @@ import { z } from "zod";
 export const confidenceLevelSchema = z.enum(["high", "medium", "low", "insufficient"]);
 export const evidenceSufficiencySchema = z.enum(["sufficient", "partial", "insufficient"]);
 export const goalRelevanceSchema = z.enum(["directly_blocks", "indirectly_affects", "unrelated"]);
+export const findingOriginSchema = z.enum(["client_reported", "ai_independent"]);
 
 export const financialImpactSchema = z
   .object({

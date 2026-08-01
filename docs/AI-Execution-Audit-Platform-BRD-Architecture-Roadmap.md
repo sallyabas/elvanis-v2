@@ -36,6 +36,8 @@ Goal selection → evidence intake (native tool exports or fill-in templates, no
 | Data Protection Compliance (GDPR now, PDPL for Gulf) | Post-audit by default; standalone if triggered | ~£1,500–3,500 |
 | Monthly Execution Office | Recurring, V3, once repeat clients exist | TBD after repeat demand appears |
 
+**Free tier definition (confirmed 2026-07-31):** "free" above means the *first completed audit per company*, however long evidence-gathering takes — not a time-boxed trial. Any full re-audit after that first report is delivered is paid (Execution Sprint / re-audit pricing / eventual Monthly Execution Office). See §2.3a for the submission/SLA mechanics this ties into.
+
 ### 1.6 Success Metrics
 - **V1:** clients say top 3 priorities are credible; financial framing feels useful, not fabricated; at least 1–2 findings per client are immediately actionable; some pilots convert to paid Execution Sprint or Tender Readiness
 - **V2:** reviewer time per audit measurably decreases; clients reuse the dashboard; repeat/re-audit demand appears; retrieval starts drawing on real case history
@@ -122,6 +124,7 @@ This is the "consultation service" layer — it's not a separate product, it's t
 - **Mandatory human review gate, not optional.** A report cannot reach `sent` status without passing through `pending_review` → reviewer `approved`. This is enforced at the database/workflow level, not just a UI convention — there is no code path that delivers a report without that gate.
 - **Business profile is a living record, not a one-time capture.** Company profile, goal, and evidence are all versioned and re-readable — every lens prompt reads the *current* state of the profile at generation time, not a stale copy taken at signup. If a client updates their goal or profile between audits, the next generation reflects that change automatically.
 - **Known-source template library.** Rather than parsing every upload generically, the system maintains a library of recognized export signatures (column headers, file-naming patterns) for common tools (Xero, QuickBooks, HubSpot, Salesforce, Jira, Intercom, Zendesk). A recognized file auto-selects the matching field-mapping template; an unrecognized file falls back to generic parsing + the merge-and-complete page.
+- **No auto-approve mechanism yet, deliberately (confirmed 2026-07-31).** The right granularity for auto-approving findings (per-lens? per-finding-type? per-confidence-threshold?) isn't known yet, and guessing now risks rebuilding later. Every finding still requires mandatory human review, no exceptions — but `lens_findings` captures the data (confidence level, reviewer disposition, client dispute outcomes) that a future auto-approve design will need, so that decision can be made from real patterns later rather than guessed now. See §3 schema.
 
 ### 2.2 Tech Stack
 - **Frontend/Backend:** Next.js (App Router), same as Elvanis
@@ -145,6 +148,16 @@ This is the "consultation service" layer — it's not a separate product, it's t
 11. **Case Library Write** — every completed audit stored/tagged (v1: storage only; v2: retrieval activates)
 12. **Scheduled Jobs (crons)** — re-audit reminder cadence, evidence-completeness nudges, Execution Sprint progress check-ins, Monthly Execution Office refresh triggers
 
+### 2.3a SLA & Submission Flow (confirmed 2026-07-31)
+Expands steps 2, 8, and 9 above with the actual client-facing timing contract.
+
+- **72-hour SLA, shown to the client as a single promise:** "Your report will be ready within 72 hours." The internal two-part breakdown below is never exposed.
+- **Uploading evidence has no clock.** Clients can take whatever time they need gathering evidence before submitting — encourage this, don't rush it.
+- **"Submit for Review" is an explicit action, distinct from uploading**, gated behind a confirmation modal: *"Ready to submit? You'll have 24 hours to edit or add evidence — after that, review begins, and your report will be ready within 72 hours total. This will use your free audit."* (Confirm/Cancel.)
+- **Internal breakdown:** 24-hour edit window after "Submit for Review" (client can still revise/add evidence; no reviewer activity yet) + 48-hour review period, which starts only once the edit window closes. The reviewer notification (step 9) must fire the instant the 24-hour window closes — a `scheduled_jobs` trigger, not something left to a human to notice — so the 48-hour clock starts accurately.
+- **New evidence submitted after a report has already been delivered starts a new, distinct re-audit cycle** — never a silent edit to the sent report. Reuses the existing re-audit workflow/cron (`scheduled_jobs`: `re_audit_reminder`). The original report stays untouched in Reports & History (consistent with the frozen-snapshot principle, §2.5).
+- **Free tier = the first completed audit per company only**, however long evidence-gathering took. Any full re-audit after a report has been delivered is paid (Execution Sprint / re-audit pricing / eventual Monthly Execution Office §1.5) — never free again.
+
 ### 2.4 Module Boundaries
 - **Tender Readiness**, **AI Reliability Audit**, and **Data Protection Compliance** are all built on externally researchable material — none require a live client trigger to build a solid v1. Each has its own intake, findings schema, report template, and standalone entry page, built on the shared core engine once it's stable.
 - **AI Opportunity** is *not* a module — it has no standalone table beyond being an output section linked to a given audit's synthesis result.
@@ -153,7 +166,7 @@ This is the "consultation service" layer — it's not a separate product, it's t
 Recommendation: keep these genuinely separate, not combined into one "profile" page, because they answer different questions and change at different rates.
 
 - **Account Settings** — about the *person* logging in: name, email, password, notification preferences, plan/subscription and billing. Changes rarely, personal, not client-facing content.
-- **Business Profile** — about the *company being diagnosed*: brand name, website URL, social/review links, industry, business model, goals (current + history), tools/stack. This is the living record every lens prompt reads from — it changes occasionally, and its accuracy directly affects diagnosis quality.
+- **Business Profile** — about the *company being diagnosed*: brand name, website URL, social/review links, industry, business model, goals (current + history), tools/stack. This is the living record every lens prompt reads from — it changes occasionally, and its accuracy directly affects diagnosis quality. One company per account for now (V1, confirmed 2026-07-31; DB-enforced, see §3) — no multi-company support yet. This does NOT mean one country: `registration_country`/`uae_free_zone` and `customer_market_countries` are independent and can differ for the same company (e.g. registered in Saudi Arabia, selling to UK customers) — see §1.8c.
 - **Reports & History** — a chronological archive of everything generated for that company: Digital Presence Scan, each Core Audit report (including re-audits), Tender Readiness output, AI Reliability Audit output. Each report is a frozen snapshot, referencing the profile's state *at that time* — not retroactively altered if the profile changes later. This is also where "comparison over time" (V2) naturally lives.
 - **Dashboard** — the current, active view: latest top-3 priorities, roadmap status, active Execution Sprint progress. This is "what matters right now," distinct from the historical archive.
 
@@ -169,13 +182,17 @@ users
   plan_tier, created_at, last_login_at
 
 companies
-  id, user_id (fk), name, website_url, social_links (jsonb), industry, business_model (B2B/B2C),
+  id, user_id (fk, UNIQUE), name, website_url, social_links (jsonb), industry, business_model (B2B/B2C),
   registration_country, uae_free_zone (mainland/difc/adgm, only meaningful when registration_country = UAE),
   customer_market_countries (text[]), employee_count, stage, revenue_range_band, customer_type,
   main_tools_stack (jsonb), team_structure_summary, created_at, updated_at, privacy_acknowledged_at
   -- country split into two independent jurisdiction signals (§1.8c): registration_country drives
   -- UAE DIFC/ADGM-style rules, customer_market_countries drives extraterritorial regimes
-  -- (EU AI Act/GDPR/Saudi PDPL) — both can apply to the same company simultaneously
+  -- (EU AI Act/GDPR/Saudi PDPL) — both can apply to the same company simultaneously, and are
+  -- read independently by any regulatory check — never assume they match
+  -- user_id UNIQUE confirmed 2026-07-31: one company per account for now (V1), enforced at the
+  -- DB level, not just a UI convention — same philosophy as the mandatory review gate. Will need
+  -- removing when multi-company support ships (V2+)
 
 company_profile_history
   id, company_id (fk), changed_field, old_value, new_value, changed_at
@@ -206,7 +223,16 @@ evidence_fields
 lens_findings
   id, company_id (fk), lens, ai_draft (jsonb), reviewer_status (draft/edited/approved/rejected),
   reviewer_notes, confidence_level (high/medium/low/insufficient),
-  is_missing_data_finding (bool), created_at
+  is_missing_data_finding (bool), origin (client_reported/ai_independent, nullable),
+  client_confidence_marking (accurate/not_confident, nullable), is_disputed (bool, default false),
+  dispute_resolution_notes, created_at
+  -- origin/client_confidence_marking/is_disputed/dispute_resolution_notes confirmed 2026-07-31:
+  -- Commercial/Market's hybrid design needs client source-tagging ("you told us this" vs
+  -- "we found this independently") and a dispute flow (client marks an ai_independent finding
+  -- not_confident -> dropped from client view, still surfaced to the reviewer for resolution).
+  -- Pure data capture alongside confidence_level/reviewer_status — feeds a future auto-approve
+  -- design once the right granularity is known; no auto-approve behavior exists yet, and
+  -- mandatory review is unchanged for every finding.
 
 financial_impact_estimates
   id, lens_finding_id (fk), impact_band_low, impact_band_high, currency,
