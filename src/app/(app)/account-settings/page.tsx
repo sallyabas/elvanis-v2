@@ -1,5 +1,61 @@
-// Account Settings — about the person logging in: name, email, password,
-// notification preferences, plan/billing. See spec §2.5 "Account Settings".
-export default function AccountSettingsPage() {
-  return <div>Account Settings</div>;
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { AccountSettingsForm } from "./AccountSettingsForm";
+import type { NotificationPreferences } from "./actions";
+
+const DEFAULT_PREFERENCES: NotificationPreferences = {
+  reportReady: true,
+  reAuditReminder: true,
+  evidenceIncomplete: true,
+};
+
+// Account Settings — about the person, not the business (confirmed
+// 2026-08-04, Priority 3). Real: name, email (display only — it's the
+// sign-in identity, changing it would mean re-verifying a new email, not
+// built here), notification preferences (genuinely gates sending, not
+// just a display toggle — see src/lib/notifications/dispatch.ts).
+//
+// Deliberately NOT built, flagged rather than faked: password management
+// (this app is passwordless throughout, both client and reviewer auth —
+// there is no password to manage) and real billing/subscription changes
+// (no payment provider is integrated anywhere in this codebase — plan is
+// shown, not editable, since there's nothing real to upgrade to yet).
+export default async function AccountSettingsPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/client-login");
+  }
+
+  const { data: profile } = await supabase.from("users").select("name, email, notification_preferences, plan_tier").eq("id", user.id).single();
+
+  const preferences = {
+    ...DEFAULT_PREFERENCES,
+    ...((profile?.notification_preferences as Partial<NotificationPreferences>) ?? {}),
+  };
+
+  return (
+    <div className="mx-auto max-w-2xl px-6 py-10">
+      <h1 className="mb-1 text-2xl font-semibold">Account Settings</h1>
+      <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">Your personal account, not the business.</p>
+
+      <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+        <p className="mb-4 text-sm">
+          <span className="font-medium">Email:</span> {profile?.email ?? user.email}
+          <span className="ml-2 text-xs text-neutral-400">(sign-in identity — not editable here)</span>
+        </p>
+        <AccountSettingsForm initialName={profile?.name ?? ""} initialPreferences={preferences} />
+      </section>
+
+      <section className="rounded-lg border border-neutral-200 bg-white p-5 text-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <p className="mb-1">
+          <span className="font-medium">Plan:</span> {profile?.plan_tier ?? "free"}
+        </p>
+        <p className="text-xs text-neutral-400">Billing management isn&apos;t available yet — no payment provider is connected.</p>
+      </section>
+    </div>
+  );
 }

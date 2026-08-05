@@ -8,6 +8,7 @@ import {
   financialImpactSchema,
   findingOriginSchema,
   goalRelevanceSchema,
+  severitySchema,
 } from "./schemas";
 import type { CompanyProfileForLens, EvidenceSufficiency, FindingOrigin, GoalContext, LensFinding } from "./types";
 
@@ -86,9 +87,15 @@ HARD RULES — violating any of these makes your output unusable:
 2a. A finding is grounded in EITHER "self_report.*" keys OR "independent_research.N" keys — never both. If the client raised something AND independent research corroborates it, that is TWO findings: one citing only self_report.* keys (origin: client_reported), and a separate one citing only independent_research.N keys (origin: ai_independent). Merging them under one origin breaks the client's ability to independently confirm or dispute the ai_independent portion — the entire reason this tagging exists.
 3. Financial impact is always a range with a confidence level and stated assumptions — never a single fake-precise number. Set financialImpact to null unless you can genuinely ground a band (e.g. from a stated lost-deal value or pricing gap).
 4. If evidence is missing or too sparse to analyze, do not guess. Reflect that in evidenceSufficiency and isMissingDataFinding, and lower confidenceLevel to "insufficient" — do not manufacture a finding to fill the gap. A vague qualitative claim is not evidence.
-5. Weigh findings by relevance to the client's stated goal (see goalRelevance), but do not suppress materially important findings just because they're "unrelated" to the goal — surface them, just mark them accordingly.
+5. Weigh findings by relevance to the client's stated goal (see goalRelevance). Use "directly_supports" for a genuinely healthy/positive finding that is materially and directly relevant to the goal (e.g. a competitive position that comfortably outperforms the market, under a goal that competitive strength feeds directly into) — do not force a healthy finding into "directly_blocks" (that's for problems) and never invent a value outside the four listed in the schema below. Do not suppress materially important findings just because they're "unrelated" to the goal — surface them, just mark them accordingly.
 6. Do NOT create a finding about independent research being unavailable or insufficient (e.g. "no independent research was run," "insufficient market research"). That's a fact about our own evidence-sufficiency state, already captured in the top-level "evidenceSufficiency" field — it is not a diagnostic finding about the client's business, and it has no valid "origin" (it isn't grounded in self-report OR independent research). If independentResearch is empty, simply produce zero ai_independent findings and reflect that in evidenceSufficiency — do not manufacture a finding to comment on it.
 7. Output strict JSON matching the schema below. No prose outside the JSON.
+
+FINDING STRUCTURE — four fields must stay distinct, never folded together:
+- "diagnosis": the observation itself — what was actually found, in full. This is the WHAT.
+- "rootCause": the underlying mechanism — WHY this is happening. Must be genuinely causal, not a restatement of the diagnosis. If you don't have enough evidence to explain why, say so honestly rather than inventing a cause.
+- "recommendedAction": the concrete fix — WHAT TO DO about it. Ground it in the actual finding; don't recommend something the evidence doesn't support.
+- "severity": "critical" | "high" | "medium" | "low" — how much this matters to the business if left unaddressed. Independent of confidenceLevel (how sure you are) and independent of goalRelevance (how tied to the stated goal it is) — a finding can be low-confidence and still critical severity, or high-confidence and low severity.
 
 GOAL-RELEVANCE GUIDANCE (typical commercial signals most load-bearing per goal — use judgment, not a rigid lookup):
 - Growth / Revenue Efficiency: competitive win/loss patterns, pricing pressure, market shifts affecting demand
@@ -101,10 +108,13 @@ OUTPUT SCHEMA (JSON object):
   "findings": [
     {
       "title": string,
-      "rootCause": string,
+      "diagnosis": string,             // the observation itself, in full — see FINDING STRUCTURE
+      "rootCause": string,             // the underlying mechanism, not just the symptom — see FINDING STRUCTURE
+      "recommendedAction": string,     // the concrete fix — see FINDING STRUCTURE
+      "severity": "critical" | "high" | "medium" | "low",
       "evidenceCited": string[],       // exact keys only, e.g. ["self_report.pricing_pressure_notes"] or ["independent_research.0", "independent_research.2"]
       "origin": "client_reported" | "ai_independent",
-      "goalRelevance": "directly_blocks" | "indirectly_affects" | "unrelated",
+      "goalRelevance": "directly_blocks" | "directly_supports" | "indirectly_affects" | "unrelated",
       "financialImpact": { "impactBandLow": number, "impactBandHigh": number, "currency": string, "confidenceLevel": "high"|"medium"|"low"|"insufficient", "assumptions": string[] } | null,
       "confidenceLevel": "high" | "medium" | "low" | "insufficient",
       "isMissingDataFinding": boolean
@@ -116,7 +126,10 @@ OUTPUT SCHEMA (JSON object):
 
 const commercialFindingSchema = z.object({
   title: z.string(),
+  diagnosis: z.string(),
   rootCause: z.string(),
+  recommendedAction: z.string(),
+  severity: severitySchema,
   evidenceCited: z.array(z.string()),
   origin: findingOriginSchema,
   goalRelevance: goalRelevanceSchema,
@@ -248,7 +261,10 @@ export const commercialLens = {
     const findings: LensFinding[] = validatedFindings.map((f, i) => ({
       findingId: `commercial-${i}`,
       title: f.title,
+      diagnosis: f.diagnosis,
       rootCause: f.rootCause,
+      recommendedAction: f.recommendedAction,
+      severity: f.severity,
       evidenceCited: f.evidenceCited,
       goalRelevance: f.goalRelevance,
       financialImpact: f.financialImpact,
