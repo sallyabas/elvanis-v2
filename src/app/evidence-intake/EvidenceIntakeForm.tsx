@@ -7,6 +7,7 @@ import { GOVERNANCE_DIMENSIONS } from "@/lib/lenses/ai-governance-framework";
 import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
 import { submitEvidence } from "./actions";
 import { saveEvidenceIntakeDraft } from "@/lib/evidence/draft";
+import { EXPORT_INSTRUCTIONS_BY_LENS, type EvidenceLensKey } from "@/lib/evidence/export-instructions";
 
 /** Shape of the draft blob saved/restored — mirrors this form's own local state, not a typed evidence submission (see evidence_intake_drafts migration docblock). */
 interface EvidenceIntakeDraft {
@@ -57,6 +58,34 @@ const FIELD_SETS: {
     ],
   },
 ];
+
+/**
+ * Export instructions hint (confirmed 2026-08-06) — short, tool-specific
+ * "where to click" steps guiding a client straight into the fields below
+ * with the right figures already in hand. Not auto-parsing — the client
+ * still reads the number off their own export and types it in; this just
+ * removes the "where do I even find this" friction. Collapsed by default
+ * (native <details>, no extra state) so it doesn't add length to an
+ * already-long form for anyone who doesn't need it.
+ */
+function ExportHints({ lens }: { lens: EvidenceLensKey }) {
+  const tools = EXPORT_INSTRUCTIONS_BY_LENS[lens];
+  return (
+    <details className="mb-3 rounded border border-neutral-200 bg-neutral-50 text-xs dark:border-neutral-800 dark:bg-neutral-900">
+      <summary className="cursor-pointer select-none px-3 py-2 font-medium text-neutral-600 dark:text-neutral-400">
+        Using one of these tools? Quick export steps
+      </summary>
+      <div className="space-y-2 px-3 pb-3">
+        {tools.map((t) => (
+          <div key={t.tool}>
+            <span className="font-medium">{t.tool}:</span> <span className="text-neutral-600 dark:text-neutral-400">{t.steps}</span>
+            {t.note && <p className="mt-0.5 text-neutral-400">{t.note}</p>}
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
 
 export function EvidenceIntakeForm({
   companyId,
@@ -209,6 +238,7 @@ export function EvidenceIntakeForm({
       {FIELD_SETS.map((set) => (
         <section key={set.lens}>
           <h2 className="mb-3 text-lg font-medium">{set.title}</h2>
+          <ExportHints lens={set.lens} />
           <div className="space-y-3">
             {set.fields.map((f) => (
               <label key={f.key} className="block space-y-1">
@@ -228,6 +258,7 @@ export function EvidenceIntakeForm({
 
       <section>
         <h2 className="mb-3 text-lg font-medium">Commercial / Market</h2>
+        <ExportHints lens="commercial" />
         <div className="space-y-3">
           <label className="block space-y-1">
             <span className="text-sm font-medium">Named competitors (comma-separated)</span>
