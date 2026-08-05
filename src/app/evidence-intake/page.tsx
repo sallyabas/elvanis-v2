@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { loadEvidenceIntakeDraft } from "@/lib/evidence/draft";
+import { loadGovernanceDimensions } from "@/lib/lenses/benchmarks-repository";
 import { SessionRequestButton } from "@/app/_components/SessionRequestButton";
 import { EvidenceIntakeForm } from "./EvidenceIntakeForm";
 
@@ -31,6 +32,13 @@ export default async function EvidenceIntakePage() {
   // resume any in-progress submission rather than starting blank every time.
   const draft = await loadEvidenceIntakeDraft(company.id as string);
 
+  // GOVERNANCE_DIMENSIONS is now DB-backed (confirmed 2026-08-06) — fetched
+  // here server-side and passed down as a prop, since EvidenceIntakeForm is
+  // a client component that previously imported the (now DB-loaded, no
+  // longer synchronously importable) constant directly. Same refactor
+  // pattern queued for the recommendation library next.
+  const governanceDimensions = await loadGovernanceDimensions();
+
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold">Submit your evidence</h1>
@@ -45,7 +53,12 @@ export default async function EvidenceIntakePage() {
         </p>
         <SessionRequestButton companyId={company.id as string} sessionType="discovery" />
       </div>
-      <EvidenceIntakeForm companyId={company.id as string} goalId={goal.id as string} initialDraft={draft} />
+      <EvidenceIntakeForm
+        companyId={company.id as string}
+        goalId={goal.id as string}
+        initialDraft={draft}
+        governanceDimensions={governanceDimensions}
+      />
     </div>
   );
 }

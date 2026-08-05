@@ -2,7 +2,8 @@ import { z } from "zod";
 import { generateValidatedJson } from "@/lib/ai-client";
 import { formatGoalContextForPrompt } from "./goals";
 import { formatComputedComparisonsForPrompt } from "./metrics";
-import { compareProductMetric, formatProductBenchmarksForPrompt } from "./product-benchmarks";
+import { compareProductMetric, formatProductBenchmarksForPrompt, type ProductBenchmarks } from "./product-benchmarks";
+import { loadProductBenchmarks } from "./benchmarks-repository";
 import {
   confidenceLevelSchema,
   evidenceSufficiencySchema,
@@ -12,7 +13,9 @@ import {
 } from "./schemas";
 import type { EvidenceFieldInput, LensDraftInput, LensDraftResult, LensFinding, LensModule } from "./types";
 
-const SYSTEM_PROMPT = `You are the Product/Customer lens of an AI execution audit for founder-led B2B SaaS and tech-enabled SMEs (20-200 employees, UK/NL first). You analyze submitted product and customer-experience evidence — backlog/roadmap alignment, support tickets, customer feedback, NPS, feature adoption — and produce a structured set of findings. You do not write prose reports.
+/** Built per-call, not a module-level const — see financial.ts's buildSystemPrompt docblock for why. */
+function buildSystemPrompt(benchmarks: ProductBenchmarks): string {
+  return `You are the Product/Customer lens of an AI execution audit for founder-led B2B SaaS and tech-enabled SMEs (20-200 employees, UK/NL first). You analyze submitted product and customer-experience evidence — backlog/roadmap alignment, support tickets, customer feedback, NPS, feature adoption — and produce a structured set of findings. You do not write prose reports.
 
 SCOPE — what belongs to this lens vs. others:
 - This lens owns: product usage and feature adoption, onboarding/activation, customer satisfaction (NPS/CSAT), support ticket volume and content (what customers are complaining about and why — the product-quality signal), churn/retention AS A PRODUCT-FIT SIGNAL (is the product itself driving cancellations), and backlog/roadmap alignment with customer needs.
@@ -34,7 +37,7 @@ FINDING STRUCTURE — four fields must stay distinct, never folded together:
 - "severity": "critical" | "high" | "medium" | "low" — how much this matters to the business if left unaddressed. Independent of confidenceLevel (how sure you are) and independent of goalRelevance (how tied to the stated goal it is) — a finding can be low-confidence and still critical severity, or high-confidence and low severity.
 
 REFERENCE BENCHMARKS (general context on the scale involved — the COMPUTED BENCHMARK COMPARISONS section below is what decides each finding's tier, not this):
-${formatProductBenchmarksForPrompt()}
+${formatProductBenchmarksForPrompt(benchmarks)}
 
 GOAL-RELEVANCE GUIDANCE (typical product/customer signals most load-bearing per goal — use judgment, not a rigid lookup):
 - Churn / Retention: churn rate, NPS, support ticket content/trend (what's driving cancellations)
@@ -68,6 +71,7 @@ OUTPUT SCHEMA (JSON object):
   "evidenceSufficiency": "sufficient" | "partial" | "insufficient",
   "notes": string  // optional, brief
 }`;
+}
 
 const productFindingSchema = z.object({
   title: z.string(),
@@ -101,11 +105,11 @@ function formatEvidenceForPrompt(fields: EvidenceFieldInput[]): string {
     .join("\n");
 }
 
-function buildUserPrompt(input: LensDraftInput): string {
+function buildUserPrompt(input: LensDraftInput, benchmarks: ProductBenchmarks): string {
   const { company, goal, evidenceFields, metrics } = input;
 
   const computedComparisons = metrics
-    .map((m) => compareProductMetric(m.metricKey, m.value))
+    .map((m) => compareProductMetric(benchmarks, m.metricKey, m.value))
     .filter((c) => c !== null);
 
   return `COMPANY PROFILE:
@@ -136,11 +140,12 @@ export const productLens: LensModule = {
   lens: "product",
 
   async runDraft(input: LensDraftInput): Promise<LensDraftResult> {
+    const benchmarks = await loadProductBenchmarks();
     const raw: RawProductLensOutput = await generateValidatedJson(productLensOutputSchema, {
       schemaName: "product-lens",
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildUserPrompt(input) },
+        { role: "system", content: buildSystemPrompt(benchmarks) },
+        { role: "user", content: buildUserPrompt(input, benchmarks) },
       ],
     });
 

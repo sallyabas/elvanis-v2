@@ -9,8 +9,39 @@ import type { ComputedMetricComparison } from "./metrics";
  * pilot audits (roadmap Phase 3) give actual cases to compare against. See
  * spec §4 Phase 1: lens prompts should "reference benchmarks from own
  * experience," not generic internet research.
+ *
+ * DB-backed as of 2026-08-06 (same "admin-adjustable, not a constant"
+ * principle as pricing/app_settings) — see benchmarks-repository.ts for the
+ * loader that reads the `lens_benchmarks` table and shapes it into
+ * FinancialBenchmarks. This file now holds only: the type shape, the
+ * DEFAULT constant (a safety fallback + the seed data's source of truth),
+ * and pure functions that take a FinancialBenchmarks object as a parameter
+ * rather than reading a module-level const — this is what makes
+ * financial-benchmarks.test-cases.ts able to test the tier-boundary logic
+ * directly with a fixture, no DB dependency.
  */
-export const FINANCIAL_BENCHMARKS = {
+export interface FinancialBenchmarks {
+  grossMarginPercent: {
+    healthyMin: number;
+    healthyMax: number;
+    flagBelow: number;
+    concerningBelow: number;
+  };
+  runwayMonths: {
+    criticalBelow: number;
+    warningBelow: number;
+    healthyAtOrAbove: number;
+  };
+  customerConcentrationPercent: {
+    healthyBelow: number;
+    watchBelow: number;
+    elevatedRiskBelow: number;
+    criticalAtOrAbove: number;
+  };
+}
+
+/** Fallback used if the DB read fails or returns incomplete data — also the seed data's own source of truth. */
+export const DEFAULT_FINANCIAL_BENCHMARKS: FinancialBenchmarks = {
   grossMarginPercent: {
     healthyMin: 70, // 70–80% is the healthy range for this segment
     healthyMax: 80,
@@ -28,11 +59,10 @@ export const FINANCIAL_BENCHMARKS = {
     elevatedRiskBelow: 35,
     criticalAtOrAbove: 35,
   },
-} as const;
+};
 
 /** Rendered into the system prompt as general context/scale — not what decides any individual finding's tier. */
-export function formatBenchmarksForPrompt(): string {
-  const b = FINANCIAL_BENCHMARKS;
+export function formatBenchmarksForPrompt(b: FinancialBenchmarks): string {
   return [
     `- Gross margin: below ${b.grossMarginPercent.flagBelow}% is worth flagging, below ${b.grossMarginPercent.concerningBelow}% is concerning (healthy range for this segment is ${b.grossMarginPercent.healthyMin}-${b.grossMarginPercent.healthyMax}%)`,
     `- Cash runway: below ${b.runwayMonths.criticalBelow} months is critical, ${b.runwayMonths.criticalBelow}-${b.runwayMonths.warningBelow} months is a warning, ${b.runwayMonths.healthyAtOrAbove}+ months is healthy`,
@@ -51,9 +81,7 @@ export type FinancialMetricKey =
  * lens then treats the value as qualitative evidence only, with no asserted
  * benchmark tier).
  */
-export function compareFinancialMetric(metricKey: string, value: number): ComputedMetricComparison | null {
-  const b = FINANCIAL_BENCHMARKS;
-
+export function compareFinancialMetric(b: FinancialBenchmarks, metricKey: string, value: number): ComputedMetricComparison | null {
   switch (metricKey as FinancialMetricKey) {
     case "gross_margin_percent": {
       let tier: string;

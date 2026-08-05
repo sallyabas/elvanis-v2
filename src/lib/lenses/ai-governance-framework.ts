@@ -24,6 +24,18 @@
  * conformity assessment or legal risk classification. Deep AI Act
  * risk-classification work is the Tender Readiness module's job (spec
  * §1.7 correction note 2), built later, standalone. Don't duplicate it here.
+ *
+ * DB-backed as of 2026-08-06, treated as a close cousin of the lens
+ * benchmarks (same "explicitly provisional" language, same test in
+ * CLAUDE.md's audit) — see benchmarks-repository.ts for the loader that
+ * reads the `governance_dimensions` table. The dimension KEY set
+ * (GovernanceDimensionKey) stays a fixed TS union — that's structural
+ * identity, not tunable content — only each dimension's label/source/level
+ * descriptions, and the overall-maturity tier point-boundaries, are
+ * DB-loaded. scoreDimension/computeOverallMaturity now take the loaded
+ * definitions/boundaries as parameters instead of reading a module-level
+ * const, so they're independently testable with a fixture (see
+ * ai-governance-framework.test-cases.ts).
  */
 
 export type GovernanceDimensionKey =
@@ -35,6 +47,17 @@ export type GovernanceDimensionKey =
   | "incident_response_monitoring"
   | "governance_ownership";
 
+/** The fixed, structural set of dimension keys — identity, not tunable content. Used for zod enums etc. without needing the DB-loaded definitions array. */
+export const GOVERNANCE_DIMENSION_KEYS: GovernanceDimensionKey[] = [
+  "ai_use_inventory",
+  "risk_classification_awareness",
+  "human_oversight",
+  "data_governance_for_ai",
+  "vendor_model_risk_management",
+  "incident_response_monitoring",
+  "governance_ownership",
+];
+
 export interface GovernanceDimensionDefinition {
   key: GovernanceDimensionKey;
   label: string;
@@ -43,7 +66,8 @@ export interface GovernanceDimensionDefinition {
   levels: [string, string, string, string];
 }
 
-export const GOVERNANCE_DIMENSIONS: GovernanceDimensionDefinition[] = [
+/** Fallback used if the DB read fails or returns incomplete data — also the seed data's own source of truth. */
+export const DEFAULT_GOVERNANCE_DIMENSIONS: GovernanceDimensionDefinition[] = [
   {
     key: "ai_use_inventory",
     label: "AI use inventory",
@@ -132,8 +156,8 @@ export interface ComputedDimensionScore {
 }
 
 /** Looks up the level description for a given dimension + score — pure lookup, no LLM judgment. */
-export function scoreDimension(key: GovernanceDimensionKey, score: number): ComputedDimensionScore | null {
-  const def = GOVERNANCE_DIMENSIONS.find((d) => d.key === key);
+export function scoreDimension(definitions: GovernanceDimensionDefinition[], key: GovernanceDimensionKey, score: number): ComputedDimensionScore | null {
+  const def = definitions.find((d) => d.key === key);
   if (!def) return null;
   const clamped = Math.max(0, Math.min(3, Math.round(score)));
   return {
@@ -147,27 +171,47 @@ export function scoreDimension(key: GovernanceDimensionKey, score: number): Comp
 
 export type OverallMaturityTier = "nascent" | "developing" | "established" | "mature";
 
+export interface GovernanceMaturityTierBoundaries {
+  /** Total score at/below this is "nascent". */
+  nascentMax: number;
+  /** Total score at/below this (and above nascentMax) is "developing". */
+  developingMax: number;
+  /** Total score at/below this (and above developingMax) is "established"; above this is "mature". */
+  establishedMax: number;
+}
+
+/** Fallback tier boundaries — same founder-set-starting-point treatment as the lens benchmarks. */
+export const DEFAULT_GOVERNANCE_MATURITY_TIER_BOUNDARIES: GovernanceMaturityTierBoundaries = {
+  nascentMax: 6,
+  developingMax: 13,
+  establishedMax: 18,
+};
+
 /** Deterministic aggregation across all scored dimensions — never left to the LLM. */
-export function computeOverallMaturity(scores: ComputedDimensionScore[]): {
+export function computeOverallMaturity(
+  definitions: GovernanceDimensionDefinition[],
+  scores: ComputedDimensionScore[],
+  tierBoundaries: GovernanceMaturityTierBoundaries,
+): {
   totalScore: number;
   maxPossible: number;
   tier: OverallMaturityTier;
   comparisonText: string;
 } {
   const totalScore = scores.reduce((sum, s) => sum + s.score, 0);
-  const maxPossible = GOVERNANCE_DIMENSIONS.length * 3;
+  const maxPossible = definitions.length * 3;
 
   let tier: OverallMaturityTier;
-  if (totalScore <= 6) tier = "nascent";
-  else if (totalScore <= 13) tier = "developing";
-  else if (totalScore <= 18) tier = "established";
+  if (totalScore <= tierBoundaries.nascentMax) tier = "nascent";
+  else if (totalScore <= tierBoundaries.developingMax) tier = "developing";
+  else if (totalScore <= tierBoundaries.establishedMax) tier = "established";
   else tier = "mature";
 
   return {
     totalScore,
     maxPossible,
     tier,
-    comparisonText: `${totalScore}/${maxPossible} total maturity points — "${tier}" tier (0-6 nascent, 7-13 developing, 14-18 established, 19-21 mature)`,
+    comparisonText: `${totalScore}/${maxPossible} total maturity points — "${tier}" tier (0-${tierBoundaries.nascentMax} nascent, ${tierBoundaries.nascentMax + 1}-${tierBoundaries.developingMax} developing, ${tierBoundaries.developingMax + 1}-${tierBoundaries.establishedMax} established, ${tierBoundaries.establishedMax + 1}-${maxPossible} mature)`,
   };
 }
 

@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { GOVERNANCE_DIMENSIONS } from "@/lib/lenses/ai-governance-framework";
-import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
+import type { GovernanceDimensionDefinition, GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
 import { submitEvidence } from "./actions";
 import { saveEvidenceIntakeDraft } from "@/lib/evidence/draft";
 import { EXPORT_INSTRUCTIONS_BY_LENS, type EvidenceLensKey } from "@/lib/evidence/export-instructions";
@@ -91,10 +90,18 @@ export function EvidenceIntakeForm({
   companyId,
   goalId,
   initialDraft,
+  governanceDimensions,
 }: {
   companyId: string;
   goalId: string;
   initialDraft: EvidenceIntakeDraft | null;
+  /**
+   * DB-backed as of 2026-08-06 (see benchmarks-repository.ts) — fetched
+   * server-side in page.tsx and passed down here, since GOVERNANCE_DIMENSIONS
+   * can no longer be imported directly into a client component now that it's
+   * an async DB read rather than a synchronous module-level const.
+   */
+  governanceDimensions: GovernanceDimensionDefinition[];
 }) {
   const router = useRouter();
 
@@ -311,7 +318,7 @@ export function EvidenceIntakeForm({
           ) : (
             <div className="space-y-3">
               <p className="text-xs text-neutral-500">No documents? Rate where each area actually stands today.</p>
-              {GOVERNANCE_DIMENSIONS.map((dim) => (
+              {governanceDimensions.map((dim) => (
                 <label key={dim.key} className="block space-y-1">
                   <span className="text-sm font-medium">{dim.label}</span>
                   <select

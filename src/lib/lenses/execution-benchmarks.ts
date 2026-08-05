@@ -7,8 +7,50 @@ import type { ComputedMetricComparison } from "./metrics";
  * Financial. Explicitly a starting point, not permanent — refine with real
  * pilot audits (roadmap Phase 3) once actual cases exist to compare against.
  * Every figure below is sourced; do not add a number here without a citation.
+ *
+ * DB-backed as of 2026-08-06 (same rationale as financial-benchmarks.ts) —
+ * see benchmarks-repository.ts for the loader. This file holds only the
+ * type shape, the DEFAULT constant (fallback + seed source of truth), and
+ * pure functions taking an ExecutionBenchmarks parameter instead of reading
+ * a module-level const.
  */
-export const EXECUTION_BENCHMARKS = {
+export interface ExecutionBenchmarks {
+  deliveryLeadTimeForChangesDays: {
+    topPercentileUnderDays: number;
+    highPercentileUnderDays: number;
+    source: string;
+  };
+  prCycleTimeHours: {
+    eliteBelow: number;
+    goodRange: readonly [number, number];
+    fairRange: readonly [number, number];
+    poorAbove: number;
+    source: string;
+  };
+  prReviewPickupTimeHours: {
+    eliteBelow: number;
+    industryAverageHours: number;
+    note: string;
+    source: string;
+  };
+  decisionApprovalLatencyHours: {
+    warningAtHours: number;
+    crisisAtHours: number;
+    delayShareFromDecisionLatency: string;
+    revenueAtRisk: string;
+    source: string;
+  };
+  meetingLoadHoursPerWeek: {
+    companyWideAverage: readonly [number, number];
+    individualContributorAverage: number;
+    managerRange: readonly [number, number];
+    cSuiteAverage: number;
+    source: string;
+  };
+}
+
+/** Fallback used if the DB read fails or returns incomplete data — also the seed data's own source of truth. */
+export const DEFAULT_EXECUTION_BENCHMARKS: ExecutionBenchmarks = {
   // DORA (dora.dev) 2025 report: moved from 4-tier Elite/High/Medium/Low to
   // percentile distribution. Only meaningful when engineering delivery
   // evidence (commit-to-prod data) is actually submitted.
@@ -21,8 +63,8 @@ export const EXECUTION_BENCHMARKS = {
   // LinearB 2026 Software Engineering Benchmarks Report (8.1M+ PRs, 4,800 orgs).
   prCycleTimeHours: {
     eliteBelow: 25,
-    goodRange: [25, 72] as const,
-    fairRange: [73, 161] as const,
+    goodRange: [25, 72],
+    fairRange: [73, 161],
     poorAbove: 161,
     source: "LinearB 2026 Software Engineering Benchmarks Report",
   },
@@ -44,17 +86,16 @@ export const EXECUTION_BENCHMARKS = {
   // Aggregate workplace survey data — company-wide average as the anchor,
   // with role-based variance so a single number isn't misapplied.
   meetingLoadHoursPerWeek: {
-    companyWideAverage: [11, 12] as const,
+    companyWideAverage: [11, 12],
     individualContributorAverage: 4,
-    managerRange: [9, 13] as const,
+    managerRange: [9, 13],
     cSuiteAverage: 11,
     source: "Aggregated 2025/2026 workplace meeting-time survey data (Fellow, Hubstaff, Chanty)",
   },
-} as const;
+};
 
 /** Rendered into the system prompt as general context/scale — not what decides any individual finding's tier. */
-export function formatExecutionBenchmarksForPrompt(): string {
-  const b = EXECUTION_BENCHMARKS;
+export function formatExecutionBenchmarksForPrompt(b: ExecutionBenchmarks): string {
   return [
     `- Delivery lead time for changes (commit to production, only when engineering delivery evidence is submitted): top ~15% of teams under ${b.deliveryLeadTimeForChangesDays.topPercentileUnderDays} day, next ~15-30% under ${b.deliveryLeadTimeForChangesDays.highPercentileUnderDays} days, 43.5% of teams over ${b.deliveryLeadTimeForChangesDays.highPercentileUnderDays} days (the median case, not an outlier) [source: ${b.deliveryLeadTimeForChangesDays.source}]`,
     `- PR/code review cycle time: elite <${b.prCycleTimeHours.eliteBelow}h, good ${b.prCycleTimeHours.goodRange[0]}-${b.prCycleTimeHours.goodRange[1]}h, fair ${b.prCycleTimeHours.fairRange[0]}-${b.prCycleTimeHours.fairRange[1]}h, poor >${b.prCycleTimeHours.poorAbove}h [source: ${b.prCycleTimeHours.source}]`,
@@ -77,9 +118,7 @@ export type ExecutionMetricKey =
  * lens then treats the value as qualitative evidence only, with no asserted
  * benchmark tier).
  */
-export function compareExecutionMetric(metricKey: string, value: number): ComputedMetricComparison | null {
-  const b = EXECUTION_BENCHMARKS;
-
+export function compareExecutionMetric(b: ExecutionBenchmarks, metricKey: string, value: number): ComputedMetricComparison | null {
   switch (metricKey as ExecutionMetricKey) {
     case "delivery_lead_time_for_changes_days": {
       const d = b.deliveryLeadTimeForChangesDays;

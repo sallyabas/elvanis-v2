@@ -3,11 +3,13 @@ import { generateValidatedJson } from "@/lib/ai-client";
 import {
   computeOverallMaturity,
   formatDimensionScoresForPrompt,
-  GOVERNANCE_DIMENSIONS,
+  GOVERNANCE_DIMENSION_KEYS,
   scoreDimension,
   type ComputedDimensionScore,
+  type GovernanceDimensionDefinition,
   type GovernanceDimensionKey,
 } from "./ai-governance-framework";
+import { loadGovernanceDimensions, loadGovernanceMaturityTierBoundaries } from "./benchmarks-repository";
 import { formatGoalContextForPrompt } from "./goals";
 import {
   confidenceLevelSchema,
@@ -140,14 +142,15 @@ const questionnaireOutputSchema = z.object({
   notes: z.string().optional(),
 });
 
-function buildQuestionnaireSystemPrompt(): string {
+/** Built per-call, not a module-level const — see financial.ts's buildSystemPrompt docblock for why (definitions are now DB-loaded). */
+function buildQuestionnaireSystemPrompt(definitions: GovernanceDimensionDefinition[]): string {
   return `You are the AI & Governance lens of an AI execution audit for founder-led B2B SaaS and tech-enabled SMEs (20-200 employees, UK/NL first) — QUESTIONNAIRE MODE (no governance documents were submitted; you're working from a structured self-assessment). You produce a structured set of findings. You do not write prose reports.
 
 ${SHARED_RULES}
 8. COMPUTED MATURITY SCORES ARE FINAL — DO NOT RE-SCORE. Every dimension's score (0-3) and level description below was supplied by the client/reviewer and looked up against a fixed rubric in code — it is not yours to judge or second-guess. Your job is to narrate the risk implications of each low-scoring or missing dimension, not to re-assess the score itself.
 
 GOVERNANCE DIMENSIONS (reference — the computed scores below are what's final, not this list):
-${GOVERNANCE_DIMENSIONS.map((d) => `- ${d.label} [source: ${d.source}]`).join("\n")}
+${definitions.map((d) => `- ${d.label} [source: ${d.source}]`).join("\n")}
 
 OUTPUT SCHEMA (JSON object):
 {
@@ -171,14 +174,18 @@ OUTPUT SCHEMA (JSON object):
 }
 
 async function runQuestionnaireMode(input: AiGovernanceDraftInput): Promise<AiGovernanceDraftResult> {
-  const providedScores = input.questionnaireScores ?? {};
-  const dimensionScores: ComputedDimensionScore[] = GOVERNANCE_DIMENSIONS.map((d) => {
-    const raw = providedScores[d.key];
-    return raw === undefined ? null : scoreDimension(d.key, raw);
-  }).filter((s) => s !== null);
+  const [definitions, tierBoundaries] = await Promise.all([loadGovernanceDimensions(), loadGovernanceMaturityTierBoundaries()]);
 
-  const unscoredDimensions = GOVERNANCE_DIMENSIONS.filter((d) => providedScores[d.key] === undefined);
-  const overallMaturity = computeOverallMaturity(dimensionScores);
+  const providedScores = input.questionnaireScores ?? {};
+  const dimensionScores: ComputedDimensionScore[] = definitions
+    .map((d) => {
+      const raw = providedScores[d.key];
+      return raw === undefined ? null : scoreDimension(definitions, d.key, raw);
+    })
+    .filter((s) => s !== null);
+
+  const unscoredDimensions = definitions.filter((d) => providedScores[d.key] === undefined);
+  const overallMaturity = computeOverallMaturity(definitions, dimensionScores, tierBoundaries);
 
   const userPrompt = `${buildCompanyBlock(input.company, input.goal, input.hasLiveAiInProduction)}
 
@@ -195,7 +202,7 @@ Produce your findings now, following the output schema exactly.`;
   const raw = await generateValidatedJson(questionnaireOutputSchema, {
     schemaName: "ai-governance-lens-questionnaire",
     messages: [
-      { role: "system", content: buildQuestionnaireSystemPrompt() },
+      { role: "system", content: buildQuestionnaireSystemPrompt(definitions) },
       { role: "user", content: userPrompt },
     ],
   });
@@ -222,8 +229,12 @@ Produce your findings now, following the output schema exactly.`;
 
 // ── Document-review mode ─────────────────────────────────────────────────
 
+// Uses the fixed, structural GOVERNANCE_DIMENSION_KEYS list (not the
+// DB-loaded definitions array) — the key SET is identity, not tunable
+// content, so this schema can stay a module-level const built at import
+// time, unlike the prompt text which now needs the loaded labels/levels.
 const dimensionScoreOutputSchema = z.object({
-  key: z.enum(GOVERNANCE_DIMENSIONS.map((d) => d.key) as [GovernanceDimensionKey, ...GovernanceDimensionKey[]]),
+  key: z.enum(GOVERNANCE_DIMENSION_KEYS as [GovernanceDimensionKey, ...GovernanceDimensionKey[]]),
   score: z.number().min(0).max(3),
 });
 
@@ -234,14 +245,15 @@ const documentReviewOutputSchema = z.object({
   notes: z.string().optional(),
 });
 
-function buildDocumentReviewSystemPrompt(): string {
+/** Built per-call, not a module-level const — see financial.ts's buildSystemPrompt docblock for why (definitions are now DB-loaded). */
+function buildDocumentReviewSystemPrompt(definitions: GovernanceDimensionDefinition[]): string {
   return `You are the AI & Governance lens of an AI execution audit for founder-led B2B SaaS and tech-enabled SMEs (20-200 employees, UK/NL first) — DOCUMENT-REVIEW MODE (the client submitted governance documentation for you to assess). You produce a structured set of findings. You do not write prose reports.
 
 ${SHARED_RULES}
 8. For EACH of the 7 governance dimensions listed below, assign a score from 0-3 based ONLY on what the submitted documents actually show — pick the integer score whose rubric description best matches the evidence. This is a classification task (which bucket does the evidence fall into), not free-form scoring — do not invent your own scale or wording. If the documents say nothing about a dimension, score it 0 and mark it as insufficient evidence in your findings, do not assume a mid-range score out of politeness.
 
 GOVERNANCE DIMENSIONS AND THEIR 0-3 RUBRIC (pick the integer whose description best matches the evidence — do not paraphrase the rubric, just select the score):
-${GOVERNANCE_DIMENSIONS.map(
+${definitions.map(
   (d) => `- ${d.key} [source: ${d.source}]:\n  0 = ${d.levels[0]}\n  1 = ${d.levels[1]}\n  2 = ${d.levels[2]}\n  3 = ${d.levels[3]}`,
 ).join("\n")}
 
@@ -280,6 +292,8 @@ function formatGovernanceEvidenceForPrompt(fields: EvidenceFieldInput[]): string
 }
 
 async function runDocumentReviewMode(input: AiGovernanceDraftInput): Promise<AiGovernanceDraftResult> {
+  const [definitions, tierBoundaries] = await Promise.all([loadGovernanceDimensions(), loadGovernanceMaturityTierBoundaries()]);
+
   const userPrompt = `${buildCompanyBlock(input.company, input.goal, input.hasLiveAiInProduction)}
 
 SUBMITTED GOVERNANCE DOCUMENTS/EVIDENCE:
@@ -290,7 +304,7 @@ Produce your findings AND your per-dimension scores now, following the output sc
   const raw = await generateValidatedJson(documentReviewOutputSchema, {
     schemaName: "ai-governance-lens-document-review",
     messages: [
-      { role: "system", content: buildDocumentReviewSystemPrompt() },
+      { role: "system", content: buildDocumentReviewSystemPrompt(definitions) },
       { role: "user", content: userPrompt },
     ],
   });
@@ -298,9 +312,9 @@ Produce your findings AND your per-dimension scores now, following the output sc
   // The LLM only picks a 0-3 integer per dimension; the canonical label/level
   // text/source is always looked up here in code, never generated by the model.
   const dimensionScores: ComputedDimensionScore[] = raw.dimensionScores
-    .map((d) => scoreDimension(d.key, d.score))
+    .map((d) => scoreDimension(definitions, d.key, d.score))
     .filter((s) => s !== null);
-  const overallMaturity = computeOverallMaturity(dimensionScores);
+  const overallMaturity = computeOverallMaturity(definitions, dimensionScores, tierBoundaries);
 
   const findings: LensFinding[] = raw.findings.map((f, i) => ({
     findingId: `ai_governance-${i}`,
