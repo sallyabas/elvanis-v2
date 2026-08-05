@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { LensFinding, LensType } from "@/lib/lenses/types";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
+import { SessionRequestButton } from "@/app/_components/SessionRequestButton";
 
 const LENS_ORDER: LensType[] = ["financial", "execution", "product", "commercial", "ai_governance"];
 const LENS_LABELS: Record<LensType, string> = {
@@ -99,10 +100,26 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
     byLens.set(f.lens, [...(byLens.get(f.lens) ?? []), f]);
   }
 
+  // Service Layer session requests (confirmed 2026-08-06) — Delivery
+  // Session is offered here since it's explicitly post-report only; F2F
+  // Workshop only shows once a Delivery Session has already been
+  // requested, since it's a premium upgrade OF that session specifically,
+  // never offered before evidence submission or independently of it.
+  const { data: existingSessionRequests } = await admin
+    .from("session_requests")
+    .select("session_type")
+    .eq("company_id", company.id);
+  const hasRequestedDelivery = (existingSessionRequests ?? []).some((r) => r.session_type === "delivery");
+
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold">{company.name}&apos;s Execution Audit</h1>
-      {goal && <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">Goal: {GOAL_LABELS[goal.primary_goal as keyof typeof GOAL_LABELS]}</p>}
+      {goal && <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">Goal: {GOAL_LABELS[goal.primary_goal as keyof typeof GOAL_LABELS]}</p>}
+
+      <div className="mb-8 flex flex-wrap gap-3">
+        <SessionRequestButton companyId={company.id} sessionType="delivery" />
+        {hasRequestedDelivery && <SessionRequestButton companyId={company.id} sessionType="f2f_workshop" />}
+      </div>
 
       {top3.length > 0 && (
         <section className="mb-10 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">

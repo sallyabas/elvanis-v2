@@ -62,6 +62,14 @@ function templateFor(eventType: string, recipientType: "client" | "reviewer"): {
         subject: "Regulatory content review is overdue",
         html: `<p>One or more jurisdictions' regulatory reference content is overdue for a manual re-check.</p><p><a href="${SITE_URL}/queue">Review status on the reviewer queue</a></p>`,
       };
+    case "session_requested":
+      // Reviewer-facing only (see session-requests.ts) — a client requested
+      // a Discovery/Delivery/F2F Workshop call, not something a client
+      // themselves would receive an email about.
+      return {
+        subject: "A client requested a live session",
+        html: `<p>A client has requested a Discovery, Delivery, or F2F Workshop session. Follow up to schedule it.</p><p><a href="${SITE_URL}/queue">View on the reviewer queue</a></p>`,
+      };
     default:
       return {
         subject: "Elvanis notification",

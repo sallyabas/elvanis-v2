@@ -26,29 +26,31 @@ Goal selection → evidence intake (native tool exports or fill-in templates, no
 - **Buyer:** Founder or CEO-led leadership
 - **Trigger state:** already using some digital tools, experiencing growth inefficiency, churn, margin pressure, or execution drag
 
-### 1.5 Business Model & Pricing (initial, to be tested with real pilots)
+### 1.5 Business Model & Pricing
 
-**Core Audit has two service tiers, confirmed 2026-08-02 — same technical pipeline (five-lens engine, Conflict Detection, mandatory review; no new pipeline for Concierge), different level of human attention.** See §1.9 for the full breakdown of what each tier includes.
+**Finalized v1 launch pricing, confirmed 2026-08-06** — treated as confident v1 launch numbers, not yet pilot-validated (real pilot data may still move these; not guessed, just not yet proven against real willingness-to-pay). Replaces the earlier "TBD, to be tested with pilots" placeholder ranges below with real, committed numbers.
 
-| Offer | Tier | Sequencing | Indicative price |
+**DB-backed as of the same date, not a code or doc literal** — same "admin-adjustable, not a constant" principle already used for the re-audit cadence (`app_settings`). Live source of truth is the `pricing` table (`supabase/migrations/20260806110000_pricing_table.sql`, read/write via [src/lib/pricing.ts](../src/lib/pricing.ts)), editable through a reviewer-facing panel on `/queue` (no separate admin role/auth exists yet, so the reviewer role is the de facto admin for this, same as the plan-tier badge and the regulatory-content-review panel). The table below reflects the *initial seed values* as of 2026-08-06 — check the live table for the current numbers, not this document, if the two ever diverge. Confirmed by grep at the time this table was introduced: zero hardcoded price literals existed anywhere in application code (`src/`) — the numbers had only ever lived in this document.
+
+**Core Audit has two service tiers — same technical pipeline (five-lens engine, Conflict Detection, mandatory review; no new pipeline for Concierge), different level of human attention.** See §1.9 for the full breakdown of what each tier includes.
+
+| Offer | Tier | Sequencing | Price |
 |---|---|---|---|
-| Core Audit — Standard | Standard | Standalone default entry | Free/near-free for pilots → later ~£100–300 |
-| Core Audit — Concierge/White-Glove | Concierge | Standalone, premium alternative to Standard | TBD — premium multiplier over Standard, to be tested with pilots |
-| Execution Sprint | — | Usually post-audit | ~£2,000–5,000 fixed (founding-client pricing) |
-| Tender Readiness | — | Post-audit by default; standalone if externally triggered | ~£1,500–3,500 |
-| AI Reliability Audit | — | Post-audit by default; standalone if triggered | ~£1,200–3,000 |
-| Data Protection Compliance (GDPR now, PDPL for Gulf) | — | Post-audit by default; standalone if triggered | ~£1,500–3,500 |
-| Monthly Execution Office | — | Recurring, V3, once repeat clients exist | TBD after repeat demand appears |
+| Core Audit — Standard | Standard | Standalone default entry | Free |
+| Core Audit — Concierge/White-Glove | Concierge | Standalone, premium alternative to Standard | **£300** (bundles Discovery Session + Delivery Session by default — see add-on table below) |
+| Execution Sprint | — | Usually post-audit | **£3,000** |
+| Tender Readiness | — | Post-audit by default; standalone if externally triggered | **£2,500** |
+| AI Reliability Audit | — | Post-audit by default; standalone if triggered | **£2,000** |
+| Data Protection Compliance (GDPR now, PDPL for Gulf) | — | Post-audit by default; standalone if triggered | **£2,000** |
+| Monthly Execution Office | — | Recurring, V3, once repeat clients exist | **£500/month placeholder** — genuinely cannot be finalized without any repeat-client signal yet, unlike every other row above; stays a placeholder deliberately, not guessed as confident |
 
-**Service Layer add-ons (confirmed 2026-08-02)** — see §1.9 for the full sequencing rules (what's included by default per tier vs. sellable standalone):
+**Service Layer add-ons** — see §1.9 for the full sequencing rules (what's included by default per tier vs. sellable standalone):
 
-| Add-on | Included by default in | Standalone availability | Notes |
+| Add-on | Included by default in | Standalone availability | Price |
 |---|---|---|---|
-| Discovery Session (live call, pre-evidence) | Concierge tier | Optional add-on on Standard tier, offered but never required | A client can skip straight to uploading evidence with zero human interaction on either tier |
-| Delivery Session (live call, post-report) | Concierge tier; bundled by default with paid Execution Sprint | Sellable standalone as a smaller add-on | Not included in the free/Standard tier's report+dashboard — that tier is written report + dashboard only |
-| F2F Workshop (in-person, multi-stakeholder) | Concierge tier, as a further upgrade | Sellable standalone as a premium upgrade of the Delivery Session | Only offered after evidence submission/findings exist — needs real findings to discuss, never offered before |
-
-Exact standalone prices for Delivery Session and F2F Workshop are intentionally left TBD here rather than guessed — same "test with real pilots" posture as the rest of this table, not a gap.
+| Discovery Session (live call, pre-evidence) | Concierge tier (bundled into the £300) | Optional add-on on Standard tier, offered but never required | Bundled into Concierge; no separate standalone price set — a client can skip straight to uploading evidence with zero human interaction on either tier |
+| Delivery Session (live call, post-report) | Concierge tier (bundled into the £300); bundled by default with paid Execution Sprint | Sellable standalone as a smaller add-on | Standalone price intentionally still TBD — not finalized in the 2026-08-06 pricing pass, not guessed |
+| F2F Workshop (in-person, multi-stakeholder) | Concierge tier, as a further upgrade | Sellable standalone as a premium upgrade of the Delivery Session | **£750 add-on** |
 
 **Free tier definition (confirmed 2026-07-31):** "free" above means the *first completed audit per company*, however long evidence-gathering takes — not a time-boxed trial. Any full re-audit after that first report is delivered is paid (Execution Sprint / re-audit pricing / eventual Monthly Execution Office). See §2.3a for the submission/SLA mechanics this ties into.
 

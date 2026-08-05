@@ -1,7 +1,15 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listRegulatoryContentReviewStatus } from "@/lib/reviewer/regulatory-content-review";
-import { markRegulatoryContentReviewedAction } from "./actions";
+import { listPendingSessionRequests } from "@/lib/service-layer/session-requests";
+import { listPricing } from "@/lib/pricing";
+import { markRegulatoryContentReviewedAction, updateSessionRequestStatusAction, updatePricingItemAction } from "./actions";
+
+const SESSION_TYPE_LABELS: Record<string, string> = {
+  discovery: "Discovery Session",
+  delivery: "Delivery Session",
+  f2f_workshop: "F2F Workshop",
+};
 
 const JURISDICTION_LABELS: Record<string, string> = {
   eu_ai_act: "EU AI Act",
@@ -79,10 +87,94 @@ export default async function ReviewerQueuePage() {
   ].sort((a, b) => new Date(a.readyAt ?? 0).getTime() - new Date(b.readyAt ?? 0).getTime());
 
   const regulatoryStatus = await listRegulatoryContentReviewStatus();
+  const sessionRequests = await listPendingSessionRequests();
+  const pricing = await listPricing();
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold">Reviewer Queue</h1>
+
+      <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+        <h2 className="mb-1 text-sm font-medium">Session requests</h2>
+        <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
+          Discovery/Delivery/F2F Workshop requests — no calendar integration exists yet, so these are followed up
+          personally, then marked here.
+        </p>
+        {sessionRequests.length === 0 ? (
+          <p className="text-sm text-neutral-500">No pending session requests.</p>
+        ) : (
+          <ul className="space-y-2">
+            {sessionRequests.map((r) => (
+              <li key={r.id} className="flex items-center justify-between text-sm">
+                <div>
+                  <span className="font-medium">{r.companyName}</span>{" "}
+                  <span className="text-neutral-500">
+                    · {SESSION_TYPE_LABELS[r.session_type] ?? r.session_type} · {r.status} · requested{" "}
+                    {new Date(r.requested_at).toLocaleDateString()}
+                  </span>
+                  {r.client_notes && <p className="text-xs text-neutral-400">&quot;{r.client_notes}&quot;</p>}
+                </div>
+                <div className="flex gap-1">
+                  {r.status === "requested" && (
+                    <form action={updateSessionRequestStatusAction.bind(null, r.id, "scheduled")}>
+                      <button type="submit" className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
+                        Mark scheduled
+                      </button>
+                    </form>
+                  )}
+                  <form action={updateSessionRequestStatusAction.bind(null, r.id, "completed")}>
+                    <button type="submit" className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
+                      Mark completed
+                    </button>
+                  </form>
+                  <form action={updateSessionRequestStatusAction.bind(null, r.id, "declined")}>
+                    <button type="submit" className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
+                      Decline
+                    </button>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+        <h2 className="mb-1 text-sm font-medium">Pricing</h2>
+        <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
+          DB-backed, not hardcoded anywhere in the app (confirmed 2026-08-06) — same admin-adjustable principle as
+          the re-audit cadence. No separate admin role exists yet, so this is reviewer-facing for now.
+        </p>
+        <ul className="space-y-2">
+          {pricing.map((p) => (
+            <li key={p.itemKey} className="flex items-center justify-between text-sm">
+              <div>
+                <span className="font-medium">{p.displayName}</span>{" "}
+                {p.isPlaceholder && <span className="text-xs text-amber-600 dark:text-amber-400">(placeholder)</span>}
+                {p.notes && <p className="text-xs text-neutral-400">{p.notes}</p>}
+              </div>
+              <form action={updatePricingItemAction} className="flex items-center gap-1">
+                <input type="hidden" name="itemKey" value={p.itemKey} />
+                <span className="text-xs text-neutral-500">{p.currency}</span>
+                <input
+                  type="number"
+                  name="priceAmount"
+                  defaultValue={p.priceAmount}
+                  min={0}
+                  step="1"
+                  className="w-20 rounded border border-neutral-300 px-1.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+                />
+                <button
+                  type="submit"
+                  className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                >
+                  Update
+                </button>
+              </form>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
         <h2 className="mb-1 text-sm font-medium">Regulatory content status</h2>
