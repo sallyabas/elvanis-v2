@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { OnboardingForm } from "./OnboardingForm";
+import { OnboardingWizard } from "./OnboardingWizard";
 
 // Real Company/Goal creation (confirmed 2026-08-03, Priority 1) — a
 // top-level route deliberately outside the (app) route group, so
@@ -24,12 +24,8 @@ export default async function OnboardingPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
-      <h1 className="mb-1 text-xl font-semibold">Let&apos;s get started</h1>
-      <p className="mb-6 text-sm text-neutral-500 dark:text-neutral-400">
-        Tell us about your company and what you&apos;re trying to achieve.
-      </p>
-      <OnboardingForm />
+    <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6 py-12">
+      <OnboardingWizard />
     </div>
   );
 }

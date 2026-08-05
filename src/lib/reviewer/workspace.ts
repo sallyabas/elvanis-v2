@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { LensFinding } from "@/lib/lenses/types";
+import { recordCaseLibraryEntry } from "@/lib/synthesis/case-library";
 
 /**
  * Reviewer workspace — the mandatory human validation gate (confirmed
@@ -217,4 +218,18 @@ export async function deliverReport(reportId: string): Promise<void> {
     .update({ status: "sent", delivered_at: new Date().toISOString() })
     .eq("id", reportId);
   if (error) throw new Error(`deliverReport failed: ${error.message}`);
+
+  // Case library storage (confirmed 2026-08-05) — a delivered report is a
+  // genuinely completed audit case, worth storing for future similar-
+  // patterns retrieval once real case volume exists. Real gap closed here:
+  // case_library previously had zero write calls anywhere in this codebase
+  // despite being marked "storage happens from day one" in spec §4a.3.
+  // Failure here should never block delivery itself — the report is
+  // already sent by this point; case-library storage is a best-effort
+  // side effect, not part of the delivery contract.
+  try {
+    await recordCaseLibraryEntry(reportId);
+  } catch (e) {
+    console.error(`deliverReport: recordCaseLibraryEntry failed for report ${reportId}:`, e);
+  }
 }

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { loadEvidenceIntakeDraft } from "@/lib/evidence/draft";
 import { EvidenceIntakeForm } from "./EvidenceIntakeForm";
 
 // Real Evidence Intake, fill-in-template path (confirmed 2026-08-03,
@@ -25,6 +26,10 @@ export default async function EvidenceIntakePage() {
     redirect("/onboarding");
   }
 
+  // Saved draft intake (confirmed 2026-08-05, pulled forward from V2) —
+  // resume any in-progress submission rather than starting blank every time.
+  const draft = await loadEvidenceIntakeDraft(company.id as string);
+
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold">Submit your evidence</h1>
@@ -32,7 +37,7 @@ export default async function EvidenceIntakePage() {
         Fill in what you can for each area below — leaving something blank is meaningful too, not an incomplete
         submission.
       </p>
-      <EvidenceIntakeForm companyId={company.id as string} goalId={goal.id as string} />
+      <EvidenceIntakeForm companyId={company.id as string} goalId={goal.id as string} initialDraft={draft} />
     </div>
   );
 }

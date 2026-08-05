@@ -7,7 +7,7 @@ import { z } from "zod";
 
 export const confidenceLevelSchema = z.enum(["high", "medium", "low", "insufficient"]);
 export const evidenceSufficiencySchema = z.enum(["sufficient", "partial", "insufficient"]);
-export const goalRelevanceSchema = z.enum(["directly_blocks", "directly_supports", "indirectly_affects", "unrelated"]);
+export const goalRelevanceSchema = z.enum(["directly_blocks", "directly_affects", "directly_supports", "indirectly_affects", "unrelated"]);
 export const findingOriginSchema = z.enum(["client_reported", "ai_independent"]);
 export const severitySchema = z.enum(["critical", "high", "medium", "low"]);
 

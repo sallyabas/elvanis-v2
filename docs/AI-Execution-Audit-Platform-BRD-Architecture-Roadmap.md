@@ -433,41 +433,41 @@ sessions, orders/pricing (added once pricing/payment is wired)
 
 **1. Stronger client self-serve workflow**
 - Multi-step guided workflow *(→ moved to V1 — this is just onboarding UX, no dependency on real case history)*
-- Cleaner onboarding polish — V2
-- Saved draft intake — V2
+- Cleaner onboarding polish *(→ moved to V1, built 2026-08-05 — converged with the multi-step guided workflow and goal definition wizard into one build, see CLAUDE.md "Onboarding wizard + goal definition wizard")*
+- Saved draft intake *(→ moved to V1, built 2026-08-05 — pure UX, no case-history dependency; targeted at Evidence Intake specifically, see CLAUDE.md "Fourth V2 pull-forward batch")*
 - Teammate invite for evidence completion — V2
-- Goal definition wizard — V2
+- Goal definition wizard *(→ moved to V1, built 2026-08-05 — see CLAUDE.md "Onboarding wizard + goal definition wizard")*
 - Reusable templates by company type — V2 (needs multiple company types actually seen)
 
 **2. Better analysis depth**
 - Deeper Product/Customer lens — V2
 - Deeper AI & Governance lens — V2
-- Better Commercial/Market lens — V2
+- Better Commercial/Market lens *(→ moved to V1, built 2026-08-05 — search-query quality + root-cause depth improvements, see CLAUDE.md "Deeper Commercial/Market lens"; the benchmark-library item immediately below stays V2, deliberately not folded into this)*
 - Benchmark rule library — V2 (grows with real cases)
 - Failure-mode library by goal — V2 (grows with real cases)
-- Recommendation library by issue type *(→ seed version moved to V1, hand-built from your own domain expertise, same logic as Tender Readiness's external research; richer version stays V2, grown from real case volume)*
+- Recommendation library by issue type *(→ seed version CONFIRMED moved to V1 in scope (same logic as Tender Readiness's external research), but genuinely NOT YET BUILT — confirmed by grep, 2026-08-05 status check; richer version stays V2, grown from real case volume)*
 
 **3. Case library and retrieval**
-- Structured case tagging — **V1** (storage happens from day one; see §3 DB schema)
+- Structured case tagging — **V1** (storage happens from day one; see §3 DB schema) — **real gap found and closed 2026-08-05**: this line was already true in the schema but zero application code ever actually wrote to `case_library` — confirmed by grep. Closed via `recordCaseLibraryEntry()`, called from `deliverReport()`, see CLAUDE.md "Fourth V2 pull-forward batch".
 - Retrieval of similar past audits — V2 (genuinely needs real case history to be meaningful)
-- "Similar patterns seen in X company types" surfacing — V2
+- "Similar patterns seen in X company types" surfacing *(→ matching/retrieval INFRASTRUCTURE moved to V1 as dormant code, built 2026-08-05 — same pattern as case_library itself: built now, returns nothing until real case volume exists (≥3 distinct other companies with real tag overlap), never fabricates a pattern from thin data. NOT wired into any client- or reviewer-facing UI yet — that surfacing decision genuinely stays deferred until real volume exists, see CLAUDE.md.)*
 - Internal similarity suggestions before draft generation — V2
 
 **4. Better client dashboard**
 - Findings by lens, Priority status, Roadmap sections, Assumption/confidence visibility, Conflict flags surfaced *(→ all moved to V1 — these are just report/dashboard output with no data-history dependency; already in the V1 Feature→Task list)*
 - Digital Presence Scan results linked in *(→ moved to V1 — the scan itself has no history dependency)*
-- Re-run/refresh button — V2 (needs retrieval to add real value beyond a plain re-run)
+- Re-run/refresh button *(→ BASIC version moved to V1, built 2026-08-05 — re-executes the five lenses fresh against the original evidence + current profile, no retrieval dependency; a future retrieval-informed upgrade stays V2. Reviewer-triggered, not client self-serve, since the "re-audits are always paid" rule has no billing enforcement yet — see CLAUDE.md "Fourth V2 pull-forward batch".)*
 - Comparison over time — V2 (genuinely needs ≥2 real audits per company to exist)
 
 **5. Packaging features**
 - Implementation Sprint handoff page / Execution Sprint dashboard (task breakdown, owner mapping, KPI tracking) *(→ moved to V1 — needed to actually deliver the paid Execution Sprint, a real revenue offer)*
-- Proposal/scope generator — V2
+- Proposal/scope generator — V2 (confirmed still unbuilt, 2026-08-05 status check)
 - Recommended next-module selector — V2
 - Recurring re-audit prompt — V2
 
 **6. Light data connectors**
 *(Note: per-lens native export upload — CRM/finance/support/backlog — and fill-in templates are already confirmed in V1; this stage is about deepening that, not introducing it.)*
-- Improved auto-detection of known source signatures — V2
+- Improved auto-detection of known source signatures *(→ PARTIALLY moved to V1, built 2026-08-05 — real, researched signature data for all 7 named tools now seeded into `export_source_signatures`, sourced from each tool's own current documentation. The "learn from real messy uploads" half — tuning detection against real failures — stays V2, genuinely gated on real client uploads existing to learn from. See CLAUDE.md "Fourth V2 pull-forward batch".)*
 - Broader tool coverage — V2
 
 ---
@@ -585,7 +585,7 @@ sessions, orders/pricing (added once pricing/payment is wired)
 - [ ] Roadmap section (30/60/90, editable status)
 - [ ] Assumption/confidence visibility per finding
 - [ ] Evidence library (what was submitted, re-upload option)
-- [ ] Re-run/refresh button (v2, once retrieval exists)
+- [x] Re-run/refresh button — basic version built 2026-08-05 (reviewer-triggered, re-executes against the original evidence snapshot + current profile; a retrieval-informed upgrade stays V2)
 - [ ] Next-step CTAs (Execution Sprint / Tender Readiness / AI Reliability)
 
 **Monthly Execution Office (V3 — built once repeat demand appears)**

@@ -1,11 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { GOVERNANCE_DIMENSIONS } from "@/lib/lenses/ai-governance-framework";
 import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
 import { submitEvidence } from "./actions";
+import { saveEvidenceIntakeDraft } from "@/lib/evidence/draft";
+
+/** Shape of the draft blob saved/restored — mirrors this form's own local state, not a typed evidence submission (see evidence_intake_drafts migration docblock). */
+interface EvidenceIntakeDraft {
+  fieldValues?: Record<string, string>;
+  namedCompetitors?: string;
+  marketChangeNotes?: string;
+  pricingPressureNotes?: string;
+  lostDealsNotes?: string;
+  hasLiveAiInProduction?: boolean;
+  governanceDocsSubmitted?: boolean;
+  governanceEvidenceText?: string;
+  dimensionScores?: Partial<Record<GovernanceDimensionKey, number>>;
+}
 
 const FIELD_SETS: {
   lens: "financial" | "execution" | "product";
@@ -44,23 +58,84 @@ const FIELD_SETS: {
   },
 ];
 
-export function EvidenceIntakeForm({ companyId, goalId }: { companyId: string; goalId: string }) {
+export function EvidenceIntakeForm({
+  companyId,
+  goalId,
+  initialDraft,
+}: {
+  companyId: string;
+  goalId: string;
+  initialDraft: EvidenceIntakeDraft | null;
+}) {
   const router = useRouter();
 
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
-  const [namedCompetitors, setNamedCompetitors] = useState("");
-  const [marketChangeNotes, setMarketChangeNotes] = useState("");
-  const [pricingPressureNotes, setPricingPressureNotes] = useState("");
-  const [lostDealsNotes, setLostDealsNotes] = useState("");
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>(initialDraft?.fieldValues ?? {});
+  const [namedCompetitors, setNamedCompetitors] = useState(initialDraft?.namedCompetitors ?? "");
+  const [marketChangeNotes, setMarketChangeNotes] = useState(initialDraft?.marketChangeNotes ?? "");
+  const [pricingPressureNotes, setPricingPressureNotes] = useState(initialDraft?.pricingPressureNotes ?? "");
+  const [lostDealsNotes, setLostDealsNotes] = useState(initialDraft?.lostDealsNotes ?? "");
 
-  const [hasLiveAiInProduction, setHasLiveAiInProduction] = useState(false);
-  const [governanceDocsSubmitted, setGovernanceDocsSubmitted] = useState(false);
-  const [governanceEvidenceText, setGovernanceEvidenceText] = useState("");
-  const [dimensionScores, setDimensionScores] = useState<Partial<Record<GovernanceDimensionKey, number>>>({});
+  const [hasLiveAiInProduction, setHasLiveAiInProduction] = useState(initialDraft?.hasLiveAiInProduction ?? false);
+  const [governanceDocsSubmitted, setGovernanceDocsSubmitted] = useState(initialDraft?.governanceDocsSubmitted ?? false);
+  const [governanceEvidenceText, setGovernanceEvidenceText] = useState(initialDraft?.governanceEvidenceText ?? "");
+  const [dimensionScores, setDimensionScores] = useState<Partial<Record<GovernanceDimensionKey, number>>>(
+    initialDraft?.dimensionScores ?? {},
+  );
 
   const [privacyAcknowledged, setPrivacyAcknowledged] = useState(false);
   const [status, setStatus] = useState<"idle" | "submitting" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Saved draft intake (confirmed 2026-08-05, pulled forward from V2) —
+   * debounced autosave, not a save-on-every-keystroke hammer. Skips the
+   * very first render (whatever was just loaded from initialDraft doesn't
+   * need to be immediately re-saved). Standard "sync to an external system"
+   * effect, not the react-hooks/set-state-in-effect pattern already flagged
+   * as a lesson elsewhere in this codebase (the demo prototype's timer bug)
+   * — draftStatus is only set in response to the debounce timer firing or
+   * the save resolving, never derived from another state value reacting to
+   * itself.
+   */
+  const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const isFirstRender = useRef(true);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    setDraftStatus("saving");
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      saveEvidenceIntakeDraft(companyId, {
+        fieldValues,
+        namedCompetitors,
+        marketChangeNotes,
+        pricingPressureNotes,
+        lostDealsNotes,
+        hasLiveAiInProduction,
+        governanceDocsSubmitted,
+        governanceEvidenceText,
+        dimensionScores,
+      }).then(() => setDraftStatus("saved"));
+    }, 1500);
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [
+    companyId,
+    fieldValues,
+    namedCompetitors,
+    marketChangeNotes,
+    pricingPressureNotes,
+    lostDealsNotes,
+    hasLiveAiInProduction,
+    governanceDocsSubmitted,
+    governanceEvidenceText,
+    dimensionScores,
+  ]);
 
   function evidenceFieldsFor(lens: "financial" | "execution" | "product") {
     const set = FIELD_SETS.find((s) => s.lens === lens)!;
@@ -115,6 +190,15 @@ export function EvidenceIntakeForm({ companyId, goalId }: { companyId: string; g
 
   return (
     <form onSubmit={handleSubmit} className="space-y-10">
+      <div className="flex items-center justify-between">
+        {initialDraft && (
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">Resumed from your last saved draft.</p>
+        )}
+        <p className="ml-auto text-xs text-neutral-400" aria-live="polite">
+          {draftStatus === "saving" ? "Saving…" : draftStatus === "saved" ? "Draft saved" : ""}
+        </p>
+      </div>
+
       {/* Upload-point micro-copy (spec §1.8, confirmed 2026-08-03) — shown right where evidence is entered, not buried in a footer link. */}
       <p className="rounded border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
         What you submit here is analyzed by Groq, our AI provider, to draft findings — every finding is reviewed by a

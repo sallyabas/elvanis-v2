@@ -13,6 +13,7 @@ import {
 } from "@/lib/reviewer/workspace";
 import type { LensFinding } from "@/lib/lenses/types";
 import { createClient } from "@/lib/supabase/server";
+import { rerunAudit } from "@/lib/audit/rerun-audit";
 
 // reviewed_by is a real FK to users.id. Now sourced from the real
 // authenticated session (confirmed 2026-08-02), not a REVIEWER_USER_ID env
@@ -89,4 +90,21 @@ export async function approveReportAction(reportId: string) {
   revalidatePath(`/review/${reportId}`);
   revalidatePath("/queue");
   return result;
+}
+
+/**
+ * Basic re-run/refresh button (confirmed 2026-08-05) — reviewer-triggered,
+ * see rerun-audit.ts docblock for why this isn't a client self-serve
+ * button yet. Produces a brand-new report in pending_review; the mandatory
+ * review gate applies to it exactly as it does to any other report.
+ */
+export async function rerunAuditAction(reportId: string) {
+  await getReviewerId();
+  try {
+    const result = await rerunAudit(reportId);
+    revalidatePath("/queue");
+    return { success: true, newReportId: result.reportId };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Something went wrong." };
+  }
 }

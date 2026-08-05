@@ -11,6 +11,7 @@ import {
   resolveDisputeAction,
   reRankTop3Action,
   approveReportAction,
+  rerunAuditAction,
 } from "./actions";
 import type { DisputeResolution } from "@/lib/reviewer/workspace";
 
@@ -50,6 +51,8 @@ interface Props {
   companyName: string;
   reportStatus: string;
   top3FindingIds: string[];
+  canRerun: boolean;
+  rerunOfReportId: string | null;
   findings: FindingRow[];
   conflicts: ConflictRow[];
   timing: TimingInfo;
@@ -95,12 +98,24 @@ function formatDuration(fromIso: string | null, toIso: string | null): string | 
   return `${hours}h ${minutes}m`;
 }
 
-export function ReviewWorkspaceClient({ reportId, companyName, reportStatus, top3FindingIds, findings, conflicts, timing }: Props) {
+export function ReviewWorkspaceClient({
+  reportId,
+  companyName,
+  reportStatus,
+  top3FindingIds,
+  canRerun,
+  rerunOfReportId,
+  findings,
+  conflicts,
+  timing,
+}: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [disputingId, setDisputingId] = useState<string | null>(null);
   const [resolvingConflictId, setResolvingConflictId] = useState<string | null>(null);
   const [blockedReason, setBlockedReason] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [rerunError, setRerunError] = useState<string | null>(null);
+  const [rerunResultId, setRerunResultId] = useState<string | null>(null);
 
   const findingById = new Map(findings.map((f) => [f.id, f]));
 
@@ -157,6 +172,18 @@ export function ReviewWorkspaceClient({ reportId, companyName, reportStatus, top
     setPending(true);
     const result = await approveReportAction(reportId);
     setBlockedReason(result.approved ? null : (result.blockedReason ?? "Blocked"));
+    setPending(false);
+  }
+
+  async function handleRerun() {
+    setPending(true);
+    setRerunError(null);
+    const result = await rerunAuditAction(reportId);
+    if (result.success) {
+      setRerunResultId(result.newReportId ?? null);
+    } else {
+      setRerunError(result.error ?? "Something went wrong.");
+    }
     setPending(false);
   }
 
@@ -361,6 +388,49 @@ export function ReviewWorkspaceClient({ reportId, companyName, reportStatus, top
           Approve report
         </button>
       </section>
+
+      {/* Basic re-run/refresh button (confirmed 2026-08-05) — reviewer-triggered, see rerun-audit.ts for why. */}
+      <section className="mt-6 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+        <h2 className="mb-2 font-medium">Re-run analysis</h2>
+        {rerunOfReportId && (
+          <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">
+            This report is itself a re-run of{" "}
+            <a href={`/review/${rerunOfReportId}`} className="underline">
+              an earlier report
+            </a>
+            .
+          </p>
+        )}
+        {canRerun ? (
+          <>
+            <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
+              Re-executes all five lenses fresh against the same evidence, using the company&apos;s current profile. Produces a new report in pending review — the mandatory review gate applies to it exactly as it does to this one.
+            </p>
+            {rerunError && <p className="mb-3 text-sm text-red-600">{rerunError}</p>}
+            {rerunResultId ? (
+              <p className="text-sm text-green-700 dark:text-green-400">
+                New report created —{" "}
+                <a href={`/review/${rerunResultId}`} className="underline">
+                  open it
+                </a>
+                .
+              </p>
+            ) : (
+              <button
+                disabled={pending}
+                onClick={handleRerun}
+                className="rounded border px-4 py-2 text-sm font-medium disabled:opacity-40"
+              >
+                Re-run analysis
+              </button>
+            )}
+          </>
+        ) : (
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            This report predates evidence-snapshot support and can&apos;t be re-run — no stored evidence to re-run against.
+          </p>
+        )}
+      </section>
     </div>
   );
 }
@@ -462,7 +532,7 @@ function EditForm({
           ))}
         </select>
         <select className="rounded border px-2 py-1 text-xs" value={goalRelevance} onChange={(e) => setGoalRelevance(e.target.value as GoalRelevance)}>
-          {(["directly_blocks", "directly_supports", "indirectly_affects", "unrelated"] as const).map((g) => (
+          {(["directly_blocks", "directly_affects", "directly_supports", "indirectly_affects", "unrelated"] as const).map((g) => (
             <option key={g} value={g}>
               {g}
             </option>

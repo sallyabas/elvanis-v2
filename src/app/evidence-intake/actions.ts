@@ -6,6 +6,7 @@ import type { CompanyProfileForLens, EvidenceFieldInput, GoalContext } from "@/l
 import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
 import type { CommercialSelfReport } from "@/lib/lenses/commercial";
 import type { MetricInput } from "@/lib/lenses/metrics";
+import { clearEvidenceIntakeDraft } from "@/lib/evidence/draft";
 
 export interface SubmitEvidenceInput {
   companyId: string;
@@ -124,7 +125,21 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
       product: { evidenceFields: input.product.evidenceFields, metrics: NO_METRICS },
       commercial: { selfReport: input.commercial, independentResearch: [] },
       aiGovernance: input.aiGovernance,
+      // Basic re-run/refresh button support (confirmed 2026-08-05) — store
+      // the exact evidence this run used so a reviewer can re-run it fresh
+      // later without asking the client to resubmit everything.
+      sourceEvidenceSnapshot: {
+        financial: input.financial,
+        execution: input.execution,
+        product: input.product,
+        commercial: input.commercial,
+        aiGovernance: input.aiGovernance,
+      },
     });
+    // Saved draft intake (confirmed 2026-08-05) — a successful submission
+    // means there's no longer any in-progress state worth resuming; clear
+    // it so a stale draft doesn't linger and confuse a future re-audit.
+    await clearEvidenceIntakeDraft(input.companyId);
     return { success: true, reportId: result.reportId };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Something went wrong." };
