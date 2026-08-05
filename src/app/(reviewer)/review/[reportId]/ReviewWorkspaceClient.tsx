@@ -11,6 +11,7 @@ import {
   resolveDisputeAction,
   reRankTop3Action,
   approveReportAction,
+  deliverReportAction,
   rerunAuditAction,
   setPlanTierAction,
 } from "./actions";
@@ -125,6 +126,8 @@ export function ReviewWorkspaceClient({
   const [rerunError, setRerunError] = useState<string | null>(null);
   const [rerunResultId, setRerunResultId] = useState<string | null>(null);
   const [tierPending, setTierPending] = useState(false);
+  const [deliverError, setDeliverError] = useState<string | null>(null);
+  const [delivered, setDelivered] = useState(false);
 
   async function handleSetPlanTier(tier: "free" | "concierge") {
     if (!companyUserId) return;
@@ -188,6 +191,24 @@ export function ReviewWorkspaceClient({
     setPending(true);
     const result = await approveReportAction(reportId);
     setBlockedReason(result.approved ? null : (result.blockedReason ?? "Blocked"));
+    setPending(false);
+  }
+
+  /**
+   * Real "Deliver" button (confirmed 2026-08-06) — see actions.ts docblock.
+   * deliverReport() itself refuses anything not already status='approved',
+   * so this button is disabled ahead of that too, but the server-side
+   * check is still the real gate, not this disabled attribute.
+   */
+  async function handleDeliver() {
+    setPending(true);
+    setDeliverError(null);
+    const result = await deliverReportAction(reportId);
+    if (result.success) {
+      setDelivered(true);
+    } else {
+      setDeliverError(result.error ?? "Something went wrong.");
+    }
     setPending(false);
   }
 
@@ -425,6 +446,27 @@ export function ReviewWorkspaceClient({
         >
           Approve report
         </button>
+      </section>
+
+      {/* Real "Deliver" button (confirmed 2026-08-06) — closes the gap flagged across multiple end-to-end passes where deliverReport() had no UI caller. */}
+      <section className="mt-6 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+        <h2 className="mb-2 font-medium">Deliver to client</h2>
+        <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
+          Makes the report visible to the client and logs a real &quot;report ready&quot; notification. Separate from Approve on
+          purpose — the report is reviewer-done but not yet client-visible until this step.
+        </p>
+        {deliverError && <p className="mb-3 text-sm text-red-600">{deliverError}</p>}
+        {delivered || reportStatus === "sent" ? (
+          <p className="text-sm text-green-700 dark:text-green-400">Delivered — the client can now see this report.</p>
+        ) : (
+          <button
+            disabled={pending || reportStatus !== "approved"}
+            onClick={handleDeliver}
+            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+          >
+            Deliver report
+          </button>
+        )}
       </section>
 
       {/* Basic re-run/refresh button (confirmed 2026-08-05) — reviewer-triggered, see rerun-audit.ts for why. */}

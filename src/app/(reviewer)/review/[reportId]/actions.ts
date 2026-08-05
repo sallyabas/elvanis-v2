@@ -9,6 +9,7 @@ import {
   resolveDispute,
   reRankTop3,
   approveReport,
+  deliverReport,
   type DisputeResolution,
 } from "@/lib/reviewer/workspace";
 import type { LensFinding } from "@/lib/lenses/types";
@@ -91,6 +92,29 @@ export async function approveReportAction(reportId: string) {
   revalidatePath(`/review/${reportId}`);
   revalidatePath("/queue");
   return result;
+}
+
+/**
+ * Real "Deliver" button (confirmed 2026-08-06) — closes a gap flagged
+ * repeatedly across multiple live end-to-end passes: deliverReport()
+ * existed in workspace.ts with no UI caller anywhere, forcing every full
+ * walkthrough (including the test-as-a-stranger pass) to route around it
+ * with a direct script call. deliverReport() itself already enforces
+ * status === 'approved' — this action just surfaces that as a real button
+ * and re-checks reviewer session/role first, same pattern as every other
+ * action in this file.
+ */
+export async function deliverReportAction(reportId: string) {
+  await getReviewerId();
+  try {
+    await deliverReport(reportId);
+    revalidatePath(`/review/${reportId}`);
+    revalidatePath("/queue");
+    revalidatePath("/reports");
+    return { success: true as const };
+  } catch (e) {
+    return { success: false as const, error: e instanceof Error ? e.message : "Something went wrong." };
+  }
 }
 
 /**

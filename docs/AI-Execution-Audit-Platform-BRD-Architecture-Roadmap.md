@@ -30,6 +30,8 @@ Goal selection → evidence intake (native tool exports or fill-in templates, no
 
 **Finalized v1 launch pricing, confirmed 2026-08-06** — treated as confident v1 launch numbers, not yet pilot-validated (real pilot data may still move these; not guessed, just not yet proven against real willingness-to-pay). Replaces the earlier "TBD, to be tested with pilots" placeholder ranges below with real, committed numbers.
 
+**DB-backed as of the same date, not a code or doc literal** — same "admin-adjustable, not a constant" principle already used for the re-audit cadence (`app_settings`). Live source of truth is the `pricing` table (`supabase/migrations/20260806110000_pricing_table.sql`, read/write via [src/lib/pricing.ts](../src/lib/pricing.ts)), editable through a reviewer-facing panel on `/queue` (no separate admin role/auth exists yet, so the reviewer role is the de facto admin for this, same as the plan-tier badge and the regulatory-content-review panel). The table below reflects the *initial seed values* as of 2026-08-06 — check the live table for the current numbers, not this document, if the two ever diverge. Confirmed by grep at the time this table was introduced: zero hardcoded price literals existed anywhere in application code (`src/`) — the numbers had only ever lived in this document.
+
 **Core Audit has two service tiers — same technical pipeline (five-lens engine, Conflict Detection, mandatory review; no new pipeline for Concierge), different level of human attention.** See §1.9 for the full breakdown of what each tier includes.
 
 | Offer | Tier | Sequencing | Price |

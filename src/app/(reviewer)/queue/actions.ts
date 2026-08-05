@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { markRegulatoryContentReviewed } from "@/lib/reviewer/regulatory-content-review";
 import { updateSessionRequestStatus } from "@/lib/service-layer/session-requests";
+import { updatePricingItem } from "@/lib/pricing";
 import { createClient } from "@/lib/supabase/server";
 
 // Same independent session+role re-check as every other reviewer Server
@@ -31,5 +32,25 @@ export async function markRegulatoryContentReviewedAction(jurisdiction: string) 
 export async function updateSessionRequestStatusAction(requestId: string, status: "scheduled" | "completed" | "declined") {
   await getReviewerId();
   await updateSessionRequestStatus(requestId, status);
+  revalidatePath("/queue");
+}
+
+/**
+ * Pricing panel (confirmed 2026-08-06) — reviewer-facing, since no
+ * separate admin role/auth exists in this codebase (same reasoning
+ * already applied to the plan-tier badge and the regulatory-content
+ * "Mark reviewed" buttons: the reviewer role is the de facto admin for
+ * internal operational data, not a new system to build). Uses FormData
+ * (not a bound arg) since the price itself is a live-edited value, not a
+ * fixed identifier.
+ */
+export async function updatePricingItemAction(formData: FormData) {
+  await getReviewerId();
+  const itemKey = String(formData.get("itemKey"));
+  const priceAmount = Number(formData.get("priceAmount"));
+  if (!itemKey || Number.isNaN(priceAmount) || priceAmount < 0) {
+    throw new Error("Invalid pricing update.");
+  }
+  await updatePricingItem(itemKey, priceAmount);
   revalidatePath("/queue");
 }
