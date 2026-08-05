@@ -12,7 +12,29 @@ export type LensType =
 
 export type ConfidenceLevel = "high" | "medium" | "low" | "insufficient";
 export type EvidenceSufficiency = "sufficient" | "partial" | "insufficient";
-export type GoalRelevance = "directly_blocks" | "indirectly_affects" | "unrelated";
+/**
+ * How a finding bears on the client's stated goal. "directly_supports" added
+ * 2026-08-01 after live testing showed the model reliably hallucinating an
+ * out-of-enum value ("directly_affects") for genuinely healthy/positive
+ * findings under a directly-relevant goal (e.g. gross margin comfortably
+ * above benchmark, under a cash-flow-efficiency goal) — none of the original
+ * three values honestly fit "this is good news and directly relevant," so
+ * the model invented one instead of picking the closest existing option.
+ * The schema was incomplete for a real, common case, not a prompt-wording
+ * problem — this is the fix; prompt guidance is reinforcement on top of it,
+ * not a substitute for it.
+ */
+export type GoalRelevance = "directly_blocks" | "directly_supports" | "indirectly_affects" | "unrelated";
+/**
+ * Business-impact severity if this finding goes unaddressed — deliberately
+ * independent of confidenceLevel (how sure we are) and of report-level
+ * priority_ranking (which combines goal/financial/urgency/confidence scores
+ * for top-3 SELECTION). A finding can be low-confidence AND critical
+ * severity (e.g. a plausible but unverified compliance exposure), or
+ * high-confidence AND low severity — these are genuinely different axes,
+ * confirmed 2026-08-01.
+ */
+export type Severity = "critical" | "high" | "medium" | "low";
 
 /**
  * The goal menu (Phase 0 roadmap item, locked 2026-07-31). Goal is a
@@ -34,6 +56,16 @@ export interface GoalContext {
   targetMetric?: string | null;
   timeHorizon?: string | null;
   successDefinition?: string | null;
+  /**
+   * Client's own words on "what would good look like" for this goal (spec
+   * §1.9a, confirmed 2026-08-02) — always client-authored, optional, never
+   * fed into lens prompts (deliberately out of scope; see §1.9a "worth
+   * considering later"). Shown alongside the benchmark comparison in the
+   * final report — a neutral note is shown in its place when blank, never
+   * silently omitted.
+   */
+  desiredFutureStatePrimary?: string | null;
+  desiredFutureStateSecondary?: string | null;
 }
 
 /**
@@ -80,10 +112,23 @@ export interface FinancialImpact {
 /** Client-facing source tag (spec §2.3a, confirmed 2026-07-31) — currently used by Commercial/Market. */
 export type FindingOrigin = "client_reported" | "ai_independent";
 
+/**
+ * Confirmed 2026-08-01: four fields must stay explicitly separate, not
+ * folded into free text — root cause and recommended fix have been the
+ * core value proposition from day one, not optional detail.
+ */
 export interface LensFinding {
   findingId: string;
+  /** Short label for lists/headers, e.g. "Revenue concentrated in 2 clients (61% of ARR)". */
   title: string;
+  /** (1) The observation itself — what was actually found, in full, including any factual benchmark comparison. Distinct from the short title. */
+  diagnosis: string;
+  /** (2) WHY — the underlying mechanism. Must not just restate the diagnosis or a benchmark comparison; that belongs in diagnosis, not here. */
   rootCause: string;
+  /** (3) The recommended fix/action — concrete and grounded in the finding, never fabricated beyond what the evidence reasonably supports. */
+  recommendedAction: string;
+  /** (4) Business-impact severity if unaddressed — see Severity docblock. Independent of confidenceLevel and of report-level priority_ranking. */
+  severity: Severity;
   /** Specific evidence field names/values this finding is grounded in — never fabricated. */
   evidenceCited: string[];
   goalRelevance: GoalRelevance;

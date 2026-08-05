@@ -1,5 +1,101 @@
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { GOAL_LABELS } from "@/lib/lenses/goals";
+import type { PrimaryGoal } from "@/lib/lenses/types";
+import { DesiredFutureStateField } from "./DesiredFutureStateField";
+import { BusinessProfileForm } from "./BusinessProfileForm";
+import type { CompanyProfileFields } from "./actions";
+
 // Business Profile — the living record every lens prompt reads from at
-// generation time. See spec §2.5 / §5 "Business Profile (living record)".
-export default function BusinessProfilePage() {
-  return <div>Business Profile</div>;
+// generation time. Confirmed 2026-08-04 (Priority 3): now fully
+// session-derived, not `?companyId=`/`?goalId=` — the `(app)` layout
+// already guarantees an authenticated client with a real company exists
+// before this page renders. Renders the full field set (company identity,
+// brand, business context), not just the one goal-linked field.
+export default async function BusinessProfilePage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/client-login");
+  }
+
+  const { data: company, error: companyError } = await supabase
+    .from("companies")
+    .select(
+      "id, name, industry, business_model, employee_count, stage, website_url, social_links, revenue_range_band, customer_type, main_tools_stack, team_structure_summary",
+    )
+    .eq("user_id", user.id)
+    .single();
+
+  if (companyError || !company) {
+    redirect("/onboarding");
+  }
+
+  const { data: goal } = await supabase
+    .from("goals")
+    .select("id, primary_goal, secondary_goal, desired_future_state_primary, desired_future_state_secondary")
+    .eq("company_id", company.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const socialLinks = (company.social_links as { links?: string[] } | null)?.links ?? [];
+  const mainToolsStack = (company.main_tools_stack as { tools?: string[] } | null)?.tools ?? [];
+
+  const initialFields: CompanyProfileFields = {
+    name: company.name as string,
+    industry: company.industry as string | null,
+    businessModel: company.business_model as "B2B" | "B2C" | null,
+    employeeCount: company.employee_count as number | null,
+    stage: company.stage as string | null,
+    websiteUrl: company.website_url as string | null,
+    socialLinks,
+    revenueRangeBand: company.revenue_range_band as string | null,
+    customerType: company.customer_type as string | null,
+    mainToolsStack,
+    teamStructureSummary: company.team_structure_summary as string | null,
+  };
+
+  return (
+    <div className="mx-auto max-w-2xl px-6 py-10">
+      <h1 className="mb-1 text-2xl font-semibold">Business Profile</h1>
+      <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">
+        The living record every lens prompt reads from — changes are logged and tracked over time.
+      </p>
+
+      <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+        <h2 className="mb-4 font-medium">Company details</h2>
+        <BusinessProfileForm companyId={company.id as string} initial={initialFields} />
+      </section>
+
+      {goal && (
+        <>
+          <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+            <h2 className="mb-4 font-medium">Primary goal: {GOAL_LABELS[goal.primary_goal as PrimaryGoal]}</h2>
+            <DesiredFutureStateField
+              goalId={goal.id}
+              field="primary"
+              initialValue={goal.desired_future_state_primary}
+              label="What would good look like here?"
+            />
+          </section>
+
+          {goal.secondary_goal && (
+            <section className="rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+              <h2 className="mb-4 font-medium">Secondary goal: {GOAL_LABELS[goal.secondary_goal as PrimaryGoal]}</h2>
+              <DesiredFutureStateField
+                goalId={goal.id}
+                field="secondary"
+                initialValue={goal.desired_future_state_secondary}
+                label="What would good look like here?"
+              />
+            </section>
+          )}
+        </>
+      )}
+    </div>
+  );
 }

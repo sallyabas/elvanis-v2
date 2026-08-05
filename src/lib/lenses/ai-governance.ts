@@ -14,6 +14,7 @@ import {
   evidenceSufficiencySchema,
   financialImpactSchema,
   goalRelevanceSchema,
+  severitySchema,
 } from "./schemas";
 import type { CompanyProfileForLens, EvidenceFieldInput, EvidenceSufficiency, GoalContext, LensFinding } from "./types";
 
@@ -73,12 +74,21 @@ const SHARED_RULES = `HARD RULES — violating any of these makes your output un
 3. Do NOT perform a formal EU AI Act conformity assessment or definitive legal risk classification — that deep work belongs to the standalone Tender Readiness module. You may reference the AI Act's tiers as context for why a dimension matters, but do not issue a formal classification verdict.
 4. Only raise a finding for a dimension that shows a genuine gap (a low score, or evidence too thin to assess) or a specific compliance/risk exposure. Do NOT create findings praising dimensions that scored well — this lens surfaces risk, not a scorecard.
 5. Financial impact is always a range with a confidence level and stated assumptions — never a single fake-precise number. Most governance gaps are risk exposure, not a clean cost figure — set financialImpact to null unless you can genuinely ground a band (e.g. cost of remediation, or a stated regulatory exposure if the company's AI use is plausibly high-risk).
-6. Weigh findings by relevance to the client's stated goal (see goalRelevance), but do not suppress materially important governance risk just because it's "unrelated" to the stated goal.
-7. Output strict JSON matching the schema below. No prose outside the JSON.`;
+6. Weigh findings by relevance to the client's stated goal (see goalRelevance), but do not suppress materially important governance risk just because it's "unrelated" to the stated goal. Per rule 4 this lens only raises risk/gap findings, never a "things are healthy" finding, so "directly_supports" (the fourth goalRelevance value, shared across all lenses) will rarely if ever apply here — do not stretch a real gap into "directly_blocks" or invent a value outside the four listed in the schema below just because none feels like a perfect fit.
+7. Output strict JSON matching the schema below. No prose outside the JSON.
+
+FINDING STRUCTURE — four fields must stay distinct, never folded together:
+- "diagnosis": the observation itself — what was actually found, in full (which dimension, what the evidence/score shows). This is the WHAT.
+- "rootCause": the underlying mechanism — WHY this gap exists. Must be genuinely causal, not a restatement of the diagnosis. If you don't have enough evidence to explain why, say so honestly rather than inventing a cause.
+- "recommendedAction": the concrete fix — WHAT TO DO about it. Ground it in the actual finding; don't recommend something the evidence doesn't support.
+- "severity": "critical" | "high" | "medium" | "low" — how much this matters to the business if left unaddressed. Independent of confidenceLevel (how sure you are) and independent of goalRelevance (how tied to the stated goal it is).`;
 
 const findingSchema = z.object({
   title: z.string(),
+  diagnosis: z.string(),
   rootCause: z.string(),
+  recommendedAction: z.string(),
+  severity: severitySchema,
   evidenceCited: z.array(z.string()),
   goalRelevance: goalRelevanceSchema,
   financialImpact: financialImpactSchema,
@@ -107,8 +117,13 @@ function buildLiveAiNoDocsFinding(): LensFinding {
   return {
     findingId: "ai_governance-live_ai_no_docs",
     title: "Live AI in production with no governance documentation",
+    diagnosis:
+      "The company reports using AI in a live/production capacity but has not submitted any governance documentation (AI use inventory, risk assessment, human-oversight process, or data-handling policy).",
     rootCause:
-      "The company reports using AI in a live/production capacity but has not submitted any governance documentation (AI use inventory, risk assessment, human-oversight process, or data-handling policy). Live AI without documented governance is a structural gap in its own right, independent of how any individual maturity dimension scores.",
+      "Live AI without documented governance is a structural gap in its own right, independent of how any individual maturity dimension scores — the company adopted or deployed AI faster than it built the oversight to match it.",
+    recommendedAction:
+      "Produce a minimal AI use inventory and a documented human-oversight process before adding further AI-powered functionality — this is the prerequisite most other governance dimensions build on.",
+    severity: "critical",
     evidenceCited: ["has_live_ai_in_production", "governance_docs_submitted"],
     goalRelevance: "directly_blocks",
     financialImpact: null,
@@ -139,9 +154,12 @@ OUTPUT SCHEMA (JSON object):
   "findings": [
     {
       "title": string,
-      "rootCause": string,
+      "diagnosis": string,           // the observation itself, in full — see FINDING STRUCTURE
+      "rootCause": string,           // the underlying mechanism, not just the symptom — see FINDING STRUCTURE
+      "recommendedAction": string,   // the concrete fix — see FINDING STRUCTURE
+      "severity": "critical" | "high" | "medium" | "low",
       "evidenceCited": string[],
-      "goalRelevance": "directly_blocks" | "indirectly_affects" | "unrelated",
+      "goalRelevance": "directly_blocks" | "directly_supports" | "indirectly_affects" | "unrelated",
       "financialImpact": { "impactBandLow": number, "impactBandHigh": number, "currency": string, "confidenceLevel": "high"|"medium"|"low"|"insufficient", "assumptions": string[] } | null,
       "confidenceLevel": "high" | "medium" | "low" | "insufficient",
       "isMissingDataFinding": boolean
@@ -232,9 +250,12 @@ OUTPUT SCHEMA (JSON object):
   "findings": [
     {
       "title": string,
-      "rootCause": string,
+      "diagnosis": string,           // the observation itself, in full — see FINDING STRUCTURE
+      "rootCause": string,           // the underlying mechanism, not just the symptom — see FINDING STRUCTURE
+      "recommendedAction": string,   // the concrete fix — see FINDING STRUCTURE
+      "severity": "critical" | "high" | "medium" | "low",
       "evidenceCited": string[],
-      "goalRelevance": "directly_blocks" | "indirectly_affects" | "unrelated",
+      "goalRelevance": "directly_blocks" | "directly_supports" | "indirectly_affects" | "unrelated",
       "financialImpact": { "impactBandLow": number, "impactBandHigh": number, "currency": string, "confidenceLevel": "high"|"medium"|"low"|"insufficient", "assumptions": string[] } | null,
       "confidenceLevel": "high" | "medium" | "low" | "insufficient",
       "isMissingDataFinding": boolean

@@ -8,6 +8,7 @@ import {
   evidenceSufficiencySchema,
   financialImpactSchema,
   goalRelevanceSchema,
+  severitySchema,
 } from "./schemas";
 import type { EvidenceFieldInput, LensDraftInput, LensDraftResult, LensFinding, LensModule } from "./types";
 
@@ -18,9 +19,15 @@ HARD RULES — violating any of these makes your output unusable:
 2. Financial impact is always a range (impactBandLow/impactBandHigh) with a confidence level and stated assumptions — never a single fake-precise number. If you cannot responsibly estimate a range, set financialImpact to null rather than inventing one.
 3. If evidence for a specific check is missing or too sparse to analyze, do not guess. Reflect that in evidenceSufficiency and isMissingDataFinding, and lower confidenceLevel to "insufficient" — do not manufacture a finding to fill the gap. Vague qualitative claims (e.g. "margins are healthy I believe") are not evidence — treat unverifiable anecdotes the same as missing data, not as grounds for a confident finding.
 4. Do NOT diagnose WHY financial data is missing or the company lacks financial visibility/reporting infrastructure (e.g. "no finance function," "immature financial processes," "lack of reporting infrastructure") — that causal diagnosis belongs to the Execution lens, not Financial. If you note insufficient data (rule 3), the rootCause must describe ONLY what evidence is missing or unverifiable (e.g. "No monthly revenue, margin, runway, or concentration figures were submitted; the qualitative claim in the general note cannot be independently verified") — never speculate about organizational causes.
-5. Weigh findings by relevance to the client's stated goal (see goalRelevance), but do not suppress materially important findings just because they're "unrelated" to the goal — surface them, just mark them accordingly.
-6. COMPUTED BENCHMARK COMPARISONS ARE FINAL — DO NOT RECOMPUTE. Every metric's tier and comparison-to-benchmark below was already calculated in code, in matching units, and is guaranteed correct. Use each "comparisonText" verbatim (or a light rewording that preserves its exact meaning and direction) in the corresponding finding's rootCause. Do NOT independently judge whether a value is above/below/within a benchmark, do NOT convert units yourself, and do NOT second-guess the tier — that arithmetic is not your job here. For any number in the evidence that is NOT in the computed comparisons list, you may discuss it qualitatively but must not assert a specific benchmark comparison for it.
+5. Weigh findings by relevance to the client's stated goal (see goalRelevance). Use "directly_supports" for a genuinely healthy/positive finding that is materially and directly relevant to the goal (e.g. a metric comfortably ahead of benchmark, under a goal that metric feeds directly into) — do not force a healthy finding into "directly_blocks" (that's for problems) and never invent a value outside the four listed in the schema below. Do not suppress materially important findings just because they're "unrelated" to the goal — surface them, just mark them accordingly.
+6. COMPUTED BENCHMARK COMPARISONS ARE FINAL — DO NOT RECOMPUTE. Every metric's tier and comparison-to-benchmark below was already calculated in code, in matching units, and is guaranteed correct. Use each "comparisonText" verbatim (or a light rewording that preserves its exact meaning and direction) in the corresponding finding's "diagnosis" — it's a factual observation, not a causal explanation, so it belongs there, not in "rootCause". Do NOT independently judge whether a value is above/below/within a benchmark, do NOT convert units yourself, and do NOT second-guess the tier — that arithmetic is not your job here. For any number in the evidence that is NOT in the computed comparisons list, you may discuss it qualitatively but must not assert a specific benchmark comparison for it.
 7. Output strict JSON matching the schema below. No prose outside the JSON.
+
+FINDING STRUCTURE — four fields must stay distinct, never folded together:
+- "diagnosis": the observation itself — what was actually found, in full (including any factual benchmark comparison from rule 6). This is the WHAT.
+- "rootCause": the underlying mechanism — WHY this is happening. Must be genuinely causal, not a restatement of the diagnosis or a benchmark comparison. If you don't have enough evidence to explain why, say so honestly rather than inventing a cause.
+- "recommendedAction": the concrete fix — WHAT TO DO about it. Ground it in the actual finding; don't recommend something the evidence doesn't support.
+- "severity": "critical" | "high" | "medium" | "low" — how much this matters to the business if left unaddressed. Independent of confidenceLevel (how sure you are) and independent of goalRelevance (how tied to the stated goal it is) — a finding can be low-confidence and still critical severity, or high-confidence and low severity.
 
 REFERENCE BENCHMARKS (general context on the scale involved — the COMPUTED BENCHMARK COMPARISONS section below is what decides each finding's tier, not this):
 ${formatBenchmarksForPrompt()}
@@ -37,9 +44,12 @@ OUTPUT SCHEMA (JSON object):
   "findings": [
     {
       "title": string,               // short label, e.g. "Revenue concentrated in 2 clients (61% of ARR)"
-      "rootCause": string,           // the underlying mechanism, not just the symptom
+      "diagnosis": string,           // the observation itself, in full — see FINDING STRUCTURE
+      "rootCause": string,           // the underlying mechanism, not just the symptom — see FINDING STRUCTURE
+      "recommendedAction": string,   // the concrete fix — see FINDING STRUCTURE
+      "severity": "critical" | "high" | "medium" | "low",
       "evidenceCited": string[],     // exact evidence field names/values this is grounded in
-      "goalRelevance": "directly_blocks" | "indirectly_affects" | "unrelated",
+      "goalRelevance": "directly_blocks" | "directly_supports" | "indirectly_affects" | "unrelated",
       "financialImpact": {
         "impactBandLow": number,
         "impactBandHigh": number,
@@ -57,7 +67,10 @@ OUTPUT SCHEMA (JSON object):
 
 const financialFindingSchema = z.object({
   title: z.string(),
+  diagnosis: z.string(),
   rootCause: z.string(),
+  recommendedAction: z.string(),
+  severity: severitySchema,
   evidenceCited: z.array(z.string()),
   goalRelevance: goalRelevanceSchema,
   financialImpact: financialImpactSchema,
@@ -130,7 +143,10 @@ export const financialLens: LensModule = {
     const findings: LensFinding[] = raw.findings.map((f, i) => ({
       findingId: `financial-${i}`,
       title: f.title,
+      diagnosis: f.diagnosis,
       rootCause: f.rootCause,
+      recommendedAction: f.recommendedAction,
+      severity: f.severity,
       evidenceCited: f.evidenceCited,
       goalRelevance: f.goalRelevance,
       financialImpact: f.financialImpact,
