@@ -55,6 +55,16 @@ export interface RunAuditInput {
     independentResearch: IndependentResearchFinding[];
   };
   aiGovernance: Omit<AiGovernanceDraftInput, "company" | "goal">;
+  /**
+   * Basic re-run/refresh button support (confirmed 2026-08-05) — the exact
+   * evidence payload this run was called with, stored verbatim so a later
+   * re-run can reuse it (see rerun-audit.ts). Optional: callers that don't
+   * pass this (none currently) simply produce a report that can't be
+   * re-run later, same as every report created before this field existed.
+   */
+  sourceEvidenceSnapshot?: Record<string, unknown>;
+  /** Set only when this run IS a re-run of an earlier report — links the new report back to it. */
+  rerunOfReportId?: string | null;
 }
 
 export interface RunAuditResult {
@@ -166,6 +176,8 @@ export async function runAudit(input: RunAuditInput): Promise<RunAuditResult> {
       // without recomputing — see supabase/migrations/20260802120000.
       evidence_sufficiency_by_lens: evidenceSufficiencyByLens,
       governance_maturity_tier: governanceMaturityTier,
+      source_evidence_snapshot: input.sourceEvidenceSnapshot ?? null,
+      rerun_of_report_id: input.rerunOfReportId ?? null,
     })
     .select("id")
     .single();

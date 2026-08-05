@@ -7,7 +7,7 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
 
   const { data: report, error: reportError } = await supabase
     .from("reports")
-    .select("id, status, top_3_finding_ids, created_at, submitted_at, edit_window_closes_at, approved_at, companies(name)")
+    .select("id, status, top_3_finding_ids, created_at, submitted_at, edit_window_closes_at, approved_at, source_evidence_snapshot, rerun_of_report_id, companies(name)")
     .eq("id", reportId)
     .single();
 
@@ -48,6 +48,8 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
       companyName={company?.name ?? "Unknown company"}
       reportStatus={report.status}
       top3FindingIds={(report.top_3_finding_ids as string[]) ?? []}
+      canRerun={report.source_evidence_snapshot !== null}
+      rerunOfReportId={report.rerun_of_report_id as string | null}
       findings={findings}
       conflicts={conflicts ?? []}
       timing={{
