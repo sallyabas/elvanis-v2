@@ -462,7 +462,7 @@ function EditForm({
           ))}
         </select>
         <select className="rounded border px-2 py-1 text-xs" value={goalRelevance} onChange={(e) => setGoalRelevance(e.target.value as GoalRelevance)}>
-          {(["directly_blocks", "directly_supports", "indirectly_affects", "unrelated"] as const).map((g) => (
+          {(["directly_blocks", "directly_affects", "directly_supports", "indirectly_affects", "unrelated"] as const).map((g) => (
             <option key={g} value={g}>
               {g}
             </option>

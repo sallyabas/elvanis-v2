@@ -74,7 +74,7 @@ const SHARED_RULES = `HARD RULES — violating any of these makes your output un
 3. Do NOT perform a formal EU AI Act conformity assessment or definitive legal risk classification — that deep work belongs to the standalone Tender Readiness module. You may reference the AI Act's tiers as context for why a dimension matters, but do not issue a formal classification verdict.
 4. Only raise a finding for a dimension that shows a genuine gap (a low score, or evidence too thin to assess) or a specific compliance/risk exposure. Do NOT create findings praising dimensions that scored well — this lens surfaces risk, not a scorecard.
 5. Financial impact is always a range with a confidence level and stated assumptions — never a single fake-precise number. Most governance gaps are risk exposure, not a clean cost figure — set financialImpact to null unless you can genuinely ground a band (e.g. cost of remediation, or a stated regulatory exposure if the company's AI use is plausibly high-risk).
-6. Weigh findings by relevance to the client's stated goal (see goalRelevance), but do not suppress materially important governance risk just because it's "unrelated" to the stated goal. Per rule 4 this lens only raises risk/gap findings, never a "things are healthy" finding, so "directly_supports" (the fourth goalRelevance value, shared across all lenses) will rarely if ever apply here — do not stretch a real gap into "directly_blocks" or invent a value outside the four listed in the schema below just because none feels like a perfect fit.
+6. Weigh findings by relevance to the client's stated goal (see goalRelevance), but do not suppress materially important governance risk just because it's "unrelated" to the stated goal. Per rule 4 this lens only raises risk/gap findings, never a "things are healthy" finding, so "directly_supports" (shared across all lenses) will rarely if ever apply here. "directly_affects" — a real, material, often-quantifiable cost or exposure tied to the goal that is NOT itself the primary/dominant obstruction — is more likely to come up than "directly_supports": e.g. a governance gap with a real, boundable financial exposure (a plausible fine/remediation-cost range) under a cash-flow-efficiency goal, without that gap being what's actually blocking the business from hitting the goal. Do not stretch a real gap into "directly_blocks" or invent a value outside the five listed in the schema below just because none feels like a perfect fit — pick the closest of these five instead.
 7. Output strict JSON matching the schema below. No prose outside the JSON.
 
 FINDING STRUCTURE — four fields must stay distinct, never folded together:
@@ -159,7 +159,7 @@ OUTPUT SCHEMA (JSON object):
       "recommendedAction": string,   // the concrete fix — see FINDING STRUCTURE
       "severity": "critical" | "high" | "medium" | "low",
       "evidenceCited": string[],
-      "goalRelevance": "directly_blocks" | "directly_supports" | "indirectly_affects" | "unrelated",
+      "goalRelevance": "directly_blocks" | "directly_affects" | "directly_supports" | "indirectly_affects" | "unrelated",
       "financialImpact": { "impactBandLow": number, "impactBandHigh": number, "currency": string, "confidenceLevel": "high"|"medium"|"low"|"insufficient", "assumptions": string[] } | null,
       "confidenceLevel": "high" | "medium" | "low" | "insufficient",
       "isMissingDataFinding": boolean
@@ -255,7 +255,7 @@ OUTPUT SCHEMA (JSON object):
       "recommendedAction": string,   // the concrete fix — see FINDING STRUCTURE
       "severity": "critical" | "high" | "medium" | "low",
       "evidenceCited": string[],
-      "goalRelevance": "directly_blocks" | "directly_supports" | "indirectly_affects" | "unrelated",
+      "goalRelevance": "directly_blocks" | "directly_affects" | "directly_supports" | "indirectly_affects" | "unrelated",
       "financialImpact": { "impactBandLow": number, "impactBandHigh": number, "currency": string, "confidenceLevel": "high"|"medium"|"low"|"insufficient", "assumptions": string[] } | null,
       "confidenceLevel": "high" | "medium" | "low" | "insufficient",
       "isMissingDataFinding": boolean

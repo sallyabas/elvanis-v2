@@ -68,11 +68,14 @@ export interface RunAuditResult {
 }
 
 function scoreForDefaultRanking(f: LensFinding): number {
-  // directly_blocks outranks directly_supports even though both are
-  // "directly" tied to the goal — top-3 is about what needs ACTION, and a
-  // healthy/positive finding (however directly relevant) isn't a fix-first
-  // candidate the way a blocker is. See GoalRelevance docblock in types.ts.
-  const goalWeight = { directly_blocks: 3, directly_supports: 2, indirectly_affects: 1, unrelated: 0 }[f.goalRelevance];
+  // directly_blocks outranks directly_affects outranks directly_supports,
+  // even though all three are "directly" tied to the goal — top-3 is about
+  // what needs ACTION. directly_blocks and directly_affects are both real
+  // problems (the primary obstruction vs. a direct, material cost/drag that
+  // isn't the primary cause); directly_supports is healthy/positive and
+  // isn't a fix-first candidate the way either problem-finding is, however
+  // directly relevant it is. See GoalRelevance docblock in types.ts.
+  const goalWeight = { directly_blocks: 4, directly_affects: 3, directly_supports: 2, indirectly_affects: 1, unrelated: 0 }[f.goalRelevance];
   const confidenceWeight = { high: 3, medium: 2, low: 1, insufficient: 0 }[f.confidenceLevel];
   return goalWeight * 2 + confidenceWeight;
 }

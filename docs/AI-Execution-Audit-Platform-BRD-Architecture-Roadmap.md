@@ -433,16 +433,16 @@ sessions, orders/pricing (added once pricing/payment is wired)
 
 **1. Stronger client self-serve workflow**
 - Multi-step guided workflow *(→ moved to V1 — this is just onboarding UX, no dependency on real case history)*
-- Cleaner onboarding polish — V2
+- Cleaner onboarding polish *(→ moved to V1, built 2026-08-05 — converged with the multi-step guided workflow and goal definition wizard into one build, see CLAUDE.md "Onboarding wizard + goal definition wizard")*
 - Saved draft intake — V2
 - Teammate invite for evidence completion — V2
-- Goal definition wizard — V2
+- Goal definition wizard *(→ moved to V1, built 2026-08-05 — see CLAUDE.md "Onboarding wizard + goal definition wizard")*
 - Reusable templates by company type — V2 (needs multiple company types actually seen)
 
 **2. Better analysis depth**
 - Deeper Product/Customer lens — V2
 - Deeper AI & Governance lens — V2
-- Better Commercial/Market lens — V2
+- Better Commercial/Market lens *(→ moved to V1, built 2026-08-05 — search-query quality + root-cause depth improvements, see CLAUDE.md "Deeper Commercial/Market lens"; the benchmark-library item immediately below stays V2, deliberately not folded into this)*
 - Benchmark rule library — V2 (grows with real cases)
 - Failure-mode library by goal — V2 (grows with real cases)
 - Recommendation library by issue type *(→ seed version moved to V1, hand-built from your own domain expertise, same logic as Tender Readiness's external research; richer version stays V2, grown from real case volume)*

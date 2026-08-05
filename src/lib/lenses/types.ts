@@ -23,8 +23,31 @@ export type EvidenceSufficiency = "sufficient" | "partial" | "insufficient";
  * The schema was incomplete for a real, common case, not a prompt-wording
  * problem — this is the fix; prompt guidance is reinforcement on top of it,
  * not a substitute for it.
+ *
+ * "directly_affects" added 2026-08-05, same root cause, a second real gap —
+ * the `directly_supports` fix did not stop the hallucination; a real
+ * end-to-end run (2026-08-04, Priority 1 verification) reproduced the exact
+ * same invalid value from Execution/Product/Commercial under a
+ * `cash_flow_margin_efficiency` goal. Traced to each lens's own
+ * GOAL-RELEVANCE GUIDANCE for that specific goal: Execution's is "labor-hours
+ * cost of decision latency and meeting load," Product's is "whether low
+ * adoption/high churn is wasting acquisition spend," Commercial's is
+ * "pricing pressure forcing discounting, margin-eroding competitive
+ * dynamics" — all three describe a genuinely DIRECT, material, and often
+ * quantifiable cost/impact channel into the goal that is nonetheless NOT the
+ * primary obstruction of it. Neither existing negative value honestly fits:
+ * "directly_blocks" overstates it (nothing is actually preventing the goal),
+ * "indirectly_affects" understates it (the cost link is direct and traceable,
+ * not tangential). Reproduced live: identical evidence at this exact
+ * boundary made the model swing unpredictably between `indirectly_affects`
+ * and `directly_blocks` across repeated runs (both defensible-sounding but
+ * wrong, unlike a clean pick) — the same instability signature that
+ * originally motivated `directly_supports`, this time on the negative side.
+ * Reusing the model's own repeatedly-chosen name ("directly_affects") rather
+ * than inventing a new one, since it's already the intuitive fit and now
+ * matches what every prompt asks for.
  */
-export type GoalRelevance = "directly_blocks" | "directly_supports" | "indirectly_affects" | "unrelated";
+export type GoalRelevance = "directly_blocks" | "directly_affects" | "directly_supports" | "indirectly_affects" | "unrelated";
 /**
  * Business-impact severity if this finding goes unaddressed — deliberately
  * independent of confidenceLevel (how sure we are) and of report-level
