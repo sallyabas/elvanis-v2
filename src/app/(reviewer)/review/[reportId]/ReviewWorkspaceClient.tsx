@@ -12,8 +12,10 @@ import {
   reRankTop3Action,
   approveReportAction,
   rerunAuditAction,
+  setPlanTierAction,
 } from "./actions";
 import type { DisputeResolution } from "@/lib/reviewer/workspace";
+import { matchRecommendationLibraryEntries } from "@/lib/recommendations/recommendation-library";
 
 interface FindingRow {
   id: string;
@@ -49,10 +51,13 @@ interface TimingInfo {
 interface Props {
   reportId: string;
   companyName: string;
+  companyUserId: string | null;
+  planTier: string;
   reportStatus: string;
   top3FindingIds: string[];
   canRerun: boolean;
   rerunOfReportId: string | null;
+  similarPatterns: { companyId: string; companyName: string; reportId: string; overlappingTags: string[]; similarityScore: number }[];
   findings: FindingRow[];
   conflicts: ConflictRow[];
   timing: TimingInfo;
@@ -101,10 +106,13 @@ function formatDuration(fromIso: string | null, toIso: string | null): string | 
 export function ReviewWorkspaceClient({
   reportId,
   companyName,
+  companyUserId,
+  planTier,
   reportStatus,
   top3FindingIds,
   canRerun,
   rerunOfReportId,
+  similarPatterns,
   findings,
   conflicts,
   timing,
@@ -116,6 +124,14 @@ export function ReviewWorkspaceClient({
   const [pending, setPending] = useState(false);
   const [rerunError, setRerunError] = useState<string | null>(null);
   const [rerunResultId, setRerunResultId] = useState<string | null>(null);
+  const [tierPending, setTierPending] = useState(false);
+
+  async function handleSetPlanTier(tier: "free" | "concierge") {
+    if (!companyUserId) return;
+    setTierPending(true);
+    await setPlanTierAction(reportId, companyUserId, tier);
+    setTierPending(false);
+  }
 
   const findingById = new Map(findings.map((f) => [f.id, f]));
 
@@ -204,7 +220,29 @@ export function ReviewWorkspaceClient({
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="mb-1 text-2xl font-semibold">{companyName}</h1>
+      <div className="mb-1 flex items-center gap-2">
+        <h1 className="text-2xl font-semibold">{companyName}</h1>
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+            planTier === "concierge"
+              ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+              : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
+          }`}
+        >
+          {planTier === "concierge" ? "Concierge" : "Standard"}
+        </span>
+        {companyUserId && (
+          <select
+            className="rounded border px-1.5 py-0.5 text-xs"
+            value={planTier}
+            disabled={tierPending}
+            onChange={(e) => handleSetPlanTier(e.target.value as "free" | "concierge")}
+          >
+            <option value="free">Standard</option>
+            <option value="concierge">Concierge</option>
+          </select>
+        )}
+      </div>
       <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
         Report status: <span className="font-medium">{reportStatus}</span>
       </p>
@@ -358,7 +396,7 @@ export function ReviewWorkspaceClient({
                 <li key={f.id}>
                   <FindingCard f={f} />
                   {editingId === f.id ? (
-                    <EditForm initial={displayedContent(f)} onCancel={() => setEditingId(null)} onSave={(changes, notes) => handleSaveEdit(f, changes, notes)} />
+                    <EditForm lens={f.lens} initial={displayedContent(f)} onCancel={() => setEditingId(null)} onSave={(changes, notes) => handleSaveEdit(f, changes, notes)} />
                   ) : (
                     <div className="mt-2 flex gap-2">
                       <button disabled={pending} onClick={() => handleAccept(f.id)} className="rounded border px-2 py-1 text-xs">
@@ -431,6 +469,28 @@ export function ReviewWorkspaceClient({
           </p>
         )}
       </section>
+
+      {/* Dormant similar-patterns infrastructure, surfaced 2026-08-06 — genuinely empty until real case volume exists (see case-library.ts). Reviewer-only, never client-facing. */}
+      <section className="mt-6 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+        <h2 className="mb-2 font-medium">Similar patterns across other companies</h2>
+        {similarPatterns.length === 0 ? (
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            Not enough real case volume yet — this only surfaces once at least 3 genuinely distinct other companies
+            show real overlap, so it doesn&apos;t show a coincidental one-off match as if it were a pattern.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {similarPatterns.map((p) => (
+              <li key={p.reportId} className="text-sm">
+                <span className="font-medium">{p.companyName}</span>{" "}
+                <span className="text-neutral-500 dark:text-neutral-400">
+                  · {(p.similarityScore * 100).toFixed(0)}% overlap · {p.overlappingTags.join(", ")}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
@@ -476,10 +536,12 @@ interface EditFormValues {
 }
 
 function EditForm({
+  lens,
   initial,
   onCancel,
   onSave,
 }: {
+  lens: LensType;
   initial: LensFinding;
   onCancel: () => void;
   onSave: (changes: EditFormValues, notes: string) => void;
@@ -492,6 +554,14 @@ function EditForm({
   const [confidenceLevel, setConfidenceLevel] = useState<ConfidenceLevel>(initial.confidenceLevel);
   const [goalRelevance, setGoalRelevance] = useState<GoalRelevance>(initial.goalRelevance);
   const [notes, setNotes] = useState("");
+
+  // Recommendation library, seed version (confirmed 2026-08-06) — a
+  // deterministic keyword match against this finding's title + diagnosis,
+  // computed fresh each render from current field values (not a stale
+  // computation from initial load) so it stays relevant as the reviewer
+  // edits. Reference only — never auto-fills recommendedAction, the
+  // reviewer decides whether/how to draw on it.
+  const suggestions = matchRecommendationLibraryEntries(lens, title, diagnosis);
 
   return (
     <div className="mt-2 space-y-2 rounded border border-blue-300 p-3 dark:border-blue-800">
@@ -516,6 +586,19 @@ function EditForm({
           rows={2}
         />
       </label>
+      {suggestions.length > 0 && (
+        <div className="rounded border border-dashed border-neutral-300 bg-neutral-50 p-2 text-xs dark:border-neutral-700 dark:bg-neutral-900">
+          <p className="mb-1 font-medium text-neutral-500 dark:text-neutral-400">
+            Suggested playbook (reference only — not auto-applied):
+          </p>
+          {suggestions.slice(0, 2).map((s) => (
+            <div key={s.key} className="mb-1.5 last:mb-0">
+              <p className="font-medium text-neutral-600 dark:text-neutral-300">{s.label}</p>
+              <p className="text-neutral-500 dark:text-neutral-400">{s.recommendedActionTemplate}</p>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="flex gap-2">
         <select className="rounded border px-2 py-1 text-xs" value={severity} onChange={(e) => setSeverity(e.target.value as Severity)}>
           {(["critical", "high", "medium", "low"] as const).map((s) => (

@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { findSimilarPatterns } from "@/lib/synthesis/case-library";
 import { ReviewWorkspaceClient } from "./ReviewWorkspaceClient";
 
 export default async function ReviewWorkspacePage({ params }: { params: Promise<{ reportId: string }> }) {
@@ -7,7 +8,9 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
 
   const { data: report, error: reportError } = await supabase
     .from("reports")
-    .select("id, status, top_3_finding_ids, created_at, submitted_at, edit_window_closes_at, approved_at, source_evidence_snapshot, rerun_of_report_id, companies(name)")
+    .select(
+      "id, status, company_id, top_3_finding_ids, created_at, submitted_at, edit_window_closes_at, approved_at, source_evidence_snapshot, rerun_of_report_id, companies(name, user_id, users(plan_tier))",
+    )
     .eq("id", reportId)
     .single();
 
@@ -40,16 +43,31 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
     return <div className="p-6 text-sm text-red-600">Failed to load conflicts: {conflictsError.message}</div>;
   }
 
-  const company = report.companies as unknown as { name: string } | null;
+  const company = report.companies as unknown as { name: string; user_id: string; users: { plan_tier: string } | { plan_tier: string }[] | null } | null;
+  const ownerUsersRow = Array.isArray(company?.users) ? company?.users[0] : company?.users;
+
+  // Dormant similar-patterns infrastructure, now surfaced in the reviewer
+  // workspace (confirmed 2026-08-06) — genuinely returns [] until real case
+  // volume exists (≥3 distinct other companies with real tag overlap), see
+  // src/lib/synthesis/case-library.ts. Reviewer-only, never client-facing —
+  // showing a client cross-company patterns would leak other clients' data.
+  const similarPatterns = await findSimilarPatterns(report.company_id as string);
+  const patternCompanyIds = [...new Set(similarPatterns.map((p) => p.companyId))];
+  const { data: patternCompanies } =
+    patternCompanyIds.length > 0 ? await supabase.from("companies").select("id, name").in("id", patternCompanyIds) : { data: [] };
+  const patternCompanyNames = new Map((patternCompanies ?? []).map((c) => [c.id as string, c.name as string]));
 
   return (
     <ReviewWorkspaceClient
       reportId={report.id}
       companyName={company?.name ?? "Unknown company"}
+      companyUserId={company?.user_id ?? null}
+      planTier={ownerUsersRow?.plan_tier ?? "free"}
       reportStatus={report.status}
       top3FindingIds={(report.top_3_finding_ids as string[]) ?? []}
       canRerun={report.source_evidence_snapshot !== null}
       rerunOfReportId={report.rerun_of_report_id as string | null}
+      similarPatterns={similarPatterns.map((p) => ({ ...p, companyName: patternCompanyNames.get(p.companyId) ?? "Unknown company" }))}
       findings={findings}
       conflicts={conflicts ?? []}
       timing={{

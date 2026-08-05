@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { markRegulatoryContentReviewed } from "@/lib/reviewer/regulatory-content-review";
+import { updateSessionRequestStatus } from "@/lib/service-layer/session-requests";
 import { createClient } from "@/lib/supabase/server";
 
 // Same independent session+role re-check as every other reviewer Server
@@ -24,5 +25,11 @@ async function getReviewerId(): Promise<string> {
 export async function markRegulatoryContentReviewedAction(jurisdiction: string) {
   const reviewerId = await getReviewerId();
   await markRegulatoryContentReviewed(jurisdiction, reviewerId);
+  revalidatePath("/queue");
+}
+
+export async function updateSessionRequestStatusAction(requestId: string, status: "scheduled" | "completed" | "declined") {
+  await getReviewerId();
+  await updateSessionRequestStatus(requestId, status);
   revalidatePath("/queue");
 }

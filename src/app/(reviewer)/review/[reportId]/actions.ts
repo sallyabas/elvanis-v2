@@ -14,6 +14,7 @@ import {
 import type { LensFinding } from "@/lib/lenses/types";
 import { createClient } from "@/lib/supabase/server";
 import { rerunAudit } from "@/lib/audit/rerun-audit";
+import { setPlanTier, type PlanTier } from "@/lib/service-layer/plan-tier";
 
 // reviewed_by is a real FK to users.id. Now sourced from the real
 // authenticated session (confirmed 2026-08-02), not a REVIEWER_USER_ID env
@@ -107,4 +108,14 @@ export async function rerunAuditAction(reportId: string) {
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Something went wrong." };
   }
+}
+
+/**
+ * Concierge tier assignment (confirmed 2026-08-06) — closes the "no tier
+ * badge in the Reviewer Workspace yet" gap flagged in CLAUDE.md 2026-08-02.
+ */
+export async function setPlanTierAction(reportId: string, companyUserId: string, tier: PlanTier) {
+  await getReviewerId();
+  await setPlanTier(companyUserId, tier);
+  revalidatePath(`/review/${reportId}`);
 }

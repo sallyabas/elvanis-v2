@@ -29,12 +29,12 @@ interface HistoryItem {
 //
 // Filtered to `status = 'sent'` for both core reports and module_requests,
 // matching the intended "a client only sees it once actually delivered"
-// principle — worth noting: module_requests' own RLS policy is looser
-// than reports' (it allows the owner to read any status, not just 'sent'),
-// so this filter is enforced at the application level here, not by RLS
-// itself. Flagged as a real, minor cross-cutting inconsistency, not fixed
-// here — changing an RLS policy wasn't asked for and deserves its own
-// confirmation, not a silent side effect of building this list.
+// principle. module_requests' own RLS policy previously allowed the owner
+// to read any status, not just 'sent' — that real gap was fixed at the
+// schema level 2026-08-06 (supabase/migrations/20260806090000_module_requests_rls_fix.sql),
+// so this `.eq("status", "sent")` filter is now enforced by RLS itself too,
+// not just this application-level query — belt and suspenders, matching
+// `reports`' own pattern exactly.
 export default async function ReportsHistoryPage() {
   const supabase = await createClient();
   const {

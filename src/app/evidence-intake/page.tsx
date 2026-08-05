@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { loadEvidenceIntakeDraft } from "@/lib/evidence/draft";
+import { SessionRequestButton } from "@/app/_components/SessionRequestButton";
 import { EvidenceIntakeForm } from "./EvidenceIntakeForm";
 
 // Real Evidence Intake, fill-in-template path (confirmed 2026-08-03,
@@ -33,10 +34,17 @@ export default async function EvidenceIntakePage() {
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold">Submit your evidence</h1>
-      <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">
+      <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
         Fill in what you can for each area below — leaving something blank is meaningful too, not an incomplete
         submission.
       </p>
+      <div className="mb-8 rounded border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
+        <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">
+          Prefer to talk it through first? A Discovery Session is a short optional call before you submit — never
+          required.
+        </p>
+        <SessionRequestButton companyId={company.id as string} sessionType="discovery" />
+      </div>
       <EvidenceIntakeForm companyId={company.id as string} goalId={goal.id as string} initialDraft={draft} />
     </div>
   );
