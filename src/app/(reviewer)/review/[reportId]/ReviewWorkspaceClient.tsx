@@ -16,7 +16,7 @@ import {
   setPlanTierAction,
 } from "./actions";
 import type { DisputeResolution } from "@/lib/reviewer/workspace";
-import { matchRecommendationLibraryEntries } from "@/lib/recommendations/recommendation-library";
+import { matchRecommendationLibraryEntries, type RecommendationLibraryEntry } from "@/lib/recommendations/recommendation-library";
 
 interface FindingRow {
   id: string;
@@ -62,6 +62,15 @@ interface Props {
   findings: FindingRow[];
   conflicts: ConflictRow[];
   timing: TimingInfo;
+  /**
+   * DB-backed as of 2026-08-06 (see recommendations/repository.ts) —
+   * fetched server-side in page.tsx and passed down here, since
+   * RECOMMENDATION_LIBRARY can no longer be imported directly into this
+   * client component now that it's an async DB read. Threaded through to
+   * EditForm below, same pattern as GOVERNANCE_DIMENSIONS in
+   * EvidenceIntakeForm.
+   */
+  recommendationLibrary: RecommendationLibraryEntry[];
 }
 
 function displayedContent(f: FindingRow): LensFinding {
@@ -117,6 +126,7 @@ export function ReviewWorkspaceClient({
   findings,
   conflicts,
   timing,
+  recommendationLibrary,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [disputingId, setDisputingId] = useState<string | null>(null);
@@ -417,7 +427,13 @@ export function ReviewWorkspaceClient({
                 <li key={f.id}>
                   <FindingCard f={f} />
                   {editingId === f.id ? (
-                    <EditForm lens={f.lens} initial={displayedContent(f)} onCancel={() => setEditingId(null)} onSave={(changes, notes) => handleSaveEdit(f, changes, notes)} />
+                    <EditForm
+                      lens={f.lens}
+                      initial={displayedContent(f)}
+                      recommendationLibrary={recommendationLibrary}
+                      onCancel={() => setEditingId(null)}
+                      onSave={(changes, notes) => handleSaveEdit(f, changes, notes)}
+                    />
                   ) : (
                     <div className="mt-2 flex gap-2">
                       <button disabled={pending} onClick={() => handleAccept(f.id)} className="rounded border px-2 py-1 text-xs">
@@ -580,11 +596,13 @@ interface EditFormValues {
 function EditForm({
   lens,
   initial,
+  recommendationLibrary,
   onCancel,
   onSave,
 }: {
   lens: LensType;
   initial: LensFinding;
+  recommendationLibrary: RecommendationLibraryEntry[];
   onCancel: () => void;
   onSave: (changes: EditFormValues, notes: string) => void;
 }) {
@@ -603,7 +621,7 @@ function EditForm({
   // computation from initial load) so it stays relevant as the reviewer
   // edits. Reference only — never auto-fills recommendedAction, the
   // reviewer decides whether/how to draw on it.
-  const suggestions = matchRecommendationLibraryEntries(lens, title, diagnosis);
+  const suggestions = matchRecommendationLibraryEntries(recommendationLibrary, lens, title, diagnosis);
 
   return (
     <div className="mt-2 space-y-2 rounded border border-blue-300 p-3 dark:border-blue-800">
