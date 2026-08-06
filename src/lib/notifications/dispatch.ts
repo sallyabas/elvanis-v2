@@ -30,33 +30,101 @@ const CLIENT_PREFERENCE_KEY: Partial<Record<string, string>> = {
   evidence_incomplete: "evidenceIncomplete",
 };
 
-function templateFor(eventType: string, recipientType: "client" | "reviewer"): { subject: string; html: string } {
+type Admin = ReturnType<typeof createAdminClient>;
+
+interface FindingTitleLookup {
+  ai_draft: { title: string } | null;
+  reviewer_edited_content: { title: string } | null;
+}
+
+/**
+ * Client-facing email templates, expanded 2026-08-06 (honest UX review
+ * pass) — real gaps, not polish. Every client-facing template used to be
+ * a single generic sentence plus a link to /reports (the list page, not
+ * the specific report), with no company name, no hint at what the email
+ * was actually about, and no reminder that this app is passwordless
+ * (magic-link + code) — a genuine first-time client who submitted
+ * evidence days ago may not remember how sign-in works. Now:
+ * - company name looked up via companies.user_id = recipient_id (one
+ *   company per account in V1, so this is unambiguous)
+ * - report_ready and re_audit_reminder use the new related_report_id
+ *   column to link directly to the specific report and, for report_ready,
+ *   pull the REAL top-3 finding titles rather than generic boilerplate
+ *   ("hint at what's inside" is more honestly satisfied by the actual
+ *   content than a canned sentence, consistent with this codebase's
+ *   standing "never fake content" discipline)
+ * - a passwordless-login reminder is appended to every client-facing
+ *   template
+ * Reviewer-facing templates are untouched — reviewers already know how
+ * this app's auth works, that wasn't the finding.
+ */
+async function templateFor(
+  admin: Admin,
+  notification: { event_type: string; recipient_type: "client" | "reviewer"; recipient_id: string; related_report_id: string | null },
+): Promise<{ subject: string; html: string }> {
+  const eventType = notification.event_type;
+
+  let companyName: string | null = null;
+  if (notification.recipient_type === "client") {
+    const { data: company } = await admin.from("companies").select("name").eq("user_id", notification.recipient_id).maybeSingle();
+    companyName = (company?.name as string | undefined) ?? null;
+  }
+  const greeting = companyName ? `<p>Hi ${companyName} team,</p>` : "";
+  const loginReminder = `<p style="color:#666;font-size:13px;">Sign in at <a href="${SITE_URL}/client-login">${SITE_URL}/client-login</a> with this same email — this app is passwordless, we'll send you a fresh sign-in link and code.</p>`;
+
   switch (eventType) {
-    case "report_ready":
+    case "report_ready": {
+      let reportUrl = `${SITE_URL}/reports`;
+      let contentsHint = "your top 3 priorities and a 30/60/90 day roadmap";
+
+      if (notification.related_report_id) {
+        reportUrl = `${SITE_URL}/reports/${notification.related_report_id}`;
+        const { data: report } = await admin.from("reports").select("top_3_finding_ids").eq("id", notification.related_report_id).maybeSingle();
+        const top3Ids = (report?.top_3_finding_ids as string[] | undefined) ?? [];
+        if (top3Ids.length > 0) {
+          const { data: findings } = await admin.from("lens_findings").select("ai_draft, reviewer_edited_content").in("id", top3Ids);
+          const titles = ((findings ?? []) as FindingTitleLookup[])
+            .map((f) => f.reviewer_edited_content?.title ?? f.ai_draft?.title)
+            .filter((t): t is string => Boolean(t));
+          if (titles.length > 0) {
+            contentsHint = `your top ${titles.length === 1 ? "priority" : `${titles.length} priorities`} — ${titles.join(", ")} — plus a 30/60/90 day roadmap`;
+          }
+        }
+      }
+
       return {
-        subject: "Your Elvanis report is ready",
-        html: `<p>Your execution audit report is ready to view.</p><p><a href="${SITE_URL}/reports">View your report</a></p>`,
+        subject: companyName ? `${companyName}'s Elvanis report is ready` : "Your Elvanis report is ready",
+        html: `${greeting}<p>Your execution audit report is ready, including ${contentsHint}.</p><p><a href="${reportUrl}">View your report</a></p>${loginReminder}`,
       };
+    }
     case "new_submission":
       return {
         subject: "New submission ready for review",
         html: `<p>A new report has cleared its edit window and is ready for reviewer approval.</p><p><a href="${SITE_URL}/queue">Open the reviewer queue</a></p>`,
       };
     case "evidence_incomplete":
-      return recipientType === "client"
+      return notification.recipient_type === "client"
         ? {
             subject: "Finish submitting your evidence",
-            html: `<p>Your evidence submission is still incomplete. Finish it whenever you're ready — there's no rush, but we wanted to check in.</p>`,
+            html: `${greeting}<p>Your evidence submission is still incomplete. Finish it whenever you're ready — there's no rush, but we wanted to check in.</p><p><a href="${SITE_URL}/evidence-intake">Continue your submission</a></p>${loginReminder}`,
           }
         : {
             subject: "A client submission has stalled",
             html: `<p>A client's evidence submission has had no new activity for a while. You may want to follow up.</p>`,
           };
-    case "re_audit_reminder":
+    case "re_audit_reminder": {
+      let sinceText = "your last audit";
+      if (notification.related_report_id) {
+        const { data: report } = await admin.from("reports").select("delivered_at").eq("id", notification.related_report_id).maybeSingle();
+        if (report?.delivered_at) {
+          sinceText = `your ${new Date(report.delivered_at as string).toLocaleDateString()} audit`;
+        }
+      }
       return {
         subject: "Time for your next execution audit",
-        html: `<p>It's been a while since your last audit — worth checking in on how things have progressed.</p><p><a href="${SITE_URL}/business-profile">Start a re-audit</a></p>`,
+        html: `${greeting}<p>It's been a while since ${sinceText} — worth checking in on how things have progressed.</p><p><a href="${SITE_URL}/business-profile">Start a re-audit</a></p>${loginReminder}`,
       };
+    }
     case "regulatory_content_review_due":
       return {
         subject: "Regulatory content review is overdue",
@@ -69,6 +137,16 @@ function templateFor(eventType: string, recipientType: "client" | "reviewer"): {
       return {
         subject: "A client requested a live session",
         html: `<p>A client has requested a Discovery, Delivery, or F2F Workshop session. Follow up to schedule it.</p><p><a href="${SITE_URL}/queue">View on the reviewer queue</a></p>`,
+      };
+    case "sprint_interest_requested":
+      // Reviewer-facing — a client marked interest in help implementing a
+      // specific high-priority finding (confirmed 2026-08-06, honest UX
+      // review pass). Doesn't create the sprint itself; the reviewer still
+      // starts it from the report workspace's existing "Start an
+      // Execution Sprint" entry point.
+      return {
+        subject: "A client is interested in an Execution Sprint",
+        html: `<p>A client marked interest in help implementing one of their findings.</p><p><a href="${SITE_URL}/queue">View on the reviewer queue</a></p>`,
       };
     case "sprint_queue_item":
       // Reviewer-facing — a client submitted a plan-change note, or a KPI
@@ -93,7 +171,7 @@ function templateFor(eventType: string, recipientType: "client" | "reviewer"): {
       // retried on the next cron tick.
       return {
         subject: "Reply to your Execution Sprint question",
-        html: `<p>Your reviewer replied to your Execution Sprint note. Check your sprint page for details.</p>`,
+        html: `${greeting}<p>Your reviewer replied to your Execution Sprint note. Check your sprint page for details.</p>${loginReminder}`,
       };
     default:
       return {
@@ -114,7 +192,7 @@ export async function sendPendingNotifications(): Promise<DispatchResult> {
 
   const { data: pending, error } = await supabase
     .from("notifications")
-    .select("id, recipient_type, recipient_id, event_type")
+    .select("id, recipient_type, recipient_id, event_type, related_report_id")
     .is("sent_at", null)
     .eq("channel", "email");
   if (error) throw new Error(`sendPendingNotifications: failed to load pending notifications: ${error.message}`);
@@ -147,7 +225,12 @@ export async function sendPendingNotifications(): Promise<DispatchResult> {
         }
       }
 
-      const { subject, html } = templateFor(notification.event_type as string, notification.recipient_type as "client" | "reviewer");
+      const { subject, html } = await templateFor(supabase, {
+        event_type: notification.event_type as string,
+        recipient_type: notification.recipient_type as "client" | "reviewer",
+        recipient_id: notification.recipient_id as string,
+        related_report_id: (notification.related_report_id as string | null) ?? null,
+      });
       await sendEmail({ to: user.email as string, subject, html });
 
       const { error: updateError } = await supabase

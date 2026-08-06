@@ -3,10 +3,28 @@
 import { useState } from "react";
 import { requestSession, type SessionType } from "@/lib/service-layer/session-requests";
 
-const LABELS: Record<SessionType, { cta: string; sentLabel: string }> = {
-  discovery: { cta: "Request a Discovery Session", sentLabel: "Discovery Session requested" },
-  delivery: { cta: "Request a Delivery Session", sentLabel: "Delivery Session requested" },
-  f2f_workshop: { cta: "Request an F2F Workshop", sentLabel: "F2F Workshop requested" },
+// Framing text + spelled-out F2F wording added 2026-08-06 (honest UX
+// review pass) — the report page previously offered Delivery Session and
+// F2F Workshop with zero explanation of what either actually was (unlike
+// Discovery Session on the intake page, which already had a one-line
+// description above it), and "F2F Workshop" appeared as bare internal
+// shorthand in client-facing copy.
+const LABELS: Record<SessionType, { cta: string; sentLabel: string; description: string }> = {
+  discovery: {
+    cta: "Request a Discovery Session",
+    sentLabel: "Discovery Session requested",
+    description: "A short optional call before you submit your evidence — never required.",
+  },
+  delivery: {
+    cta: "Request a Delivery Session",
+    sentLabel: "Delivery Session requested",
+    description: "A call with your reviewer to walk through these findings together and talk through what's realistic to tackle first.",
+  },
+  f2f_workshop: {
+    cta: "Request a Face-to-Face (F2F) Workshop",
+    sentLabel: "Face-to-Face (F2F) Workshop requested",
+    description: "An in-person, multi-stakeholder version of the Delivery Session — for working through priorities with your whole team in the room.",
+  },
 };
 
 /**
@@ -36,11 +54,23 @@ export function SessionRequestButton({ companyId, sessionType }: { companyId: st
   }
 
   if (status === "sent") {
-    return <p className="text-sm text-green-700 dark:text-green-400">{LABELS[sessionType].sentLabel} — we&apos;ll follow up to schedule it.</p>;
+    return (
+      <div className="rounded border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
+        <p className="text-sm text-green-700 dark:text-green-400">{LABELS[sessionType].sentLabel} — we&apos;ll follow up to schedule it.</p>
+      </div>
+    );
   }
 
+  // Self-contained framed widget, not just a bare button (confirmed
+  // 2026-08-06, honest UX review) — every use of this component now
+  // carries its own one-line explanation of what the session actually is,
+  // same framing pattern Discovery Session already used on the intake
+  // page, instead of a page having to remember to write its own
+  // surrounding paragraph (or, as on the report page before this fix,
+  // not writing one at all).
   return (
-    <div>
+    <div className="rounded border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
+      <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">{LABELS[sessionType].description}</p>
       <button
         type="button"
         onClick={handleRequest}

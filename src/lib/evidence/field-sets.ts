@@ -7,6 +7,14 @@
  * or importing across the client/server component boundary. Framework-
  * agnostic on purpose — both a client component (the form) and a server
  * component (the report page) import from here.
+ *
+ * Wording pass, 2026-08-06 (honest UX review) — "runway" is startup-founder
+ * jargon that a genuine first-time, non-startup-fluent user may not know,
+ * so the placeholder now explains it inline rather than just reusing the
+ * term; "NPS" is spelled out on first mention instead of assumed known;
+ * "Activation / onboarding notes" (the label) and "first value" (the old
+ * placeholder) were both product-management jargon stacked on jargon,
+ * reworded to plain "get set up and start actually using it."
  */
 export interface EvidenceFieldDefinition {
   key: string;
@@ -26,7 +34,11 @@ export const EVIDENCE_FIELD_SETS: EvidenceFieldSet[] = [
     title: "Financial",
     fields: [
       { key: "revenue_margin_trends", label: "Revenue and margin trends", placeholder: "How has revenue/margin moved recently? Any notable swings?" },
-      { key: "cash_flow_runway", label: "Cash flow / runway situation", placeholder: "How much runway do you have? Any cash flow concerns?" },
+      {
+        key: "cash_flow_runway",
+        label: "Cash flow / runway situation",
+        placeholder: "How many months of cash do you have left at your current spending rate (your \"runway\")? Any cash flow concerns?",
+      },
       { key: "cost_structure", label: "Cost structure notes", placeholder: "What are the biggest cost drivers? Anything creeping up?" },
       { key: "customer_concentration", label: "Customer concentration", placeholder: "Is revenue concentrated in a few large customers?" },
     ],
@@ -46,9 +58,17 @@ export const EVIDENCE_FIELD_SETS: EvidenceFieldSet[] = [
     title: "Product / Customer",
     fields: [
       { key: "usage_adoption", label: "Usage and adoption patterns", placeholder: "How are customers actually using the product?" },
-      { key: "satisfaction_signals", label: "Customer satisfaction signals", placeholder: "NPS, support tickets, direct feedback — anything notable?" },
+      {
+        key: "satisfaction_signals",
+        label: "Customer satisfaction signals",
+        placeholder: "Net Promoter Score (NPS), support tickets, direct feedback — anything notable?",
+      },
       { key: "churn_patterns", label: "Churn patterns", placeholder: "Who's churning and why, if known?" },
-      { key: "activation_onboarding", label: "Activation / onboarding notes", placeholder: "How well do new customers get to their first value?" },
+      {
+        key: "activation_onboarding",
+        label: "Onboarding notes",
+        placeholder: "How well do new customers get set up and start actually using it?",
+      },
     ],
   },
 ];

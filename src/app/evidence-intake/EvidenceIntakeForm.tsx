@@ -8,6 +8,7 @@ import { submitEvidence } from "./actions";
 import { saveEvidenceIntakeDraft } from "@/lib/evidence/draft";
 import { EXPORT_INSTRUCTIONS_BY_LENS, type EvidenceLensKey } from "@/lib/evidence/export-instructions";
 import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
+import { REVIEW_PERIOD_HOURS } from "@/lib/reports/sla";
 
 /** Shape of the draft blob saved/restored — mirrors this form's own local state, not a typed evidence submission (see evidence_intake_drafts migration docblock). */
 interface EvidenceIntakeDraft {
@@ -36,19 +37,41 @@ const FIELD_SETS = EVIDENCE_FIELD_SETS;
  * removes the "where do I even find this" friction. Collapsed by default
  * (native <details>, no extra state) so it doesn't add length to an
  * already-long form for anyone who doesn't need it.
+ *
+ * Restyled 2026-08-06 (honest UX review pass) — two real findings, not
+ * polish. First: this box previously used the identical gray
+ * border/background as the two disclaimer boxes above it (Discovery
+ * Session offer, privacy notice), so a real read-through trains the eye
+ * to skim past all three as boilerplate — the one that's actually a
+ * useful shortcut looked exactly like the two that are inert notices.
+ * Given a distinct accent color and a "Tip" label so it reads as
+ * "something to use," not "something to ignore." Second: each tool's
+ * `note` (e.g. Jira's 1,000-issue export cap, HubSpot/Intercom/Zendesk
+ * emailing the file instead of downloading it) previously rendered in
+ * `text-neutral-400` — the single faintest text color used anywhere on
+ * this page, fainter than the steps text above it. These are genuinely
+ * actionable caveats, not fine print; now rendered in a distinctly
+ * colored, bolded callout instead of fading them out.
  */
 function ExportHints({ lens }: { lens: EvidenceLensKey }) {
   const tools = EXPORT_INSTRUCTIONS_BY_LENS[lens];
   return (
-    <details className="mb-3 rounded border border-neutral-200 bg-neutral-50 text-xs dark:border-neutral-800 dark:bg-neutral-900">
-      <summary className="cursor-pointer select-none px-3 py-2 font-medium text-neutral-600 dark:text-neutral-400">
+    <details className="mb-3 rounded border border-blue-200 bg-blue-50 text-xs dark:border-blue-900 dark:bg-blue-950">
+      <summary className="cursor-pointer select-none px-3 py-2 font-medium text-blue-800 dark:text-blue-300">
+        <span className="mr-1 rounded bg-blue-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+          Tip
+        </span>
         Using one of these tools? Quick export steps
       </summary>
       <div className="space-y-2 px-3 pb-3">
         {tools.map((t) => (
           <div key={t.tool}>
-            <span className="font-medium">{t.tool}:</span> <span className="text-neutral-600 dark:text-neutral-400">{t.steps}</span>
-            {t.note && <p className="mt-0.5 text-neutral-400">{t.note}</p>}
+            <span className="font-medium">{t.tool}:</span> <span className="text-neutral-700 dark:text-neutral-300">{t.steps}</span>
+            {t.note && (
+              <p className="mt-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                {t.note}
+              </p>
+            )}
           </div>
         ))}
       </div>
@@ -56,16 +79,10 @@ function ExportHints({ lens }: { lens: EvidenceLensKey }) {
   );
 }
 
-/**
- * Review period is intentionally still a fixed constant, not DB-backed —
- * unlike edit_window_hours, it has no enforcement mechanism anywhere in
- * code (confirmed in CLAUDE.md: "exists only as narrative, never an
- * enforced deadline"), so migrating it now would let the modal promise a
- * number nothing actually holds to. Only promote it to a DB setting
- * alongside building real enforcement for it — a separate, deliberate
- * decision, not a side effect of this one.
- */
-const REVIEW_PERIOD_HOURS = 48;
+// REVIEW_PERIOD_HOURS now lives in src/lib/reports/sla.ts (confirmed
+// 2026-08-06, honest UX review pass) — shared with the client report
+// page's "still being reviewed" holding copy, so the two surfaces can
+// never quote a different total-turnaround number for the same promise.
 
 export function EvidenceIntakeForm({
   companyId,
@@ -279,11 +296,15 @@ export function EvidenceIntakeForm({
         <ExportHints lens="commercial" />
         <div className="space-y-3">
           <label className="block space-y-1">
-            <span className="text-sm font-medium">Named competitors (comma-separated)</span>
+            {/* "(comma-separated)" was a technical formatting instruction, not
+                natural language (confirmed 2026-08-06, honest UX review) —
+                the placeholder example already shows the format without
+                lecturing the user about it. */}
+            <span className="text-sm font-medium">Named competitors</span>
             <input
               type="text"
               className="w-full rounded border px-3 py-2 text-sm"
-              placeholder="Competitor A, Competitor B"
+              placeholder="e.g. Competitor A, Competitor B"
               value={namedCompetitors}
               onChange={(e) => setNamedCompetitors(e.target.value)}
             />

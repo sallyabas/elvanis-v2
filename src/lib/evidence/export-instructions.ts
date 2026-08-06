@@ -36,8 +36,16 @@ export const EXPORT_INSTRUCTIONS_BY_LENS: Record<EvidenceLensKey, ToolExportInst
     },
     {
       tool: "QuickBooks Online",
-      steps: 'Reports → Standard reports → search "Profit and Loss" → Export/Print dropdown → Export to Excel.',
-      note: "QuickBooks Online can't export Profit & Loss directly to CSV — export to Excel first, then Save As → CSV if you need a CSV file.",
+      // Real UX gap found and fixed 2026-08-06 (honest UX review pass):
+      // this used to end on "Export to Excel" — a step that reads as
+      // complete on its own — with the actual CSV requirement tucked into
+      // a separate `note` rendered in the faintest gray text on the page.
+      // A real first-time user following the steps literally would stop
+      // at Excel and never see it. Folded the full required path into one
+      // continuous sentence instead, so there's no natural stopping point
+      // before the file the client actually needs to attach.
+      steps:
+        'Reports → Standard reports → search "Profit and Loss" → Export/Print dropdown → Export to Excel (QuickBooks Online can\'t export this report directly to CSV) → open the file and Save As → CSV.',
       source:
         "https://quickbooks.intuit.com/learn-support/en-us/help-article/report-management/export-reports-excel-quickbooks-online/L7iAoP97n_US_en_US",
     },

@@ -2,14 +2,16 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { EvidenceFieldInput, LensFinding, LensType } from "@/lib/lenses/types";
+import type { EvidenceFieldInput, LensFinding, LensType, Severity } from "@/lib/lenses/types";
 import type { CommercialSelfReport } from "@/lib/lenses/commercial";
 import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
 import { SessionRequestButton } from "@/app/_components/SessionRequestButton";
+import { SprintInterestButton } from "@/app/_components/SprintInterestButton";
 import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
 import { loadGovernanceDimensions } from "@/lib/lenses/benchmarks-repository";
+import { getTotalTurnaroundHours } from "@/lib/reports/sla";
 
 interface SourceEvidenceSnapshot {
   financial: { evidenceFields: EvidenceFieldInput[] };
@@ -23,6 +25,17 @@ interface SourceEvidenceSnapshot {
     governanceEvidence?: EvidenceFieldInput[];
   };
 }
+
+// Severity color-coding (confirmed 2026-08-06, honest UX review pass) —
+// previously all four severities rendered as identical small gray
+// uppercase text, so a report with findings across all 5 lenses had
+// nothing to visually triage; every badge had to be read in full.
+const SEVERITY_STYLES: Record<Severity, string> = {
+  critical: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+  high: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
+  medium: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+  low: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
+};
 
 const LENS_ORDER: LensType[] = ["financial", "execution", "product", "commercial", "ai_governance"];
 const LENS_LABELS: Record<LensType, string> = {
@@ -81,11 +94,18 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
   if (owner?.user_id !== user.id) notFound();
 
   if (reportStatus.status !== "sent") {
+    // Real bug found and fixed 2026-08-06 (honest UX review pass): this
+    // used to hardcode "72 hours" while the submit confirmation modal a
+    // moment earlier correctly computed the total from the DB-backed
+    // edit_window_hours setting — the two could silently diverge the
+    // moment that setting changed. Both now read getTotalTurnaroundHours().
+    const { totalHours } = await getTotalTurnaroundHours();
     return (
       <div className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="mb-2 text-xl font-semibold">Your report is being reviewed</h1>
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          We&apos;ll have this ready within 72 hours. Check back soon.
+          We&apos;ll have this ready within {totalHours} hours. We&apos;ll email you the moment it&apos;s ready — no
+          need to keep checking back.
         </p>
       </div>
     );
@@ -137,30 +157,33 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
     .eq("company_id", company.id);
   const hasRequestedDelivery = (existingSessionRequests ?? []).some((r) => r.session_type === "delivery");
 
+  // Client-facing Execution Sprint interest (confirmed 2026-08-06, honest
+  // UX review pass) — see sprint_interest_requests migration docblock.
+  // Session-scoped, not admin (RLS already restricts to the caller's own
+  // company) — a finding with any existing request (open or resolved)
+  // shows "requested" instead of the button again, avoiding duplicate spam.
+  const { data: existingSprintInterest } = await supabase.from("sprint_interest_requests").select("finding_id").eq("report_id", reportId);
+  const requestedFindingIds = new Set((existingSprintInterest ?? []).map((r) => r.finding_id as string));
+
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold">{company.name}&apos;s Execution Audit</h1>
-      {goal && <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">Goal: {GOAL_LABELS[goal.primary_goal as keyof typeof GOAL_LABELS]}</p>}
-
-      <div className="mb-8 flex flex-wrap gap-3">
-        <SessionRequestButton companyId={company.id} sessionType="delivery" />
-        {hasRequestedDelivery && <SessionRequestButton companyId={company.id} sessionType="f2f_workshop" />}
-        <Link
-          href="/evidence-intake"
-          className="rounded border border-neutral-300 px-3 py-1.5 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-        >
-          Submit new evidence
-        </Link>
-      </div>
+      {goal && <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">Goal: {GOAL_LABELS[goal.primary_goal as keyof typeof GOAL_LABELS]}</p>}
 
       {top3.length > 0 && (
         <section className="mb-10 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
           <h2 className="mb-3 text-lg font-medium">Top 3 priorities</h2>
+          {/* Shows the diagnosis (what was found), not the recommendedAction
+              — confirmed 2026-08-06, honest UX review. Previously showed
+              recommendedAction here, then the by-lens section below
+              repeated the exact same sentence under its own "Recommended:"
+              label — real, verbatim duplication on a report meant to be
+              scannable at a glance, not a design choice. */}
           <ol className="list-inside list-decimal space-y-3 text-sm">
             {top3.map((f) => (
               <li key={f.findingId}>
                 <span className="font-medium">{f.title}</span>
-                <p className="mt-1 text-neutral-600 dark:text-neutral-400">{f.recommendedAction}</p>
+                <p className="mt-1 text-neutral-600 dark:text-neutral-400">{f.diagnosis}</p>
               </li>
             ))}
           </ol>
@@ -195,11 +218,35 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
           <div className="space-y-3">
             {byLens.get(lens)!.map((row) => {
               const f = displayedContent(row);
+              // Missing-evidence findings get a visually distinct card
+              // (confirmed 2026-08-06, honest UX review) — previously
+              // "Insufficient evidence for product/customer analysis"
+              // rendered in the exact same card style and severity badge
+              // as a genuine analytical finding like "Gross Margin Trend,"
+              // so a first-time reader had to read the full sentence to
+              // realize it wasn't a real issue. isMissingDataFinding is
+              // the existing structural flag every lens already sets —
+              // no new schema needed, just using what was already there.
               return (
-                <div key={row.id} className="rounded border border-neutral-200 p-4 text-sm dark:border-neutral-800">
+                <div
+                  key={row.id}
+                  className={
+                    f.isMissingDataFinding
+                      ? "rounded border border-dashed border-neutral-300 bg-neutral-50 p-4 text-sm dark:border-neutral-700 dark:bg-neutral-900/50"
+                      : "rounded border border-neutral-200 p-4 text-sm dark:border-neutral-800"
+                  }
+                >
                   <div className="mb-1 flex items-center justify-between">
                     <span className="font-medium">{f.title}</span>
-                    <span className="text-xs uppercase text-neutral-400">{f.severity}</span>
+                    {f.isMissingDataFinding ? (
+                      <span className="rounded bg-neutral-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+                        No evidence submitted
+                      </span>
+                    ) : (
+                      <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${SEVERITY_STYLES[f.severity]}`}>
+                        {f.severity}
+                      </span>
+                    )}
                   </div>
                   <p className="mb-1 text-neutral-600 dark:text-neutral-400">{f.diagnosis}</p>
                   <p className="mb-1 text-neutral-600 dark:text-neutral-400">
@@ -215,6 +262,21 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
                       Estimated impact: {f.financialImpact.impactBandLow ?? "?"}–{f.financialImpact.impactBandHigh ?? "?"} {f.financialImpact.currency ?? ""}
                     </p>
                   )}
+                  {/* Client-facing Execution Sprint interest (confirmed
+                      2026-08-06, honest UX review) — gated to critical/high
+                      severity, same "high-priority" threshold this codebase
+                      already uses for isFixFirstCandidate() elsewhere.
+                      Never shown on isMissingDataFinding rows — there's
+                      nothing to implement when the gap is "you didn't
+                      submit evidence," not a real finding. */}
+                  {!f.isMissingDataFinding && (f.severity === "critical" || f.severity === "high") && (
+                    <SprintInterestButton
+                      companyId={company.id}
+                      reportId={reportId}
+                      findingId={row.id}
+                      alreadyRequested={requestedFindingIds.has(row.id)}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -223,6 +285,34 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
       ))}
 
       {visibleFindings.length === 0 && <p className="text-sm text-neutral-500">No findings to show yet.</p>}
+
+      {/*
+       * Next steps — moved here from the top of the page, and no longer
+       * all rendered with identical visual weight (confirmed 2026-08-06,
+       * honest UX review). Previously these three buttons — "Request a
+       * Delivery Session," "Request an F2F Workshop," "Submit new
+       * evidence" — were the very first thing on the page, above every
+       * finding, with zero explanation of what any of them were, and
+       * "Submit new evidence" (which starts a new paid re-audit cycle)
+       * looked exactly like the two "request a call" buttons next to it.
+       * Now: shown after the client has actually read their findings,
+       * session requests get the framed/explained treatment
+       * (SessionRequestButton now carries its own description), and
+       * "Submit new evidence" is deliberately a plain text link with its
+       * own cautionary line, not a bordered button of equal weight.
+       */}
+      <section className="mt-10 space-y-4">
+        <h2 className="text-lg font-medium">Next steps</h2>
+        <SessionRequestButton companyId={company.id} sessionType="delivery" />
+        {hasRequestedDelivery && <SessionRequestButton companyId={company.id} sessionType="f2f_workshop" />}
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+          Have new evidence to add?{" "}
+          <Link href="/evidence-intake" className="underline">
+            Submit new evidence
+          </Link>{" "}
+          — note this starts a new, paid re-audit cycle (your free audit has already been used).
+        </p>
+      </section>
 
       {evidenceSnapshot && (
         <section className="mt-10">
