@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getSettingNumber } from "@/lib/app-settings";
 import { financialLens } from "@/lib/lenses/financial";
 import { executionLens } from "@/lib/lenses/execution";
 import { productLens } from "@/lib/lenses/product";
@@ -34,8 +35,6 @@ import type { MetricInput } from "@/lib/lenses/metrics";
  * re-tagged with their real UUID before conflict detection runs — no
  * separate id-mapping layer needed downstream.
  */
-
-const EDIT_WINDOW_HOURS = 24;
 
 export interface EvidenceForLens {
   evidenceFields: EvidenceFieldInput[];
@@ -159,7 +158,12 @@ export async function runAudit(input: RunAuditInput): Promise<RunAuditResult> {
   // so every lens_findings row can be linked to it via report_id — required
   // to correctly scope "this report's findings" across re-audit cycles.
   const submittedAt = new Date();
-  const editWindowClosesAt = new Date(submittedAt.getTime() + EDIT_WINDOW_HOURS * 60 * 60 * 1000);
+  // DB-backed as of 2026-08-06 (same admin-adjustable pattern as
+  // re_audit_reminder_days) — see EvidenceIntakeForm.tsx's confirmation
+  // modal, which reads this exact same setting so its copy can never
+  // drift from the value actually enforced here.
+  const editWindowHours = await getSettingNumber("edit_window_hours", 24);
+  const editWindowClosesAt = new Date(submittedAt.getTime() + editWindowHours * 60 * 60 * 1000);
 
   const { data: reportRow, error: reportError } = await supabase
     .from("reports")

@@ -86,11 +86,24 @@ function ExportHints({ lens }: { lens: EvidenceLensKey }) {
   );
 }
 
+/**
+ * Review period is intentionally still a fixed constant, not DB-backed —
+ * unlike edit_window_hours, it has no enforcement mechanism anywhere in
+ * code (confirmed in CLAUDE.md: "exists only as narrative, never an
+ * enforced deadline"), so migrating it now would let the modal promise a
+ * number nothing actually holds to. Only promote it to a DB setting
+ * alongside building real enforcement for it — a separate, deliberate
+ * decision, not a side effect of this one.
+ */
+const REVIEW_PERIOD_HOURS = 48;
+
 export function EvidenceIntakeForm({
   companyId,
   goalId,
   initialDraft,
   governanceDimensions,
+  editWindowHours,
+  isFreeAudit,
 }: {
   companyId: string;
   goalId: string;
@@ -102,6 +115,16 @@ export function EvidenceIntakeForm({
    * an async DB read rather than a synchronous module-level const.
    */
   governanceDimensions: GovernanceDimensionDefinition[];
+  /**
+   * DB-backed (app_settings.edit_window_hours, confirmed 2026-08-06) —
+   * fetched server-side and passed down so the confirmation modal's copy
+   * reads the exact same value run-audit.ts uses to compute
+   * edit_window_closes_at. Never a separately hardcoded "24 hours" string
+   * — that divergence is the real gap this whole migration closes.
+   */
+  editWindowHours: number;
+  /** Computed server-side from whether this company has any already-`sent` report — real free-tier state, not assumed. */
+  isFreeAudit: boolean;
 }) {
   const router = useRouter();
 
@@ -181,8 +204,26 @@ export function EvidenceIntakeForm({
     });
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  /**
+   * Real confirmation modal (confirmed 2026-08-06) — closes a gap found
+   * while migrating edit_window_hours: spec §2.3a's "Submit for Review is
+   * gated behind a confirmation modal" requirement was only ever actually
+   * built in the demo prototype (mock data, never connected to Supabase).
+   * The real live form went straight from the privacy checkbox to
+   * submission with zero SLA disclosure — every real client so far
+   * submitted evidence without ever seeing this. Form submit now opens
+   * the modal instead of submitting directly; the actual submission moved
+   * to handleConfirmSubmit, fired only from the modal's own Confirm button.
+   */
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setShowConfirmModal(true);
+  }
+
+  async function handleConfirmSubmit() {
+    setShowConfirmModal(false);
     setStatus("submitting");
     setError(null);
 
@@ -368,6 +409,35 @@ export function EvidenceIntakeForm({
           {status === "submitting" ? "Submitting…" : "Submit for review"}
         </button>
       </section>
+
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg dark:bg-neutral-900">
+            <h3 className="mb-2 text-base font-semibold">Ready to submit?</h3>
+            <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
+              You&apos;ll have {editWindowHours} hours to edit or add evidence — after that, review begins, and your
+              report will be ready within {editWindowHours + REVIEW_PERIOD_HOURS} hours total.{" "}
+              {isFreeAudit ? "This will use your free audit." : "This is a paid re-audit."}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                className="rounded border px-3 py-1.5 text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSubmit}
+                className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 }

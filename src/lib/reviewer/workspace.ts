@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getSettingNumber } from "@/lib/app-settings";
 import type { LensFinding } from "@/lib/lenses/types";
 import { recordCaseLibraryEntry } from "@/lib/synthesis/case-library";
 
@@ -133,9 +134,13 @@ export async function approveReport(reportId: string, reviewerId: string): Promi
   if (reportError) throw new Error(`approveReport: failed to load report: ${reportError.message}`);
 
   if (report.edit_window_closes_at && new Date(report.edit_window_closes_at).getTime() > Date.now()) {
+    // Reads the same DB-backed setting the window was originally computed
+    // from (run-audit.ts) — describing it as a fixed "24h" here would risk
+    // exactly the copy/value drift this migration exists to prevent.
+    const editWindowHours = await getSettingNumber("edit_window_hours", 24);
     return {
       approved: false,
-      blockedReason: `The client's 24h edit window hasn't closed yet (closes ${report.edit_window_closes_at}) — review can't start until then`,
+      blockedReason: `The client's ${editWindowHours}h edit window hasn't closed yet (closes ${report.edit_window_closes_at}) — review can't start until then`,
     };
   }
 
