@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { ConfidenceLevel, GoalRelevance, LensFinding, LensType, Severity } from "@/lib/lenses/types";
 import { isFixFirstCandidate } from "@/lib/reviewer/prioritization";
 import {
@@ -14,6 +15,7 @@ import {
   deliverReportAction,
   rerunAuditAction,
   setPlanTierAction,
+  startExecutionSprintAction,
 } from "./actions";
 import type { DisputeResolution } from "@/lib/reviewer/workspace";
 import { matchRecommendationLibraryEntries, type RecommendationLibraryEntry } from "@/lib/recommendations/recommendation-library";
@@ -128,6 +130,7 @@ export function ReviewWorkspaceClient({
   timing,
   recommendationLibrary,
 }: Props) {
+  const router = useRouter();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [disputingId, setDisputingId] = useState<string | null>(null);
   const [resolvingConflictId, setResolvingConflictId] = useState<string | null>(null);
@@ -138,6 +141,8 @@ export function ReviewWorkspaceClient({
   const [tierPending, setTierPending] = useState(false);
   const [deliverError, setDeliverError] = useState<string | null>(null);
   const [delivered, setDelivered] = useState(false);
+  const [sprintError, setSprintError] = useState<string | null>(null);
+  const [startingSprintFor, setStartingSprintFor] = useState<string | null>(null);
 
   async function handleSetPlanTier(tier: "free" | "concierge") {
     if (!companyUserId) return;
@@ -220,6 +225,25 @@ export function ReviewWorkspaceClient({
       setDeliverError(result.error ?? "Something went wrong.");
     }
     setPending(false);
+  }
+
+  /**
+   * Execution Sprint entry point (confirmed 2026-08-06) — creates the
+   * sprint and triggers the AI-drafted task breakdown, then navigates the
+   * reviewer straight to the mandatory Accept/Edit/Reject pass. Only ever
+   * offered for approved/edited findings, matching createSprintFromFinding()'s
+   * own server-side guard.
+   */
+  async function handleStartSprint(findingId: string) {
+    setStartingSprintFor(findingId);
+    setSprintError(null);
+    const result = await startExecutionSprintAction(reportId, findingId);
+    if (result.success) {
+      router.push(`/review-sprint/${result.sprintId}`);
+    } else {
+      setSprintError(result.error ?? "Something went wrong.");
+      setStartingSprintFor(null);
+    }
   }
 
   async function handleRerun() {
@@ -484,6 +508,35 @@ export function ReviewWorkspaceClient({
           </button>
         )}
       </section>
+
+      {/* Execution Sprint entry point (confirmed 2026-08-06) — reviewer-triggered from an approved/edited finding, no in-app checkout (payment confirmed externally first). */}
+      {(reportStatus === "approved" || reportStatus === "sent") && (
+        <section className="mt-6 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+          <h2 className="mb-2 font-medium">Start an Execution Sprint</h2>
+          <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
+            A bounded 2-4 week paid implementation engagement fixing ONE finding below — only once payment is
+            confirmed outside the app. Creates the sprint and AI-drafts its task breakdown; you&apos;ll land on a
+            review pass before the client ever sees it.
+          </p>
+          {sprintError && <p className="mb-3 text-sm text-red-600">{sprintError}</p>}
+          <ul className="space-y-2">
+            {undisputedFindings
+              .filter((f) => f.reviewer_status === "approved" || f.reviewer_status === "edited")
+              .map((f) => (
+                <li key={f.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span>{displayedContent(f).title}</span>
+                  <button
+                    disabled={pending || startingSprintFor !== null}
+                    onClick={() => handleStartSprint(f.id)}
+                    className="shrink-0 rounded border px-2 py-1 text-xs"
+                  >
+                    {startingSprintFor === f.id ? "Drafting tasks…" : "Start Execution Sprint"}
+                  </button>
+                </li>
+              ))}
+          </ul>
+        </section>
+      )}
 
       {/* Basic re-run/refresh button (confirmed 2026-08-05) — reviewer-triggered, see rerun-audit.ts for why. */}
       <section className="mt-6 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">

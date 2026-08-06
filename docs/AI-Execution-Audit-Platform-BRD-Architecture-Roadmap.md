@@ -541,7 +541,7 @@ sessions, orders/pricing (added once pricing/payment is wired)
 **Dashboard (separate page — current, live state)**
 - [ ] Latest top-3 priorities
 - [ ] Active roadmap status
-- [ ] Active Execution Sprint progress
+- [x] Active Execution Sprint progress — real tile added 2026-08-06 alongside the Execution Sprint Dashboard build (see CLAUDE.md)
 
 **Evidence Intake — sequencing confirmed 2026-08-03: fill-in-template path first, native upload/parsing as a real, explicitly deferred follow-on (not implied, not silently dropped)**
 - [ ] Per-lens fill-in template — build this first; part of the Priority 1 minimal end-to-end client path (sign in → create company/goal → submit evidence → see the resulting report, no stub anywhere in that chain)
@@ -596,18 +596,18 @@ sessions, orders/pricing (added once pricing/payment is wired)
 - [ ] Monthly executive summary generation (reuses report generator)
 - [ ] Issue re-prioritization on refresh
 
-**Execution Sprint Dashboard**
-- [ ] Sprint scoping from a selected finding
-- [ ] Task breakdown with owner mapping
-- [ ] KPI target vs. actual tracking
-- [ ] Progress status (scoped/in progress/complete)
-- [ ] Sprint timeline / due dates
+**Execution Sprint Dashboard — built and verified live, 2026-08-06 (see CLAUDE.md "Execution Sprint Dashboard — built, 2026-08-06" for the full design/build/verification writeup)**
+- [x] Sprint scoping from a selected finding — reviewer-triggered, AI-drafted task breakdown with mandatory Accept/Edit/Reject gate before the sprint is client-visible
+- [x] Task breakdown with owner mapping — free-text role label, not a multi-user/permissions system
+- [x] KPI target vs. actual tracking — structured `kpi_description`/`kpi_target_value`/`kpi_actual_value`/`kpi_direction`, with a deterministic deviation check (admin-adjustable threshold) auto-surfacing significant deviations to the reviewer queue
+- [x] Progress status (scoped/in progress/complete) — client-editable per task, sprint-level completion requires explicit client signoff, no auto-complete
+- [x] Sprint timeline / due dates — 28-day window from reviewer approval, per-task due dates computed from the AI draft's suggested offset
 
 **Notifications**
 - [ ] Client: report ready
 - [ ] Reviewer: new submission received
 - [ ] Reviewer: evidence-completeness milestone reached
-- [ ] Client: sprint progress update
+- [x] Client: sprint progress update — the check-in reminder built 2026-08-06 (`sprint_update` event type, previously dormant since the original schema)
 - [ ] Delivery via Resend, same pattern as Elvanis
 
 **Scheduled Jobs (crons)**

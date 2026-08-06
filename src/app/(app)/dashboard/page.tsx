@@ -6,9 +6,9 @@ import { deriveRoadmap } from "@/lib/reports/roadmap";
 
 // Dashboard — current, live state (confirmed 2026-08-04, Priority 3):
 // latest top-3 priorities + roadmap status, drawn from the most recently
-// sent report. Active Execution Sprint progress is correctly absent — no
-// Execution Sprint feature exists anywhere in this codebase yet (V2/V3
-// scope, zero app code), matching CLAUDE.md's own documented status.
+// sent report. Active Execution Sprint progress tile added 2026-08-06 now
+// that the feature is real — shows the most recent in_progress sprint's
+// task-completion count, linking to the full sprint page for detail.
 export default async function DashboardPage() {
   const supabase = await createClient();
   const {
@@ -48,6 +48,36 @@ export default async function DashboardPage() {
   }
   const roadmap = deriveRoadmap(top3);
 
+  const { data: activeSprint } = await supabase
+    .from("execution_sprints")
+    .select("id, target_end_date, selected_finding_id")
+    .eq("company_id", company.id)
+    .eq("status", "in_progress")
+    .order("start_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let sprintFindingTitle: string | null = null;
+  let sprintTaskCounts: { done: number; total: number } | null = null;
+  if (activeSprint) {
+    const { data: findingRow } = await supabase
+      .from("lens_findings")
+      .select("ai_draft, reviewer_edited_content")
+      .eq("id", activeSprint.selected_finding_id)
+      .maybeSingle();
+    const findingContent = (findingRow?.reviewer_edited_content ?? findingRow?.ai_draft) as LensFinding | undefined;
+    sprintFindingTitle = findingContent?.title ?? null;
+
+    const { data: sprintTasks } = await supabase
+      .from("sprint_tasks")
+      .select("status")
+      .eq("execution_sprint_id", activeSprint.id)
+      .neq("reviewer_status", "rejected");
+    const total = sprintTasks?.length ?? 0;
+    const done = (sprintTasks ?? []).filter((t) => t.status === "done").length;
+    sprintTaskCounts = { done, total };
+  }
+
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold">Dashboard</h1>
@@ -80,6 +110,22 @@ export default async function DashboardPage() {
               View full report
             </Link>
           </section>
+
+          {activeSprint && (
+            <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+              <h2 className="mb-3 font-medium">Active Execution Sprint</h2>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">{sprintFindingTitle ?? "In progress"}</p>
+              {sprintTaskCounts && (
+                <p className="mt-1 text-sm text-neutral-500">
+                  {sprintTaskCounts.done} of {sprintTaskCounts.total} tasks done
+                </p>
+              )}
+              {activeSprint.target_end_date && <p className="mt-1 text-sm text-neutral-500">Target end {activeSprint.target_end_date}</p>}
+              <Link href={`/execution-sprint/${activeSprint.id}`} className="mt-3 inline-block text-sm underline">
+                View sprint
+              </Link>
+            </section>
+          )}
 
           <section className="mb-8">
             <h2 className="mb-3 font-medium">Roadmap status</h2>

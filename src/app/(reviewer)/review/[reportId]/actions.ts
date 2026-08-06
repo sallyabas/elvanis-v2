@@ -16,6 +16,7 @@ import type { LensFinding } from "@/lib/lenses/types";
 import { createClient } from "@/lib/supabase/server";
 import { rerunAudit } from "@/lib/audit/rerun-audit";
 import { setPlanTier, type PlanTier } from "@/lib/service-layer/plan-tier";
+import { createSprintFromFinding } from "@/lib/execution-sprint/workspace";
 
 // reviewed_by is a real FK to users.id. Now sourced from the real
 // authenticated session (confirmed 2026-08-02), not a REVIEWER_USER_ID env
@@ -112,6 +113,26 @@ export async function deliverReportAction(reportId: string) {
     revalidatePath("/queue");
     revalidatePath("/reports");
     return { success: true as const };
+  } catch (e) {
+    return { success: false as const, error: e instanceof Error ? e.message : "Something went wrong." };
+  }
+}
+
+/**
+ * Execution Sprint entry point (confirmed 2026-08-06) — reviewer-triggered
+ * from an approved/edited finding on an approved-or-delivered report, no
+ * in-app checkout (payment confirmed externally first, same pattern as
+ * Concierge/F2F Workshop). createSprintFromFinding() creates the sprint
+ * and immediately drafts its task breakdown via AI; the reviewer lands on
+ * /review-sprint/[sprintId] to run the mandatory Accept/Edit/Reject pass
+ * before the sprint is ever client-visible.
+ */
+export async function startExecutionSprintAction(reportId: string, findingId: string) {
+  await getReviewerId();
+  try {
+    const result = await createSprintFromFinding(reportId, findingId);
+    revalidatePath(`/review/${reportId}`);
+    return { success: true as const, sprintId: result.sprintId };
   } catch (e) {
     return { success: false as const, error: e instanceof Error ? e.message : "Something went wrong." };
   }
