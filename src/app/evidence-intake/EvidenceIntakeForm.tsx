@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { GOVERNANCE_DIMENSIONS } from "@/lib/lenses/ai-governance-framework";
-import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
+import type { GovernanceDimensionDefinition, GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
 import { submitEvidence } from "./actions";
 import { saveEvidenceIntakeDraft } from "@/lib/evidence/draft";
+import { EXPORT_INSTRUCTIONS_BY_LENS, type EvidenceLensKey } from "@/lib/evidence/export-instructions";
+import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
 
 /** Shape of the draft blob saved/restored — mirrors this form's own local state, not a typed evidence submission (see evidence_intake_drafts migration docblock). */
 interface EvidenceIntakeDraft {
@@ -21,51 +22,79 @@ interface EvidenceIntakeDraft {
   dimensionScores?: Partial<Record<GovernanceDimensionKey, number>>;
 }
 
-const FIELD_SETS: {
-  lens: "financial" | "execution" | "product";
-  title: string;
-  fields: { key: string; label: string; placeholder: string }[];
-}[] = [
-  {
-    lens: "financial",
-    title: "Financial",
-    fields: [
-      { key: "revenue_margin_trends", label: "Revenue and margin trends", placeholder: "How has revenue/margin moved recently? Any notable swings?" },
-      { key: "cash_flow_runway", label: "Cash flow / runway situation", placeholder: "How much runway do you have? Any cash flow concerns?" },
-      { key: "cost_structure", label: "Cost structure notes", placeholder: "What are the biggest cost drivers? Anything creeping up?" },
-      { key: "customer_concentration", label: "Customer concentration", placeholder: "Is revenue concentrated in a few large customers?" },
-    ],
-  },
-  {
-    lens: "execution",
-    title: "Execution / Operating",
-    fields: [
-      { key: "team_delivery_process", label: "Team structure and delivery process", placeholder: "How is the team organized? What's the delivery process like?" },
-      { key: "delivery_speed", label: "Recent delivery speed / delays", placeholder: "Any recent delays or slowdowns in shipping work?" },
-      { key: "meeting_load", label: "Meeting load / decision-making friction", placeholder: "How much time goes to meetings? Do decisions get stuck?" },
-      { key: "financial_visibility", label: "Visibility into financial data", placeholder: "How easily can the team see financial numbers day-to-day?" },
-    ],
-  },
-  {
-    lens: "product",
-    title: "Product / Customer",
-    fields: [
-      { key: "usage_adoption", label: "Usage and adoption patterns", placeholder: "How are customers actually using the product?" },
-      { key: "satisfaction_signals", label: "Customer satisfaction signals", placeholder: "NPS, support tickets, direct feedback — anything notable?" },
-      { key: "churn_patterns", label: "Churn patterns", placeholder: "Who's churning and why, if known?" },
-      { key: "activation_onboarding", label: "Activation / onboarding notes", placeholder: "How well do new customers get to their first value?" },
-    ],
-  },
-];
+// Field labels now live in src/lib/evidence/field-sets.ts (confirmed
+// 2026-08-06), shared with the client report page's "Evidence submitted"
+// display — this form's own copy would otherwise drift from what the
+// report page shows for the exact same fieldNames.
+const FIELD_SETS = EVIDENCE_FIELD_SETS;
+
+/**
+ * Export instructions hint (confirmed 2026-08-06) — short, tool-specific
+ * "where to click" steps guiding a client straight into the fields below
+ * with the right figures already in hand. Not auto-parsing — the client
+ * still reads the number off their own export and types it in; this just
+ * removes the "where do I even find this" friction. Collapsed by default
+ * (native <details>, no extra state) so it doesn't add length to an
+ * already-long form for anyone who doesn't need it.
+ */
+function ExportHints({ lens }: { lens: EvidenceLensKey }) {
+  const tools = EXPORT_INSTRUCTIONS_BY_LENS[lens];
+  return (
+    <details className="mb-3 rounded border border-neutral-200 bg-neutral-50 text-xs dark:border-neutral-800 dark:bg-neutral-900">
+      <summary className="cursor-pointer select-none px-3 py-2 font-medium text-neutral-600 dark:text-neutral-400">
+        Using one of these tools? Quick export steps
+      </summary>
+      <div className="space-y-2 px-3 pb-3">
+        {tools.map((t) => (
+          <div key={t.tool}>
+            <span className="font-medium">{t.tool}:</span> <span className="text-neutral-600 dark:text-neutral-400">{t.steps}</span>
+            {t.note && <p className="mt-0.5 text-neutral-400">{t.note}</p>}
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+/**
+ * Review period is intentionally still a fixed constant, not DB-backed —
+ * unlike edit_window_hours, it has no enforcement mechanism anywhere in
+ * code (confirmed in CLAUDE.md: "exists only as narrative, never an
+ * enforced deadline"), so migrating it now would let the modal promise a
+ * number nothing actually holds to. Only promote it to a DB setting
+ * alongside building real enforcement for it — a separate, deliberate
+ * decision, not a side effect of this one.
+ */
+const REVIEW_PERIOD_HOURS = 48;
 
 export function EvidenceIntakeForm({
   companyId,
   goalId,
   initialDraft,
+  governanceDimensions,
+  editWindowHours,
+  isFreeAudit,
 }: {
   companyId: string;
   goalId: string;
   initialDraft: EvidenceIntakeDraft | null;
+  /**
+   * DB-backed as of 2026-08-06 (see benchmarks-repository.ts) — fetched
+   * server-side in page.tsx and passed down here, since GOVERNANCE_DIMENSIONS
+   * can no longer be imported directly into a client component now that it's
+   * an async DB read rather than a synchronous module-level const.
+   */
+  governanceDimensions: GovernanceDimensionDefinition[];
+  /**
+   * DB-backed (app_settings.edit_window_hours, confirmed 2026-08-06) —
+   * fetched server-side and passed down so the confirmation modal's copy
+   * reads the exact same value run-audit.ts uses to compute
+   * edit_window_closes_at. Never a separately hardcoded "24 hours" string
+   * — that divergence is the real gap this whole migration closes.
+   */
+  editWindowHours: number;
+  /** Computed server-side from whether this company has any already-`sent` report — real free-tier state, not assumed. */
+  isFreeAudit: boolean;
 }) {
   const router = useRouter();
 
@@ -145,8 +174,26 @@ export function EvidenceIntakeForm({
     });
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  /**
+   * Real confirmation modal (confirmed 2026-08-06) — closes a gap found
+   * while migrating edit_window_hours: spec §2.3a's "Submit for Review is
+   * gated behind a confirmation modal" requirement was only ever actually
+   * built in the demo prototype (mock data, never connected to Supabase).
+   * The real live form went straight from the privacy checkbox to
+   * submission with zero SLA disclosure — every real client so far
+   * submitted evidence without ever seeing this. Form submit now opens
+   * the modal instead of submitting directly; the actual submission moved
+   * to handleConfirmSubmit, fired only from the modal's own Confirm button.
+   */
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setShowConfirmModal(true);
+  }
+
+  async function handleConfirmSubmit() {
+    setShowConfirmModal(false);
     setStatus("submitting");
     setError(null);
 
@@ -209,6 +256,7 @@ export function EvidenceIntakeForm({
       {FIELD_SETS.map((set) => (
         <section key={set.lens}>
           <h2 className="mb-3 text-lg font-medium">{set.title}</h2>
+          <ExportHints lens={set.lens} />
           <div className="space-y-3">
             {set.fields.map((f) => (
               <label key={f.key} className="block space-y-1">
@@ -228,6 +276,7 @@ export function EvidenceIntakeForm({
 
       <section>
         <h2 className="mb-3 text-lg font-medium">Commercial / Market</h2>
+        <ExportHints lens="commercial" />
         <div className="space-y-3">
           <label className="block space-y-1">
             <span className="text-sm font-medium">Named competitors (comma-separated)</span>
@@ -280,7 +329,7 @@ export function EvidenceIntakeForm({
           ) : (
             <div className="space-y-3">
               <p className="text-xs text-neutral-500">No documents? Rate where each area actually stands today.</p>
-              {GOVERNANCE_DIMENSIONS.map((dim) => (
+              {governanceDimensions.map((dim) => (
                 <label key={dim.key} className="block space-y-1">
                   <span className="text-sm font-medium">{dim.label}</span>
                   <select
@@ -330,6 +379,35 @@ export function EvidenceIntakeForm({
           {status === "submitting" ? "Submitting…" : "Submit for review"}
         </button>
       </section>
+
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg dark:bg-neutral-900">
+            <h3 className="mb-2 text-base font-semibold">Ready to submit?</h3>
+            <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
+              You&apos;ll have {editWindowHours} hours to edit or add evidence — after that, review begins, and your
+              report will be ready within {editWindowHours + REVIEW_PERIOD_HOURS} hours total.{" "}
+              {isFreeAudit ? "This will use your free audit." : "This is a paid re-audit."}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                className="rounded border px-3 py-1.5 text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSubmit}
+                className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 }

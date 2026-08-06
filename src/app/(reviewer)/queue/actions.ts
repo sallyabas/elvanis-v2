@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { markRegulatoryContentReviewed } from "@/lib/reviewer/regulatory-content-review";
 import { updateSessionRequestStatus } from "@/lib/service-layer/session-requests";
 import { updatePricingItem } from "@/lib/pricing";
+import { replyToSprintQueueItem } from "@/lib/execution-sprint/workspace";
 import { createClient } from "@/lib/supabase/server";
 
 // Same independent session+role re-check as every other reviewer Server
@@ -52,5 +53,22 @@ export async function updatePricingItemAction(formData: FormData) {
     throw new Error("Invalid pricing update.");
   }
   await updatePricingItem(itemKey, priceAmount);
+  revalidatePath("/queue");
+}
+
+/**
+ * Execution Sprint queue items — both client change-request notes and
+ * deterministic KPI-deviation alerts land here (confirmed 2026-08-06, "same
+ * mechanism as the plan-change notes, different trigger"). Replying sends
+ * the client a real email immediately, not on the next cron tick — see
+ * replyToSprintQueueItem's own docblock for why this is the one deliberate
+ * exception to the standard dispatch-on-cron pattern.
+ */
+export async function replyToSprintQueueItemAction(formData: FormData) {
+  const reviewerId = await getReviewerId();
+  const queueItemId = String(formData.get("queueItemId"));
+  const replyText = String(formData.get("replyText") ?? "").trim();
+  if (!queueItemId || !replyText) throw new Error("Reply text is required.");
+  await replyToSprintQueueItem(queueItemId, replyText, reviewerId);
   revalidatePath("/queue");
 }

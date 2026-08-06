@@ -26,6 +26,14 @@ import type { LensType } from "@/lib/lenses/types";
  * applicability, benchmark tiers, fix-first flagging). A finding matching
  * zero keywords simply shows no suggestion — that's correct, not a gap;
  * this is a seed library, not an exhaustive one.
+ *
+ * DB-backed as of 2026-08-06 (confirmed by the hardcoded-values audit),
+ * same "admin-adjustable, not a constant" principle as the lens benchmarks
+ * — see repository.ts for the loader. This file holds only the type shape,
+ * the DEFAULT constant (fallback + seed source of truth), and the pure
+ * matching function, which now takes the library as a parameter instead of
+ * reading a module-level const — same refactor as the lens benchmarks, so
+ * it's independently testable (see recommendation-library.test-cases.ts).
  */
 
 export type IssueTypeKey =
@@ -57,7 +65,8 @@ export interface RecommendationLibraryEntry {
   rationale: string;
 }
 
-export const RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
+/** Fallback used if the DB read fails or returns incomplete data — also the seed data's own source of truth. */
+export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
   {
     key: "no_financial_visibility",
     label: "No real-time/near-real-time financial visibility",
@@ -214,9 +223,15 @@ function normalize(text: string): string {
  * Empty array is a normal, expected result for most findings — this is a
  * seed library covering common patterns, not an exhaustive taxonomy.
  */
-export function matchRecommendationLibraryEntries(lens: LensType, title: string, diagnosis: string): RecommendationLibraryEntry[] {
+export function matchRecommendationLibraryEntries(
+  library: RecommendationLibraryEntry[],
+  lens: LensType,
+  title: string,
+  diagnosis: string,
+): RecommendationLibraryEntry[] {
   const haystack = normalize(`${title} ${diagnosis}`);
-  const scored = RECOMMENDATION_LIBRARY.filter((entry) => entry.lens === lens)
+  const scored = library
+    .filter((entry) => entry.lens === lens)
     .map((entry) => ({
       entry,
       matchCount: entry.keywords.filter((k) => haystack.includes(k)).length,

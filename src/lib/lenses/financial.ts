@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { generateValidatedJson } from "@/lib/ai-client";
-import { compareFinancialMetric, formatBenchmarksForPrompt } from "./financial-benchmarks";
+import { compareFinancialMetric, formatBenchmarksForPrompt, type FinancialBenchmarks } from "./financial-benchmarks";
+import { loadFinancialBenchmarks } from "./benchmarks-repository";
 import { formatGoalContextForPrompt } from "./goals";
 import { formatComputedComparisonsForPrompt } from "./metrics";
 import {
@@ -12,7 +13,16 @@ import {
 } from "./schemas";
 import type { EvidenceFieldInput, LensDraftInput, LensDraftResult, LensFinding, LensModule } from "./types";
 
-const SYSTEM_PROMPT = `You are the Financial lens of an AI execution audit for founder-led B2B SaaS and tech-enabled SMEs (20-200 employees, UK/NL first). You analyze submitted financial evidence and produce a structured set of findings — you do not write prose reports.
+/**
+ * Built per-call, not a module-level const (confirmed 2026-08-06) — now
+ * that benchmarks are DB-loaded (loadFinancialBenchmarks(), see
+ * benchmarks-repository.ts), the prompt can no longer be pre-computed once
+ * at import time; it must reflect whatever's currently in the DB, same
+ * "living record, never a cached copy" principle already applied to the
+ * company profile.
+ */
+function buildSystemPrompt(benchmarks: FinancialBenchmarks): string {
+  return `You are the Financial lens of an AI execution audit for founder-led B2B SaaS and tech-enabled SMEs (20-200 employees, UK/NL first). You analyze submitted financial evidence and produce a structured set of findings — you do not write prose reports.
 
 HARD RULES — violating any of these makes your output unusable:
 1. Never fabricate a number that isn't present in the submitted evidence. Every quantified claim must name the specific evidence field(s) it came from in "evidenceCited".
@@ -30,7 +40,7 @@ FINDING STRUCTURE — four fields must stay distinct, never folded together:
 - "severity": "critical" | "high" | "medium" | "low" — how much this matters to the business if left unaddressed. Independent of confidenceLevel (how sure you are) and independent of goalRelevance (how tied to the stated goal it is) — a finding can be low-confidence and still critical severity, or high-confidence and low severity.
 
 REFERENCE BENCHMARKS (general context on the scale involved — the COMPUTED BENCHMARK COMPARISONS section below is what decides each finding's tier, not this):
-${formatBenchmarksForPrompt()}
+${formatBenchmarksForPrompt(benchmarks)}
 
 GOAL-RELEVANCE GUIDANCE (typical financial signals most load-bearing per goal — use judgment, not a rigid lookup):
 - Cash Flow / Margin Efficiency: gross/net margin health, runway, burn rate, cost structure
@@ -64,6 +74,7 @@ OUTPUT SCHEMA (JSON object):
   "evidenceSufficiency": "sufficient" | "partial" | "insufficient",
   "notes": string  // optional, brief
 }`;
+}
 
 const financialFindingSchema = z.object({
   title: z.string(),
@@ -97,11 +108,11 @@ function formatEvidenceForPrompt(fields: EvidenceFieldInput[]): string {
     .join("\n");
 }
 
-function buildUserPrompt(input: LensDraftInput): string {
+function buildUserPrompt(input: LensDraftInput, benchmarks: FinancialBenchmarks): string {
   const { company, goal, evidenceFields, metrics } = input;
 
   const computedComparisons = metrics
-    .map((m) => compareFinancialMetric(m.metricKey, m.value))
+    .map((m) => compareFinancialMetric(benchmarks, m.metricKey, m.value))
     .filter((c) => c !== null);
 
   return `COMPANY PROFILE:
@@ -132,11 +143,12 @@ export const financialLens: LensModule = {
   lens: "financial",
 
   async runDraft(input: LensDraftInput): Promise<LensDraftResult> {
+    const benchmarks = await loadFinancialBenchmarks();
     const raw: RawFinancialLensOutput = await generateValidatedJson(financialLensOutputSchema, {
       schemaName: "financial-lens",
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildUserPrompt(input) },
+        { role: "system", content: buildSystemPrompt(benchmarks) },
+        { role: "user", content: buildUserPrompt(input, benchmarks) },
       ],
     });
 

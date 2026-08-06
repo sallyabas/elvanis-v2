@@ -242,7 +242,7 @@ Expands steps 2, 8, and 9 above with the actual client-facing timing contract.
 
 - **72-hour SLA, shown to the client as a single promise everywhere outside the submit-confirmation moment:** "Your report will be ready within 72 hours" is the number used in headline/marketing copy, the dashboard, and anywhere else the SLA is referenced generally. **Correction, 2026-08-03**: this was originally written as "the internal two-part breakdown below is never exposed," which directly contradicted this same section's own confirmation-modal text two lines down — that modal correctly and intentionally discloses the 24-hour edit window, because the client needs to know it before deciding to submit (it's operationally relevant to their choice, not an internal implementation detail). The code correctly implements the modal text below; the "never exposed" framing was the actual error and is retracted — it only ever applied to headline/marketing copy, not this functional confirmation moment.
 - **Uploading evidence has no clock.** Clients can take whatever time they need gathering evidence before submitting — encourage this, don't rush it.
-- **"Submit for Review" is an explicit action, distinct from uploading**, gated behind a confirmation modal: *"Ready to submit? You'll have 24 hours to edit or add evidence — after that, review begins, and your report will be ready within 72 hours total. This will use your free audit."* (Confirm/Cancel.)
+- **"Submit for Review" is an explicit action, distinct from uploading**, gated behind a confirmation modal: *"Ready to submit? You'll have 24 hours to edit or add evidence — after that, review begins, and your report will be ready within 72 hours total. This will use your free audit."* (Confirm/Cancel.) **Real, live modal built 2026-08-06** (confirmed missing from the live app until then — only the demo prototype had it) — the 24h/72h figures are read from the `app_settings.edit_window_hours` DB value at render time, never hardcoded, so this text and the actual enforced window can never diverge; the free-audit line is a real computed check (any prior `sent` report for the company), not assumed static copy. See CLAUDE.md for the full build + live verification.
 - **Internal breakdown:** 24-hour edit window after "Submit for Review" (client can still revise/add evidence; no reviewer activity yet) + 48-hour review period, which starts only once the edit window closes. The reviewer notification (step 9) must fire the instant the 24-hour window closes — a `scheduled_jobs` trigger, not something left to a human to notice — so the 48-hour clock starts accurately.
 - **New evidence submitted after a report has already been delivered starts a new, distinct re-audit cycle** — never a silent edit to the sent report. Reuses the existing re-audit workflow/cron (`scheduled_jobs`: `re_audit_reminder`). The original report stays untouched in Reports & History (consistent with the frozen-snapshot principle, §2.5).
 - **Free tier = the first completed audit per company only**, however long evidence-gathering took. Any full re-audit after a report has been delivered is paid (Execution Sprint / re-audit pricing / eventual Monthly Execution Office §1.5) — never free again.
@@ -541,7 +541,7 @@ sessions, orders/pricing (added once pricing/payment is wired)
 **Dashboard (separate page — current, live state)**
 - [ ] Latest top-3 priorities
 - [ ] Active roadmap status
-- [ ] Active Execution Sprint progress
+- [x] Active Execution Sprint progress — real tile added 2026-08-06 alongside the Execution Sprint Dashboard build (see CLAUDE.md)
 
 **Evidence Intake — sequencing confirmed 2026-08-03: fill-in-template path first, native upload/parsing as a real, explicitly deferred follow-on (not implied, not silently dropped)**
 - [ ] Per-lens fill-in template — build this first; part of the Priority 1 minimal end-to-end client path (sign in → create company/goal → submit evidence → see the resulting report, no stub anywhere in that chain)
@@ -586,7 +586,7 @@ sessions, orders/pricing (added once pricing/payment is wired)
 - [ ] Findings-by-lens view with status
 - [ ] Roadmap section (30/60/90, editable status)
 - [ ] Assumption/confidence visibility per finding
-- [ ] Evidence library (what was submitted, re-upload option)
+- [x] Evidence library (what was submitted, re-upload option) — built 2026-08-06 (reads `reports.source_evidence_snapshot`; "re-upload" reuses the existing `/evidence-intake` flow rather than a new submission surface — see CLAUDE.md "Evidence library on the client report — built, 2026-08-06")
 - [x] Re-run/refresh button — basic version built 2026-08-05 (reviewer-triggered, re-executes against the original evidence snapshot + current profile; a retrieval-informed upgrade stays V2)
 - [ ] Next-step CTAs (Execution Sprint / Tender Readiness / AI Reliability)
 
@@ -596,18 +596,18 @@ sessions, orders/pricing (added once pricing/payment is wired)
 - [ ] Monthly executive summary generation (reuses report generator)
 - [ ] Issue re-prioritization on refresh
 
-**Execution Sprint Dashboard**
-- [ ] Sprint scoping from a selected finding
-- [ ] Task breakdown with owner mapping
-- [ ] KPI target vs. actual tracking
-- [ ] Progress status (scoped/in progress/complete)
-- [ ] Sprint timeline / due dates
+**Execution Sprint Dashboard — built and verified live, 2026-08-06 (see CLAUDE.md "Execution Sprint Dashboard — built, 2026-08-06" for the full design/build/verification writeup)**
+- [x] Sprint scoping from a selected finding — reviewer-triggered, AI-drafted task breakdown with mandatory Accept/Edit/Reject gate before the sprint is client-visible
+- [x] Task breakdown with owner mapping — free-text role label, not a multi-user/permissions system
+- [x] KPI target vs. actual tracking — structured `kpi_description`/`kpi_target_value`/`kpi_actual_value`/`kpi_direction`, with a deterministic deviation check (admin-adjustable threshold) auto-surfacing significant deviations to the reviewer queue
+- [x] Progress status (scoped/in progress/complete) — client-editable per task, sprint-level completion requires explicit client signoff, no auto-complete
+- [x] Sprint timeline / due dates — 28-day window from reviewer approval, per-task due dates computed from the AI draft's suggested offset
 
 **Notifications**
 - [ ] Client: report ready
 - [ ] Reviewer: new submission received
 - [ ] Reviewer: evidence-completeness milestone reached
-- [ ] Client: sprint progress update
+- [x] Client: sprint progress update — the check-in reminder built 2026-08-06 (`sprint_update` event type, previously dormant since the original schema)
 - [ ] Delivery via Resend, same pattern as Elvanis
 
 **Scheduled Jobs (crons)**

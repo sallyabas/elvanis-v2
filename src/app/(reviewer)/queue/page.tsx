@@ -3,7 +3,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { listRegulatoryContentReviewStatus } from "@/lib/reviewer/regulatory-content-review";
 import { listPendingSessionRequests } from "@/lib/service-layer/session-requests";
 import { listPricing } from "@/lib/pricing";
-import { markRegulatoryContentReviewedAction, updateSessionRequestStatusAction, updatePricingItemAction } from "./actions";
+import { listOpenSprintQueueItems } from "@/lib/execution-sprint/workspace";
+import {
+  markRegulatoryContentReviewedAction,
+  updateSessionRequestStatusAction,
+  updatePricingItemAction,
+  replyToSprintQueueItemAction,
+} from "./actions";
 
 const SESSION_TYPE_LABELS: Record<string, string> = {
   discovery: "Discovery Session",
@@ -61,6 +67,15 @@ export default async function ReviewerQueuePage() {
     return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {moduleError.message}</div>;
   }
 
+  const { data: scopedSprints, error: sprintsError } = await supabase
+    .from("execution_sprints")
+    .select("id, created_at, companies(name)")
+    .eq("status", "scoped");
+
+  if (sprintsError) {
+    return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {sprintsError.message}</div>;
+  }
+
   const MODULE_LABELS: Record<string, string> = {
     ai_reliability: "AI Reliability Audit",
     tender_readiness: "Tender Readiness",
@@ -76,6 +91,14 @@ export default async function ReviewerQueuePage() {
       notified: Boolean(r.reviewer_notified_at),
       href: `/review/${r.id}`,
     })),
+    ...(scopedSprints ?? []).map((s) => ({
+      id: s.id as string,
+      companyName: (s.companies as unknown as { name: string } | null)?.name ?? "Unknown company",
+      label: "Execution Sprint (task review)",
+      readyAt: s.created_at as string | null,
+      notified: true,
+      href: `/review-sprint/${s.id}`,
+    })),
     ...moduleRequests.map((r) => ({
       id: r.id as string,
       companyName: (r.companies as unknown as { name: string } | null)?.name ?? "Unknown company",
@@ -89,6 +112,7 @@ export default async function ReviewerQueuePage() {
   const regulatoryStatus = await listRegulatoryContentReviewStatus();
   const sessionRequests = await listPendingSessionRequests();
   const pricing = await listPricing();
+  const sprintQueueItems = await listOpenSprintQueueItems();
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
@@ -174,6 +198,50 @@ export default async function ReviewerQueuePage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+        <h2 className="mb-1 text-sm font-medium">Execution Sprint queue</h2>
+        <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
+          Client change-request notes and deterministic KPI-deviation alerts on active sprints. Replies send an email
+          immediately, not on the next cron tick.
+        </p>
+        {sprintQueueItems.length === 0 ? (
+          <p className="text-sm text-neutral-500">Nothing open.</p>
+        ) : (
+          <ul className="space-y-3">
+            {sprintQueueItems.map((item) => (
+              <li key={item.id} className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="font-medium">{item.companyName}</span>
+                  <Link href={`/review-sprint/${item.sprintId}`} className="text-xs underline">
+                    View sprint
+                  </Link>
+                </div>
+                <p className="text-xs text-neutral-500">
+                  {item.trigger_type === "kpi_deviation" ? "KPI deviation" : "Change request"} · {new Date(item.created_at).toLocaleString()}
+                </p>
+                <p className="mt-1 text-neutral-700 dark:text-neutral-300">{item.note}</p>
+                <form action={replyToSprintQueueItemAction} className="mt-2 flex gap-2">
+                  <input type="hidden" name="queueItemId" value={item.id} />
+                  <input
+                    type="text"
+                    name="replyText"
+                    placeholder="Reply to the client…"
+                    required
+                    className="flex-1 rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+                  />
+                  <button
+                    type="submit"
+                    className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                  >
+                    Send
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">

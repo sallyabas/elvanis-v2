@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { findSimilarPatterns } from "@/lib/synthesis/case-library";
+import { loadRecommendationLibrary } from "@/lib/recommendations/repository";
 import { ReviewWorkspaceClient } from "./ReviewWorkspaceClient";
 
 export default async function ReviewWorkspacePage({ params }: { params: Promise<{ reportId: string }> }) {
@@ -57,6 +58,13 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
     patternCompanyIds.length > 0 ? await supabase.from("companies").select("id, name").in("id", patternCompanyIds) : { data: [] };
   const patternCompanyNames = new Map((patternCompanies ?? []).map((c) => [c.id as string, c.name as string]));
 
+  // Recommendation library, DB-backed as of 2026-08-06 (see
+  // recommendations/repository.ts) — fetched here server-side and passed
+  // down as a prop, since EditForm (a client component) previously
+  // imported RECOMMENDATION_LIBRARY directly, which broke once it became
+  // an async DB read. Same refactor pattern as GOVERNANCE_DIMENSIONS.
+  const recommendationLibrary = await loadRecommendationLibrary();
+
   return (
     <ReviewWorkspaceClient
       reportId={report.id}
@@ -70,6 +78,7 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
       similarPatterns={similarPatterns.map((p) => ({ ...p, companyName: patternCompanyNames.get(p.companyId) ?? "Unknown company" }))}
       findings={findings}
       conflicts={conflicts ?? []}
+      recommendationLibrary={recommendationLibrary}
       timing={{
         createdAt: report.created_at,
         submittedAt: report.submitted_at,

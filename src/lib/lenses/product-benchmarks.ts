@@ -8,8 +8,51 @@ import type { ComputedMetricComparison } from "./metrics";
  * real pilot audits (roadmap Phase 3) once actual cases exist to compare
  * against. Every figure below is sourced; do not add a number here without
  * a citation.
+ *
+ * DB-backed as of 2026-08-06 (same rationale as financial-benchmarks.ts) —
+ * see benchmarks-repository.ts for the loader. This file holds only the
+ * type shape, the DEFAULT constant (fallback + seed source of truth), and
+ * pure functions taking a ProductBenchmarks parameter instead of reading a
+ * module-level const.
  */
-export const PRODUCT_BENCHMARKS = {
+export interface ProductBenchmarks {
+  annualLogoChurnPercent: {
+    healthyBelow: number;
+    watchBelow: number;
+    concerningBelow: number;
+    source: string;
+  };
+  npsScore: {
+    concerningBelow: number;
+    averageBelow: number;
+    goodBelow: number;
+    excellentAtOrAbove: number;
+    source: string;
+  };
+  coreFeatureAdoptionPercent: {
+    concerningBelow: number;
+    belowMedianBelow: number;
+    aboveAverageAtOrAbove: number;
+    topQuartileAtOrAbove: number;
+    source: string;
+  };
+  activationRatePercent: {
+    concerningBelow: number;
+    belowAverageBelow: number;
+    goodAtOrAbove: number;
+    excellentAtOrAbove: number;
+    source: string;
+  };
+  supportCsatPercent: {
+    concerningBelow: number;
+    averageBelow: number;
+    goodAtOrAbove: number;
+    source: string;
+  };
+}
+
+/** Fallback used if the DB read fails or returns incomplete data — also the seed data's own source of truth. */
+export const DEFAULT_PRODUCT_BENCHMARKS: ProductBenchmarks = {
   // Recurly 2025 Churn Report; SaaS retention benchmark aggregates. B2B SaaS
   // median annual logo churn is ~3.5%, "good" is under 5% — but SMB-focused
   // products run structurally higher (SMB segments have been reported at
@@ -57,11 +100,10 @@ export const PRODUCT_BENCHMARKS = {
     goodAtOrAbove: 85,
     source: "2025/2026 SaaS CSAT benchmark reports (SurveySparrow, Retently, RevOS) — B2B Software & SaaS average ~77",
   },
-} as const;
+};
 
 /** Rendered into the system prompt as general context/scale — not what decides any individual finding's tier. */
-export function formatProductBenchmarksForPrompt(): string {
-  const b = PRODUCT_BENCHMARKS;
+export function formatProductBenchmarksForPrompt(b: ProductBenchmarks): string {
   return [
     `- Annual logo churn: healthy <${b.annualLogoChurnPercent.healthyBelow}%, watch <${b.annualLogoChurnPercent.watchBelow}%, concerning <${b.annualLogoChurnPercent.concerningBelow}%, critical at/above ${b.annualLogoChurnPercent.concerningBelow}% — note SMB-focused customer bases run structurally higher [source: ${b.annualLogoChurnPercent.source}]`,
     `- NPS: critical <${b.npsScore.concerningBelow}, concerning <${b.npsScore.averageBelow}, average <${b.npsScore.goodBelow}, good <${b.npsScore.excellentAtOrAbove}, excellent at/above ${b.npsScore.excellentAtOrAbove} [source: ${b.npsScore.source}]`,
@@ -84,9 +126,7 @@ export type ProductMetricKey =
  * lens then treats the value as qualitative evidence only, with no asserted
  * benchmark tier).
  */
-export function compareProductMetric(metricKey: string, value: number): ComputedMetricComparison | null {
-  const b = PRODUCT_BENCHMARKS;
-
+export function compareProductMetric(b: ProductBenchmarks, metricKey: string, value: number): ComputedMetricComparison | null {
   switch (metricKey as ProductMetricKey) {
     case "annual_logo_churn_percent": {
       const c = b.annualLogoChurnPercent;

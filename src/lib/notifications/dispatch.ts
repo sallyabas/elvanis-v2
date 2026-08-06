@@ -70,6 +70,31 @@ function templateFor(eventType: string, recipientType: "client" | "reviewer"): {
         subject: "A client requested a live session",
         html: `<p>A client has requested a Discovery, Delivery, or F2F Workshop session. Follow up to schedule it.</p><p><a href="${SITE_URL}/queue">View on the reviewer queue</a></p>`,
       };
+    case "sprint_queue_item":
+      // Reviewer-facing — a client submitted a plan-change note, or a KPI
+      // actual deviated past the configured threshold on an active
+      // Execution Sprint (confirmed 2026-08-06, "same mechanism, different
+      // trigger").
+      return {
+        subject: "Execution Sprint needs your attention",
+        html: `<p>A client note or KPI deviation on an active Execution Sprint is waiting for a reply.</p><p><a href="${SITE_URL}/queue">Open the reviewer queue</a></p>`,
+      };
+    case "sprint_signed_off":
+      // Reviewer-facing — the client signed off on their Execution Sprint;
+      // a final wrap-up commentary is still owed (addSprintReviewerCommentary).
+      return {
+        subject: "A client signed off on their Execution Sprint",
+        html: `<p>A client has signed off on their Execution Sprint. Add your final wrap-up commentary when ready.</p><p><a href="${SITE_URL}/queue">Open the reviewer queue</a></p>`,
+      };
+    case "sprint_reply":
+      // Client-facing — normally sent immediately by replyToSprintQueueItem
+      // itself, not via this dispatcher; this template is a fallback only
+      // for the rare case that immediate send failed and the row is
+      // retried on the next cron tick.
+      return {
+        subject: "Reply to your Execution Sprint question",
+        html: `<p>Your reviewer replied to your Execution Sprint note. Check your sprint page for details.</p>`,
+      };
     default:
       return {
         subject: "Elvanis notification",

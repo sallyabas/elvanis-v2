@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { generateValidatedJson } from "@/lib/ai-client";
-import { compareExecutionMetric, formatExecutionBenchmarksForPrompt } from "./execution-benchmarks";
+import { compareExecutionMetric, formatExecutionBenchmarksForPrompt, type ExecutionBenchmarks } from "./execution-benchmarks";
+import { loadExecutionBenchmarks } from "./benchmarks-repository";
 import { formatGoalContextForPrompt } from "./goals";
 import { formatComputedComparisonsForPrompt } from "./metrics";
 import {
@@ -12,7 +13,9 @@ import {
 } from "./schemas";
 import type { EvidenceFieldInput, LensDraftInput, LensDraftResult, LensFinding, LensModule } from "./types";
 
-const SYSTEM_PROMPT = `You are the Execution/Operating lens of an AI execution audit for founder-led B2B SaaS and tech-enabled SMEs (20-200 employees, UK/NL first). You analyze submitted operational evidence — delivery/engineering cadence, decision-making and approval chains, meeting load, team structure — and produce a structured set of findings. You do not write prose reports.
+/** Built per-call, not a module-level const — see financial.ts's buildSystemPrompt docblock for why. */
+function buildSystemPrompt(benchmarks: ExecutionBenchmarks): string {
+  return `You are the Execution/Operating lens of an AI execution audit for founder-led B2B SaaS and tech-enabled SMEs (20-200 employees, UK/NL first). You analyze submitted operational evidence — delivery/engineering cadence, decision-making and approval chains, meeting load, team structure — and produce a structured set of findings. You do not write prose reports.
 
 SCOPE — what belongs to this lens vs. others:
 - This lens owns: delivery/engineering cycle time, decision and approval bottlenecks (any approval chain, not just engineering), meeting load and organizational drag, team structure/coordination friction, and operational/reporting infrastructure maturity in ANY domain (including "no financial visibility" or "no CRM in place" — those are operating-maturity gaps, this lens's job, even though the underlying data would otherwise belong to Financial or Commercial).
@@ -34,7 +37,7 @@ FINDING STRUCTURE — four fields must stay distinct, never folded together:
 - "severity": "critical" | "high" | "medium" | "low" — how much this matters to the business if left unaddressed. Independent of confidenceLevel (how sure you are) and independent of goalRelevance (how tied to the stated goal it is) — a finding can be low-confidence and still critical severity, or high-confidence and low severity.
 
 REFERENCE BENCHMARKS (general context on the scale involved — the COMPUTED BENCHMARK COMPARISONS section below is what decides each finding's tier, not this):
-${formatExecutionBenchmarksForPrompt()}
+${formatExecutionBenchmarksForPrompt(benchmarks)}
 
 GOAL-RELEVANCE GUIDANCE (typical operational signals most load-bearing per goal — use judgment, not a rigid lookup):
 - Execution Speed: decision/approval latency, delivery cycle time, meeting load eating into execution time
@@ -68,6 +71,7 @@ OUTPUT SCHEMA (JSON object):
   "evidenceSufficiency": "sufficient" | "partial" | "insufficient",
   "notes": string  // optional, brief
 }`;
+}
 
 const executionFindingSchema = z.object({
   title: z.string(),
@@ -101,11 +105,11 @@ function formatEvidenceForPrompt(fields: EvidenceFieldInput[]): string {
     .join("\n");
 }
 
-function buildUserPrompt(input: LensDraftInput): string {
+function buildUserPrompt(input: LensDraftInput, benchmarks: ExecutionBenchmarks): string {
   const { company, goal, evidenceFields, metrics } = input;
 
   const computedComparisons = metrics
-    .map((m) => compareExecutionMetric(m.metricKey, m.value))
+    .map((m) => compareExecutionMetric(benchmarks, m.metricKey, m.value))
     .filter((c) => c !== null);
 
   return `COMPANY PROFILE:
@@ -136,11 +140,12 @@ export const executionLens: LensModule = {
   lens: "execution",
 
   async runDraft(input: LensDraftInput): Promise<LensDraftResult> {
+    const benchmarks = await loadExecutionBenchmarks();
     const raw: RawExecutionLensOutput = await generateValidatedJson(executionLensOutputSchema, {
       schemaName: "execution-lens",
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildUserPrompt(input) },
+        { role: "system", content: buildSystemPrompt(benchmarks) },
+        { role: "user", content: buildUserPrompt(input, benchmarks) },
       ],
     });
 
