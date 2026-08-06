@@ -1,10 +1,28 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { LensFinding, LensType } from "@/lib/lenses/types";
+import type { EvidenceFieldInput, LensFinding, LensType } from "@/lib/lenses/types";
+import type { CommercialSelfReport } from "@/lib/lenses/commercial";
+import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
 import { SessionRequestButton } from "@/app/_components/SessionRequestButton";
+import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
+import { loadGovernanceDimensions } from "@/lib/lenses/benchmarks-repository";
+
+interface SourceEvidenceSnapshot {
+  financial: { evidenceFields: EvidenceFieldInput[] };
+  execution: { evidenceFields: EvidenceFieldInput[] };
+  product: { evidenceFields: EvidenceFieldInput[] };
+  commercial: CommercialSelfReport;
+  aiGovernance: {
+    hasLiveAiInProduction: boolean;
+    governanceDocsSubmitted: boolean;
+    questionnaireScores?: Partial<Record<GovernanceDimensionKey, number>>;
+    governanceEvidence?: EvidenceFieldInput[];
+  };
+}
 
 const LENS_ORDER: LensType[] = ["financial", "execution", "product", "commercial", "ai_governance"];
 const LENS_LABELS: Record<LensType, string> = {
@@ -75,10 +93,18 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
 
   const { data: report, error: reportError } = await supabase
     .from("reports")
-    .select("id, top_3_finding_ids, goal_id, companies!inner(id, name, user_id)")
+    .select("id, top_3_finding_ids, goal_id, source_evidence_snapshot, companies!inner(id, name, user_id)")
     .eq("id", reportId)
     .single();
   if (reportError || !report) notFound();
+
+  // Evidence library (confirmed 2026-08-06) — reads the exact evidence
+  // payload the report was generated from, verbatim (same
+  // source_evidence_snapshot rerun-audit.ts already relies on). Older
+  // reports predating snapshot support have no stored evidence — handled
+  // the same defensive way rerunAudit() does, not assumed present.
+  const evidenceSnapshot = report.source_evidence_snapshot as SourceEvidenceSnapshot | null;
+  const governanceDimensions = evidenceSnapshot ? await loadGovernanceDimensions() : [];
 
   const company = report.companies as unknown as { id: string; name: string; user_id: string };
 
@@ -119,6 +145,12 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
       <div className="mb-8 flex flex-wrap gap-3">
         <SessionRequestButton companyId={company.id} sessionType="delivery" />
         {hasRequestedDelivery && <SessionRequestButton companyId={company.id} sessionType="f2f_workshop" />}
+        <Link
+          href="/evidence-intake"
+          className="rounded border border-neutral-300 px-3 py-1.5 text-sm font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+        >
+          Submit new evidence
+        </Link>
       </div>
 
       {top3.length > 0 && (
@@ -191,6 +223,91 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
       ))}
 
       {visibleFindings.length === 0 && <p className="text-sm text-neutral-500">No findings to show yet.</p>}
+
+      {evidenceSnapshot && (
+        <section className="mt-10">
+          <details className="rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <summary className="cursor-pointer px-5 py-3 text-lg font-medium">Evidence submitted</summary>
+            <div className="space-y-6 border-t border-neutral-200 p-5 dark:border-neutral-800">
+              {EVIDENCE_FIELD_SETS.map((set) => {
+                const submitted = evidenceSnapshot[set.lens].evidenceFields;
+                return (
+                  <div key={set.lens}>
+                    <h3 className="mb-2 text-sm font-medium">{set.title}</h3>
+                    <dl className="space-y-2 text-sm">
+                      {set.fields.map((field) => {
+                        const match = submitted.find((f) => f.fieldName === field.key);
+                        return (
+                          <div key={field.key}>
+                            <dt className="text-neutral-500 dark:text-neutral-400">{field.label}</dt>
+                            <dd className={match?.fieldValue ? "text-neutral-700 dark:text-neutral-300" : "italic text-neutral-400"}>
+                              {match?.fieldValue || "Not provided"}
+                            </dd>
+                          </div>
+                        );
+                      })}
+                    </dl>
+                  </div>
+                );
+              })}
+
+              <div>
+                <h3 className="mb-2 text-sm font-medium">Commercial / Market</h3>
+                <dl className="space-y-2 text-sm">
+                  <div>
+                    <dt className="text-neutral-500 dark:text-neutral-400">Named competitors</dt>
+                    <dd className={evidenceSnapshot.commercial.namedCompetitors.length > 0 ? "text-neutral-700 dark:text-neutral-300" : "italic text-neutral-400"}>
+                      {evidenceSnapshot.commercial.namedCompetitors.length > 0 ? evidenceSnapshot.commercial.namedCompetitors.join(", ") : "Not provided"}
+                    </dd>
+                  </div>
+                  {(
+                    [
+                      ["Market change notes", evidenceSnapshot.commercial.marketChangeNotes],
+                      ["Pricing pressure notes", evidenceSnapshot.commercial.pricingPressureNotes],
+                      ["Lost deals notes", evidenceSnapshot.commercial.lostDealsNotes],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="text-neutral-500 dark:text-neutral-400">{label}</dt>
+                      <dd className={value ? "text-neutral-700 dark:text-neutral-300" : "italic text-neutral-400"}>{value || "Not provided"}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+
+              <div>
+                <h3 className="mb-2 text-sm font-medium">AI & Governance</h3>
+                <dl className="space-y-2 text-sm">
+                  <div>
+                    <dt className="text-neutral-500 dark:text-neutral-400">Live AI in production</dt>
+                    <dd className="text-neutral-700 dark:text-neutral-300">{evidenceSnapshot.aiGovernance.hasLiveAiInProduction ? "Yes" : "No"}</dd>
+                  </div>
+                  {evidenceSnapshot.aiGovernance.governanceDocsSubmitted ? (
+                    <div>
+                      <dt className="text-neutral-500 dark:text-neutral-400">Governance documentation description</dt>
+                      <dd className="text-neutral-700 dark:text-neutral-300">
+                        {evidenceSnapshot.aiGovernance.governanceEvidence?.[0]?.fieldValue || "Not provided"}
+                      </dd>
+                    </div>
+                  ) : (
+                    governanceDimensions.map((dim) => {
+                      const score = evidenceSnapshot.aiGovernance.questionnaireScores?.[dim.key];
+                      return (
+                        <div key={dim.key}>
+                          <dt className="text-neutral-500 dark:text-neutral-400">{dim.label}</dt>
+                          <dd className={score !== undefined ? "text-neutral-700 dark:text-neutral-300" : "italic text-neutral-400"}>
+                            {score !== undefined ? `${score} / 3` : "Not provided"}
+                          </dd>
+                        </div>
+                      );
+                    })
+                  )}
+                </dl>
+              </div>
+            </div>
+          </details>
+        </section>
+      )}
     </div>
   );
 }

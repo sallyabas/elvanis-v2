@@ -7,6 +7,7 @@ import type { GovernanceDimensionDefinition, GovernanceDimensionKey } from "@/li
 import { submitEvidence } from "./actions";
 import { saveEvidenceIntakeDraft } from "@/lib/evidence/draft";
 import { EXPORT_INSTRUCTIONS_BY_LENS, type EvidenceLensKey } from "@/lib/evidence/export-instructions";
+import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
 
 /** Shape of the draft blob saved/restored — mirrors this form's own local state, not a typed evidence submission (see evidence_intake_drafts migration docblock). */
 interface EvidenceIntakeDraft {
@@ -21,42 +22,11 @@ interface EvidenceIntakeDraft {
   dimensionScores?: Partial<Record<GovernanceDimensionKey, number>>;
 }
 
-const FIELD_SETS: {
-  lens: "financial" | "execution" | "product";
-  title: string;
-  fields: { key: string; label: string; placeholder: string }[];
-}[] = [
-  {
-    lens: "financial",
-    title: "Financial",
-    fields: [
-      { key: "revenue_margin_trends", label: "Revenue and margin trends", placeholder: "How has revenue/margin moved recently? Any notable swings?" },
-      { key: "cash_flow_runway", label: "Cash flow / runway situation", placeholder: "How much runway do you have? Any cash flow concerns?" },
-      { key: "cost_structure", label: "Cost structure notes", placeholder: "What are the biggest cost drivers? Anything creeping up?" },
-      { key: "customer_concentration", label: "Customer concentration", placeholder: "Is revenue concentrated in a few large customers?" },
-    ],
-  },
-  {
-    lens: "execution",
-    title: "Execution / Operating",
-    fields: [
-      { key: "team_delivery_process", label: "Team structure and delivery process", placeholder: "How is the team organized? What's the delivery process like?" },
-      { key: "delivery_speed", label: "Recent delivery speed / delays", placeholder: "Any recent delays or slowdowns in shipping work?" },
-      { key: "meeting_load", label: "Meeting load / decision-making friction", placeholder: "How much time goes to meetings? Do decisions get stuck?" },
-      { key: "financial_visibility", label: "Visibility into financial data", placeholder: "How easily can the team see financial numbers day-to-day?" },
-    ],
-  },
-  {
-    lens: "product",
-    title: "Product / Customer",
-    fields: [
-      { key: "usage_adoption", label: "Usage and adoption patterns", placeholder: "How are customers actually using the product?" },
-      { key: "satisfaction_signals", label: "Customer satisfaction signals", placeholder: "NPS, support tickets, direct feedback — anything notable?" },
-      { key: "churn_patterns", label: "Churn patterns", placeholder: "Who's churning and why, if known?" },
-      { key: "activation_onboarding", label: "Activation / onboarding notes", placeholder: "How well do new customers get to their first value?" },
-    ],
-  },
-];
+// Field labels now live in src/lib/evidence/field-sets.ts (confirmed
+// 2026-08-06), shared with the client report page's "Evidence submitted"
+// display — this form's own copy would otherwise drift from what the
+// report page shows for the exact same fieldNames.
+const FIELD_SETS = EVIDENCE_FIELD_SETS;
 
 /**
  * Export instructions hint (confirmed 2026-08-06) — short, tool-specific

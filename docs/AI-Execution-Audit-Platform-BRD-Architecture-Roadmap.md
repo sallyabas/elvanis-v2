@@ -586,7 +586,7 @@ sessions, orders/pricing (added once pricing/payment is wired)
 - [ ] Findings-by-lens view with status
 - [ ] Roadmap section (30/60/90, editable status)
 - [ ] Assumption/confidence visibility per finding
-- [ ] Evidence library (what was submitted, re-upload option)
+- [x] Evidence library (what was submitted, re-upload option) — built 2026-08-06 (reads `reports.source_evidence_snapshot`; "re-upload" reuses the existing `/evidence-intake` flow rather than a new submission surface — see CLAUDE.md "Evidence library on the client report — built, 2026-08-06")
 - [x] Re-run/refresh button — basic version built 2026-08-05 (reviewer-triggered, re-executes against the original evidence snapshot + current profile; a retrieval-informed upgrade stays V2)
 - [ ] Next-step CTAs (Execution Sprint / Tender Readiness / AI Reliability)
 
