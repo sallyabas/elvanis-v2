@@ -4,11 +4,13 @@ import { listRegulatoryContentReviewStatus } from "@/lib/reviewer/regulatory-con
 import { listPendingSessionRequests } from "@/lib/service-layer/session-requests";
 import { listPricing } from "@/lib/pricing";
 import { listOpenSprintQueueItems } from "@/lib/execution-sprint/workspace";
+import { listOpenSprintInterestRequests } from "@/lib/execution-sprint/interest-requests";
 import {
   markRegulatoryContentReviewedAction,
   updateSessionRequestStatusAction,
   updatePricingItemAction,
   replyToSprintQueueItemAction,
+  resolveSprintInterestRequestAction,
 } from "./actions";
 
 const SESSION_TYPE_LABELS: Record<string, string> = {
@@ -113,6 +115,7 @@ export default async function ReviewerQueuePage() {
   const sessionRequests = await listPendingSessionRequests();
   const pricing = await listPricing();
   const sprintQueueItems = await listOpenSprintQueueItems();
+  const sprintInterestRequests = await listOpenSprintInterestRequests();
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
@@ -238,6 +241,44 @@ export default async function ReviewerQueuePage() {
                     Send
                   </button>
                 </form>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+        <h2 className="mb-1 text-sm font-medium">Execution Sprint interest</h2>
+        <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
+          A client marked interest in help implementing a specific finding (confirmed 2026-08-06, honest UX review
+          pass) — the client-facing entry point Execution Sprint previously had none of. Doesn&apos;t create the
+          sprint itself; open the report and use &quot;Start an Execution Sprint&quot; there.
+        </p>
+        {sprintInterestRequests.length === 0 ? (
+          <p className="text-sm text-neutral-500">Nothing open.</p>
+        ) : (
+          <ul className="space-y-2">
+            {sprintInterestRequests.map((r) => (
+              <li key={r.id} className="flex items-center justify-between text-sm">
+                <div>
+                  <span className="font-medium">{r.companyName}</span>{" "}
+                  <span className="text-neutral-500">
+                    · {r.findingTitle} · {new Date(r.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                <div className="flex gap-1">
+                  <Link
+                    href={`/review/${r.report_id}`}
+                    className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                  >
+                    Open report
+                  </Link>
+                  <form action={resolveSprintInterestRequestAction.bind(null, r.id)}>
+                    <button type="submit" className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
+                      Dismiss
+                    </button>
+                  </form>
+                </div>
               </li>
             ))}
           </ul>

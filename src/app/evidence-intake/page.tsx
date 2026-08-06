@@ -58,11 +58,11 @@ export default async function EvidenceIntakePage() {
         Fill in what you can for each area below — leaving something blank is meaningful too, not an incomplete
         submission.
       </p>
-      <div className="mb-8 rounded border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
-        <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">
-          Prefer to talk it through first? A Discovery Session is a short optional call before you submit — never
-          required.
-        </p>
+      {/* SessionRequestButton is now a self-contained framed widget with its
+          own explanatory copy (confirmed 2026-08-06, honest UX review) —
+          no longer needs a bespoke wrapper paragraph duplicating what the
+          component already renders. */}
+      <div className="mb-8">
         <SessionRequestButton companyId={company.id as string} sessionType="discovery" />
       </div>
       <EvidenceIntakeForm

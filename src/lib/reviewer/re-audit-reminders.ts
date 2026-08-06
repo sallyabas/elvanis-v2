@@ -72,6 +72,11 @@ export async function checkReAuditReminders(): Promise<ReAuditReminderFired[]> {
       event_type: "re_audit_reminder",
       channel: "email",
       sent_at: null, // logged, not delivered — real send is a separate, explicit step
+      // related_report_id (confirmed 2026-08-06, honest UX review pass) —
+      // references the PRIOR delivered report, not a new one, so the email
+      // can say "it's been a while since your [date] audit" with a real
+      // date instead of generic copy.
+      related_report_id: report.id,
     });
     if (insertError) throw new Error(`checkReAuditReminders: failed to log notification: ${insertError.message}`);
 

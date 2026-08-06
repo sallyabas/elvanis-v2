@@ -5,6 +5,7 @@ import { markRegulatoryContentReviewed } from "@/lib/reviewer/regulatory-content
 import { updateSessionRequestStatus } from "@/lib/service-layer/session-requests";
 import { updatePricingItem } from "@/lib/pricing";
 import { replyToSprintQueueItem } from "@/lib/execution-sprint/workspace";
+import { resolveSprintInterestRequest } from "@/lib/execution-sprint/interest-requests";
 import { createClient } from "@/lib/supabase/server";
 
 // Same independent session+role re-check as every other reviewer Server
@@ -70,5 +71,18 @@ export async function replyToSprintQueueItemAction(formData: FormData) {
   const replyText = String(formData.get("replyText") ?? "").trim();
   if (!queueItemId || !replyText) throw new Error("Reply text is required.");
   await replyToSprintQueueItem(queueItemId, replyText, reviewerId);
+  revalidatePath("/queue");
+}
+
+/**
+ * Client-facing Execution Sprint interest (confirmed 2026-08-06, honest UX
+ * review pass) — dismissing/acknowledging a request. Doesn't create the
+ * sprint itself; the reviewer still starts it from the report workspace's
+ * existing "Start an Execution Sprint" entry point, this only clears the
+ * request off the queue once seen.
+ */
+export async function resolveSprintInterestRequestAction(requestId: string) {
+  const reviewerId = await getReviewerId();
+  await resolveSprintInterestRequest(requestId, reviewerId);
   revalidatePath("/queue");
 }

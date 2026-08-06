@@ -214,6 +214,11 @@ export async function deliverReport(reportId: string): Promise<void> {
       event_type: "report_ready",
       channel: "email",
       sent_at: null,
+      // related_report_id (confirmed 2026-08-06, honest UX review pass) —
+      // lets the report_ready email link directly to this report and pull
+      // its real top-3 finding titles, instead of a generic link to the
+      // /reports list page.
+      related_report_id: reportId,
     });
     if (notifError) throw new Error(`deliverReport: failed to log notification: ${notifError.message}`);
   }

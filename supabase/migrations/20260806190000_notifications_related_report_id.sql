@@ -1,0 +1,13 @@
+-- Real gap found and fixed 2026-08-06 (honest UX review pass): every
+-- client-facing notification template was a single generic sentence plus
+-- a link to /reports (the list page), never the specific report — because
+-- `notifications` had no column to reference which report a row was even
+-- about. report_ready and re_audit_reminder both genuinely relate to one
+-- specific report; this closes that gap so their emails can link directly
+-- to it and pull real content (the actual top-3 finding titles) instead of
+-- generic boilerplate. Nullable and on delete set null — evidence_incomplete
+-- has no report yet by definition (that's the whole point of that event),
+-- and older notification rows predating this column stay valid with no
+-- link, same defensive "older rows just don't get the enhancement"
+-- pattern already used for reports.source_evidence_snapshot.
+alter table notifications add column related_report_id uuid references reports (id) on delete set null;
