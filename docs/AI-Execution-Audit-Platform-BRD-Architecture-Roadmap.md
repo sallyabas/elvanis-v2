@@ -447,12 +447,12 @@ sessions, orders/pricing (added once pricing/payment is wired)
 - Better Commercial/Market lens *(→ moved to V1, built 2026-08-05 — search-query quality + root-cause depth improvements, see CLAUDE.md "Deeper Commercial/Market lens"; the benchmark-library item immediately below stays V2, deliberately not folded into this)*
 - Benchmark rule library — V2 (grows with real cases)
 - Failure-mode library by goal — V2 (grows with real cases)
-- Recommendation library by issue type *(→ seed version CONFIRMED moved to V1 in scope (same logic as Tender Readiness's external research), but genuinely NOT YET BUILT — confirmed by grep, 2026-08-05 status check; richer version stays V2, grown from real case volume)*
+- Recommendation library by issue type *(→ seed version moved to V1 in scope (same logic as Tender Readiness's external research) — **built 2026-08-06**, 16 curated entries, deterministic keyword matching against findings, migrated to a DB table the same day with the same defensive-fallback pattern used for lens benchmarks. See CLAUDE.md "Recommendation library migrated to DB". Richer version stays V2, grown from real case volume.)*
 
 **3. Case library and retrieval**
 - Structured case tagging — **V1** (storage happens from day one; see §3 DB schema) — **real gap found and closed 2026-08-05**: this line was already true in the schema but zero application code ever actually wrote to `case_library` — confirmed by grep. Closed via `recordCaseLibraryEntry()`, called from `deliverReport()`, see CLAUDE.md "Fourth V2 pull-forward batch".
-- Retrieval of similar past audits — V2 (genuinely needs real case history to be meaningful)
-- "Similar patterns seen in X company types" surfacing *(→ matching/retrieval INFRASTRUCTURE moved to V1 as dormant code, built 2026-08-05 — same pattern as case_library itself: built now, returns nothing until real case volume exists (≥3 distinct other companies with real tag overlap), never fabricates a pattern from thin data. NOT wired into any client- or reviewer-facing UI yet — that surfacing decision genuinely stays deferred until real volume exists, see CLAUDE.md.)*
+- Retrieval of similar past audits — genuinely needs real case history to be meaningful, so it stays functionally dormant against today's real case volume, but the retrieval mechanism itself is real and already live, not deferred code — see next line.
+- "Similar patterns seen in X company types" surfacing *(→ matching/retrieval infrastructure moved to V1, built 2026-08-05, confirmed **wired into a real reviewer-facing UI 2026-08-06** — `findSimilarPatterns()` now has a real caller in `src/app/(reviewer)/review/[reportId]/page.tsx`, passed into the Reviewer Workspace as a genuine prop, not fetched-and-discarded. Still returns nothing until real case volume exists (≥3 distinct other companies with real tag overlap) — confirmed dormant/empty against the live DB, which is the correct behavior given today's real volume, not a bug or an unwired stub. Client-facing surfacing stays deliberately deferred — showing a client another client's cross-company data would be a real leak, not a UX choice.)*
 - Internal similarity suggestions before draft generation — V2
 
 **4. Better client dashboard**
@@ -645,9 +645,9 @@ sessions, orders/pricing (added once pricing/payment is wired)
 - [ ] Standalone entry page (sellable independent of core audit)
 
 **Infrastructure**
-- [ ] New, isolated Supabase project
-- [ ] `ai-client` provider-abstraction module
-- [ ] Case library storage schema (retrieval logic deferred to v2)
+- [x] New, isolated Supabase project — done from the very start of this build (`pcnbekntpeqnacaaatkl` / `elvanis-v2`), this checklist line was simply never updated as the rest of the doc moved on
+- [x] `ai-client` provider-abstraction module — done from the very start (`src/lib/ai-client/`), same staleness as above
+- [x] Case library storage schema — storage built and live (`recordCaseLibraryEntry()`, closed 2026-08-05). Retrieval is real code too, not deferred: `findSimilarPatterns()` was built 2026-08-05 and given a real reviewer-facing UI caller 2026-08-06 (see "3. Case library and retrieval" above) — it's functionally dormant only because today's real case volume is below its own honesty floor (≥3 distinct companies), not because the code doesn't exist. This line's parenthetical was stale.
 
 **AI Reliability Audit Module (built in V1, after core engine is stable — same treatment as Tender Readiness; confirmed design 2026-08-02, see §1.7a)**
 - [ ] Research: documented real-world AI failure patterns (Air Canada, Cursor, legal-citation hallucination cases) and known adversarial-testing categories (invented policy, data leakage, bias, prompt injection)
