@@ -10,6 +10,11 @@ import { saveEvidenceIntakeDraft } from "@/lib/evidence/draft";
 import { EXPORT_INSTRUCTIONS_BY_LENS, type EvidenceLensKey } from "@/lib/evidence/export-instructions";
 import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
 import { REVIEW_PERIOD_HOURS } from "@/lib/reports/sla";
+import { Input } from "@/app/_components/ui/Input";
+import { Textarea } from "@/app/_components/ui/Textarea";
+import { Select } from "@/app/_components/ui/Select";
+import { Card } from "@/app/_components/ui/Card";
+import { Button } from "@/app/_components/ui/Button";
 
 /** Shape of the draft blob saved/restored — mirrors this form's own local state, not a typed evidence submission (see evidence_intake_drafts migration docblock). */
 interface EvidenceIntakeDraft {
@@ -292,158 +297,145 @@ export function EvidenceIntakeForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-10">
+    <form onSubmit={handleSubmit} className="space-y-6">
       <div className="flex items-center justify-between">
         {initialDraft && (
           <p className="text-xs text-neutral-500 dark:text-neutral-400">Resumed from your last saved draft.</p>
         )}
-        <p className="ml-auto text-xs text-neutral-400" aria-live="polite">
+        <p className="ml-auto text-xs text-neutral-400 dark:text-neutral-500" aria-live="polite">
           {draftStatus === "saving" ? "Saving…" : draftStatus === "saved" ? "Draft saved" : ""}
         </p>
       </div>
 
       {/* Upload-point micro-copy (spec §1.8, confirmed 2026-08-03) — shown right where evidence is entered, not buried in a footer link. */}
-      <p className="rounded border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
+      <p className="rounded-md border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
         What you submit here is analyzed by Groq, our AI provider, to draft findings — every finding is reviewed by a
         human before you see it. We never share this with any other third party, and it&apos;s never used to train
         any AI model.
       </p>
 
       {FIELD_SETS.map((set) => (
-        <section key={set.lens}>
-          <h2 className="mb-3 text-lg font-medium">{set.title}</h2>
+        <Card key={set.lens} title={set.title}>
           <ExportHints lens={set.lens} />
 
           {set.metrics.length > 0 && (
-            <div className="mb-4">
+            <div className="mb-5">
               <p className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
                 Key metrics (optional — used for benchmark comparisons in your report)
               </p>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2">
                 {set.metrics.map((m) => (
-                  <label key={m.metricKey} className="block space-y-1">
-                    <span className="text-sm font-medium">
-                      {m.label}
-                      {m.unit && <span className="text-neutral-400"> ({m.unit})</span>}
-                    </span>
-                    <input
-                      type="number"
-                      step="any"
-                      inputMode="decimal"
-                      className="w-full rounded border px-3 py-2 text-sm"
-                      placeholder={m.placeholder}
-                      value={metricValues[`${set.lens}.${m.metricKey}`] ?? ""}
-                      onChange={(e) => setMetricValues((prev) => ({ ...prev, [`${set.lens}.${m.metricKey}`]: e.target.value }))}
-                    />
-                  </label>
+                  <Input
+                    key={m.metricKey}
+                    type="number"
+                    step="any"
+                    inputMode="decimal"
+                    label={m.unit ? `${m.label} (${m.unit})` : m.label}
+                    placeholder={m.placeholder}
+                    value={metricValues[`${set.lens}.${m.metricKey}`] ?? ""}
+                    onChange={(e) => setMetricValues((prev) => ({ ...prev, [`${set.lens}.${m.metricKey}`]: e.target.value }))}
+                  />
                 ))}
               </div>
             </div>
           )}
 
-          <div className="space-y-3">
+          <div className="space-y-4">
             {set.fields.map((f) => (
-              <label key={f.key} className="block space-y-1">
-                <span className="text-sm font-medium">{f.label}</span>
-                <textarea
-                  rows={2}
-                  className="w-full rounded border px-3 py-2 text-sm"
-                  placeholder={f.placeholder}
-                  value={fieldValues[`${set.lens}.${f.key}`] ?? ""}
-                  onChange={(e) => setFieldValues((prev) => ({ ...prev, [`${set.lens}.${f.key}`]: e.target.value }))}
-                />
-              </label>
+              <Textarea
+                key={f.key}
+                rows={2}
+                label={f.label}
+                placeholder={f.placeholder}
+                value={fieldValues[`${set.lens}.${f.key}`] ?? ""}
+                onChange={(e) => setFieldValues((prev) => ({ ...prev, [`${set.lens}.${f.key}`]: e.target.value }))}
+              />
             ))}
           </div>
-        </section>
+        </Card>
       ))}
 
-      <section>
-        <h2 className="mb-3 text-lg font-medium">Commercial / Market</h2>
+      <Card title="Commercial / Market">
         <ExportHints lens="commercial" />
-        <div className="space-y-3">
-          <label className="block space-y-1">
-            {/* "(comma-separated)" was a technical formatting instruction, not
-                natural language (confirmed 2026-08-06, honest UX review) —
-                the placeholder example already shows the format without
-                lecturing the user about it. */}
-            <span className="text-sm font-medium">Named competitors</span>
-            <input
-              type="text"
-              className="w-full rounded border px-3 py-2 text-sm"
-              placeholder="e.g. Competitor A, Competitor B"
-              value={namedCompetitors}
-              onChange={(e) => setNamedCompetitors(e.target.value)}
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">Market change notes</span>
-            <textarea rows={2} className="w-full rounded border px-3 py-2 text-sm" value={marketChangeNotes} onChange={(e) => setMarketChangeNotes(e.target.value)} />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">Pricing pressure notes</span>
-            <textarea rows={2} className="w-full rounded border px-3 py-2 text-sm" value={pricingPressureNotes} onChange={(e) => setPricingPressureNotes(e.target.value)} />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">Lost deals notes</span>
-            <textarea rows={2} className="w-full rounded border px-3 py-2 text-sm" value={lostDealsNotes} onChange={(e) => setLostDealsNotes(e.target.value)} />
-          </label>
-        </div>
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-lg font-medium">AI &amp; Governance</h2>
         <div className="space-y-4">
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={hasLiveAiInProduction} onChange={(e) => setHasLiveAiInProduction(e.target.checked)} />
+          {/* "(comma-separated)" was a technical formatting instruction, not
+              natural language (confirmed 2026-08-06, honest UX review) —
+              the placeholder example already shows the format without
+              lecturing the user about it. */}
+          <Input
+            label="Named competitors"
+            placeholder="e.g. Competitor A, Competitor B"
+            value={namedCompetitors}
+            onChange={(e) => setNamedCompetitors(e.target.value)}
+          />
+          <Textarea label="Market change notes" rows={2} value={marketChangeNotes} onChange={(e) => setMarketChangeNotes(e.target.value)} />
+          <Textarea label="Pricing pressure notes" rows={2} value={pricingPressureNotes} onChange={(e) => setPricingPressureNotes(e.target.value)} />
+          <Textarea label="Lost deals notes" rows={2} value={lostDealsNotes} onChange={(e) => setLostDealsNotes(e.target.value)} />
+        </div>
+      </Card>
+
+      <Card title="AI & Governance">
+        <div className="space-y-4">
+          <label className="flex items-center gap-2 text-sm text-neutral-800 dark:text-neutral-200">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-accent"
+              checked={hasLiveAiInProduction}
+              onChange={(e) => setHasLiveAiInProduction(e.target.checked)}
+            />
             We have live AI in production today
           </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={governanceDocsSubmitted} onChange={(e) => setGovernanceDocsSubmitted(e.target.checked)} />
+          <label className="flex items-center gap-2 text-sm text-neutral-800 dark:text-neutral-200">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-accent"
+              checked={governanceDocsSubmitted}
+              onChange={(e) => setGovernanceDocsSubmitted(e.target.checked)}
+            />
             We have AI governance documentation to describe
           </label>
 
           {governanceDocsSubmitted ? (
-            <label className="block space-y-1">
-              <span className="text-sm font-medium">Describe your governance documentation</span>
-              <textarea
-                rows={4}
-                className="w-full rounded border px-3 py-2 text-sm"
-                placeholder="e.g. our AI use policy, risk classification process, incident response plan…"
-                value={governanceEvidenceText}
-                onChange={(e) => setGovernanceEvidenceText(e.target.value)}
-              />
-            </label>
+            <Textarea
+              label="Describe your governance documentation"
+              rows={4}
+              placeholder="e.g. our AI use policy, risk classification process, incident response plan…"
+              value={governanceEvidenceText}
+              onChange={(e) => setGovernanceEvidenceText(e.target.value)}
+            />
           ) : (
-            <div className="space-y-3">
-              <p className="text-xs text-neutral-500">No documents? Rate where each area actually stands today.</p>
+            <div className="space-y-4">
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">No documents? Rate where each area actually stands today.</p>
               {governanceDimensions.map((dim) => (
-                <label key={dim.key} className="block space-y-1">
-                  <span className="text-sm font-medium">{dim.label}</span>
-                  <select
-                    className="w-full rounded border px-3 py-2 text-sm"
-                    value={dimensionScores[dim.key] ?? ""}
-                    onChange={(e) =>
-                      setDimensionScores((prev) => ({ ...prev, [dim.key]: e.target.value === "" ? undefined : Number(e.target.value) }))
-                    }
-                  >
-                    <option value="">Not sure</option>
-                    {dim.levels.map((level, i) => (
-                      <option key={i} value={i}>
-                        {level}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <Select
+                  key={dim.key}
+                  label={dim.label}
+                  value={dimensionScores[dim.key] ?? ""}
+                  onChange={(e) =>
+                    setDimensionScores((prev) => ({ ...prev, [dim.key]: e.target.value === "" ? undefined : Number(e.target.value) }))
+                  }
+                >
+                  <option value="">Not sure</option>
+                  {dim.levels.map((level, i) => (
+                    <option key={i} value={i}>
+                      {level}
+                    </option>
+                  ))}
+                </Select>
               ))}
             </div>
           )}
         </div>
-      </section>
+      </Card>
 
       <section className="space-y-3 border-t border-neutral-200 pt-6 dark:border-neutral-800">
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" checked={privacyAcknowledged} onChange={(e) => setPrivacyAcknowledged(e.target.checked)} className="mt-0.5" />
+        <label className="flex items-start gap-2 text-sm text-neutral-800 dark:text-neutral-200">
+          <input
+            type="checkbox"
+            checked={privacyAcknowledged}
+            onChange={(e) => setPrivacyAcknowledged(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-accent"
+          />
           <span>
             I&apos;ve read and accept the{" "}
             <Link href="/privacy" target="_blank" className="underline">
@@ -457,41 +449,29 @@ export function EvidenceIntakeForm({
           </span>
         </label>
 
-        {status === "error" && error && <p className="text-sm text-red-600">{error}</p>}
+        {status === "error" && error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={status === "submitting" || !privacyAcknowledged}
-          className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
-        >
+        <Button type="submit" disabled={status === "submitting" || !privacyAcknowledged}>
           {status === "submitting" ? "Submitting…" : "Submit for review"}
-        </button>
+        </Button>
       </section>
 
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg dark:bg-neutral-900">
-            <h3 className="mb-2 text-base font-semibold">Ready to submit?</h3>
+            <h3 className="mb-2 text-base font-semibold text-neutral-900 dark:text-neutral-50">Ready to submit?</h3>
             <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
               You&apos;ll have {editWindowHours} hours to edit or add evidence — after that, review begins, and your
               report will be ready within {editWindowHours + REVIEW_PERIOD_HOURS} hours total.{" "}
               {isFreeAudit ? "This will use your free audit." : "This is a paid re-audit."}
             </p>
             <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowConfirmModal(false)}
-                className="rounded border px-3 py-1.5 text-sm font-medium"
-              >
+              <Button type="button" variant="secondary" onClick={() => setShowConfirmModal(false)} className="px-3 py-1.5">
                 Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmSubmit}
-                className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
-              >
+              </Button>
+              <Button type="button" onClick={handleConfirmSubmit} className="px-3 py-1.5">
                 Confirm
-              </button>
+              </Button>
             </div>
           </div>
         </div>
