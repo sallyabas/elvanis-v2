@@ -1,9 +1,12 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { loadEvidenceIntakeDraft } from "@/lib/evidence/draft";
 import { loadGovernanceDimensions } from "@/lib/lenses/benchmarks-repository";
 import { getSettingNumber } from "@/lib/app-settings";
 import { SessionRequestButton } from "@/app/_components/SessionRequestButton";
+import { ProgressStepper } from "@/app/_components/ProgressStepper";
+import { computeJourneyStatus } from "@/lib/reports/journey-status";
 import { EvidenceIntakeForm } from "./EvidenceIntakeForm";
 
 // Real Evidence Intake, fill-in-template path (confirmed 2026-08-03,
@@ -51,8 +54,14 @@ export default async function EvidenceIntakePage() {
   const { data: priorSentReports } = await supabase.from("reports").select("id").eq("company_id", company.id).eq("status", "sent").limit(1);
   const isFreeAudit = (priorSentReports ?? []).length === 0;
 
+  // ProgressStepper (confirmed 2026-08-07) — admin client required, same
+  // reasoning as Business Profile/Dashboard: see journey-status.ts's own
+  // docblock for why a session-scoped query can't see non-sent reports.
+  const journeyStatus = await computeJourneyStatus(createAdminClient(), company.id as string);
+
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
+      <ProgressStepper journeyStatus={journeyStatus} />
       <h1 className="mb-1 text-2xl font-semibold">Submit your evidence</h1>
       <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
         Fill in what you can for each area below — leaving something blank is meaningful too, not an incomplete

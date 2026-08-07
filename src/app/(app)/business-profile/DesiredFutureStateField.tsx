@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { updateDesiredFutureState } from "@/lib/goals/desired-future-state";
+import { Textarea } from "@/app/_components/ui/Textarea";
+import { Button } from "@/app/_components/ui/Button";
 
 interface Props {
   goalId: string;
@@ -28,13 +30,10 @@ export function DesiredFutureStateField({ goalId, field, initialValue, label }: 
   }
 
   return (
-    <div className="space-y-2">
-      <label className="block text-sm font-medium">{label}</label>
-      <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        Optional: in your own words, what would good look like here for your business?
-      </p>
-      <textarea
-        className="w-full rounded border px-3 py-2 text-sm"
+    <div className="space-y-3">
+      <Textarea
+        label={label}
+        hint="Optional: in your own words, what would good look like here for your business?"
         rows={3}
         maxLength={1000}
         value={value}
@@ -43,14 +42,10 @@ export function DesiredFutureStateField({ goalId, field, initialValue, label }: 
           setStatus("idle");
         }}
       />
-      {status === "error" && error && <p className="text-sm text-red-600">{error}</p>}
-      <button
-        onClick={handleSave}
-        disabled={status === "saving"}
-        className="rounded bg-accent px-3 py-1.5 text-sm text-accent-ink disabled:opacity-40"
-      >
+      {status === "error" && error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      <Button onClick={handleSave} disabled={status === "saving"} className="px-3 py-1.5">
         {status === "saving" ? "Saving…" : status === "saved" ? "Saved" : "Save"}
-      </button>
+      </Button>
     </div>
   );
 }

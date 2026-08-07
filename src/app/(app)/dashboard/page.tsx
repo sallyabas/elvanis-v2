@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { LensFinding } from "@/lib/lenses/types";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
+import { computeJourneyStatus } from "@/lib/reports/journey-status";
+import { NextStepBanner } from "@/app/_components/NextStepBanner";
+import { ProgressStepper } from "@/app/_components/ProgressStepper";
 
 // Dashboard — current, live state (confirmed 2026-08-04, Priority 3):
 // latest top-3 priorities + roadmap status, drawn from the most recently
@@ -32,6 +36,16 @@ export default async function DashboardPage() {
     .order("delivered_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  // Empty-state clarity fix, confirmed 2026-08-07 — the old copy collapsed
+  // "never submitted evidence" and "evidence submitted, still in review"
+  // into one generic "No delivered report yet" line, which read as
+  // unhelpfully thin to a first-time user. Same computeJourneyStatus() as
+  // Business Profile (admin client required — see that function's own
+  // docblock for why), so the two pages can't describe this differently.
+  // Always computed (not just when !latestReport) since ProgressStepper
+  // needs it in every state, including has_report.
+  const journeyStatus = await computeJourneyStatus(createAdminClient(), company.id as string);
 
   let top3: LensFinding[] = [];
   if (latestReport) {
@@ -83,15 +97,9 @@ export default async function DashboardPage() {
       <h1 className="mb-1 text-2xl font-semibold">Dashboard</h1>
       <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">{company.name}&apos;s current state.</p>
 
-      {!latestReport && (
-        <p className="rounded-lg border border-neutral-200 bg-white p-5 text-sm text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900">
-          No delivered report yet.{" "}
-          <Link href="/evidence-intake" className="underline">
-            Submit your evidence
-          </Link>{" "}
-          to get started.
-        </p>
-      )}
+      <ProgressStepper journeyStatus={journeyStatus} />
+
+      {!latestReport && <NextStepBanner journeyStatus={journeyStatus} />}
 
       {latestReport && (
         <>
