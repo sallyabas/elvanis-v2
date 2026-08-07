@@ -12,9 +12,9 @@ export interface SubmitEvidenceInput {
   companyId: string;
   goalId: string;
   privacyAcknowledged: boolean;
-  financial: { evidenceFields: EvidenceFieldInput[] };
-  execution: { evidenceFields: EvidenceFieldInput[] };
-  product: { evidenceFields: EvidenceFieldInput[] };
+  financial: { evidenceFields: EvidenceFieldInput[]; metrics: MetricInput[] };
+  execution: { evidenceFields: EvidenceFieldInput[]; metrics: MetricInput[] };
+  product: { evidenceFields: EvidenceFieldInput[]; metrics: MetricInput[] };
   commercial: CommercialSelfReport;
   aiGovernance: {
     hasLiveAiInProduction: boolean;
@@ -30,18 +30,17 @@ export interface SubmitEvidenceResult {
   error?: string;
 }
 
-const NO_METRICS: MetricInput[] = [];
-
 /**
  * Real evidence submission (confirmed 2026-08-03, Priority 1) — fill-in-
  * template path first, native CSV/PDF upload/parsing explicitly deferred
  * (see CLAUDE.md "Evidence Intake scope decision" and spec §5). Numeric
- * `metrics` (benchmark-comparable values) are also deferred for this
- * pass — the fill-in form collects free-text `evidenceFields` only;
- * lenses already handle metric-less evidence correctly (extensively
- * tested earlier this build), this just means benchmark comparisons won't
- * fire for a minimal-pass submission, not that anything is broken.
- * `independentResearch` for Commercial is also deferred — the real Tavily
+ * `metrics` (benchmark-comparable values) are now real (added 2026-08-07,
+ * closing a real gap: the deterministic compareFinancialMetric()/
+ * compareExecutionMetric()/compareProductMetric() machinery was built and
+ * tested, but this form never had a UI to collect the `metrics` those
+ * functions run on, so every real submission sent an empty array and
+ * benchmark comparisons never fired). `independentResearch` for Commercial
+ * remains deferred — the real Tavily
  * research automation already exists (commercial-research.ts) but wiring
  * an automatic trigger into this client-facing submission flow is a
  * separate decision, not assumed here.
@@ -120,9 +119,9 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
       company: companyProfile,
       goalId: input.goalId,
       goal: goalContext,
-      financial: { evidenceFields: input.financial.evidenceFields, metrics: NO_METRICS },
-      execution: { evidenceFields: input.execution.evidenceFields, metrics: NO_METRICS },
-      product: { evidenceFields: input.product.evidenceFields, metrics: NO_METRICS },
+      financial: { evidenceFields: input.financial.evidenceFields, metrics: input.financial.metrics },
+      execution: { evidenceFields: input.execution.evidenceFields, metrics: input.execution.metrics },
+      product: { evidenceFields: input.product.evidenceFields, metrics: input.product.metrics },
       commercial: { selfReport: input.commercial, independentResearch: [] },
       aiGovernance: input.aiGovernance,
       // Basic re-run/refresh button support (confirmed 2026-08-05) — store

@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { EvidenceFieldInput, LensFinding, LensType, Severity } from "@/lib/lenses/types";
 import type { CommercialSelfReport } from "@/lib/lenses/commercial";
 import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
+import type { MetricInput } from "@/lib/lenses/metrics";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
 import { SessionRequestButton } from "@/app/_components/SessionRequestButton";
@@ -14,9 +15,9 @@ import { loadGovernanceDimensions } from "@/lib/lenses/benchmarks-repository";
 import { getTotalTurnaroundHours } from "@/lib/reports/sla";
 
 interface SourceEvidenceSnapshot {
-  financial: { evidenceFields: EvidenceFieldInput[] };
-  execution: { evidenceFields: EvidenceFieldInput[] };
-  product: { evidenceFields: EvidenceFieldInput[] };
+  financial: { evidenceFields: EvidenceFieldInput[]; metrics?: MetricInput[] };
+  execution: { evidenceFields: EvidenceFieldInput[]; metrics?: MetricInput[] };
+  product: { evidenceFields: EvidenceFieldInput[]; metrics?: MetricInput[] };
   commercial: CommercialSelfReport;
   aiGovernance: {
     hasLiveAiInProduction: boolean;
@@ -321,9 +322,28 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
             <div className="space-y-6 border-t border-neutral-200 p-5 dark:border-neutral-800">
               {EVIDENCE_FIELD_SETS.map((set) => {
                 const submitted = evidenceSnapshot[set.lens].evidenceFields;
+                const submittedMetrics = evidenceSnapshot[set.lens].metrics ?? [];
                 return (
                   <div key={set.lens}>
                     <h3 className="mb-2 text-sm font-medium">{set.title}</h3>
+                    {set.metrics.length > 0 && (
+                      <dl className="mb-3 grid gap-2 text-sm sm:grid-cols-2">
+                        {set.metrics.map((m) => {
+                          const match = submittedMetrics.find((v) => v.metricKey === m.metricKey);
+                          return (
+                            <div key={m.metricKey}>
+                              <dt className="text-neutral-500 dark:text-neutral-400">
+                                {m.label}
+                                {m.unit && ` (${m.unit})`}
+                              </dt>
+                              <dd className={match ? "text-neutral-700 dark:text-neutral-300" : "italic text-neutral-400"}>
+                                {match ? match.value : "Not provided"}
+                              </dd>
+                            </div>
+                          );
+                        })}
+                      </dl>
+                    )}
                     <dl className="space-y-2 text-sm">
                       {set.fields.map((field) => {
                         const match = submitted.find((f) => f.fieldName === field.key);

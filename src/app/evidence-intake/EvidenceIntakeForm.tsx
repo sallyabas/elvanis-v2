@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { GovernanceDimensionDefinition, GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
+import type { MetricInput } from "@/lib/lenses/metrics";
 import { submitEvidence } from "./actions";
 import { saveEvidenceIntakeDraft } from "@/lib/evidence/draft";
 import { EXPORT_INSTRUCTIONS_BY_LENS, type EvidenceLensKey } from "@/lib/evidence/export-instructions";
@@ -13,6 +14,7 @@ import { REVIEW_PERIOD_HOURS } from "@/lib/reports/sla";
 /** Shape of the draft blob saved/restored — mirrors this form's own local state, not a typed evidence submission (see evidence_intake_drafts migration docblock). */
 interface EvidenceIntakeDraft {
   fieldValues?: Record<string, string>;
+  metricValues?: Record<string, string>;
   namedCompetitors?: string;
   marketChangeNotes?: string;
   pricingPressureNotes?: string;
@@ -116,6 +118,18 @@ export function EvidenceIntakeForm({
   const router = useRouter();
 
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(initialDraft?.fieldValues ?? {});
+  /**
+   * Real numeric metric fields (added 2026-08-07) — closes a real gap: the
+   * deterministic compareFinancialMetric()/compareExecutionMetric()/
+   * compareProductMetric() machinery was built and tested, but this form
+   * never had a UI to actually collect the `metrics: MetricInput[]` those
+   * functions run on, so `submitEvidence()` sent an empty array on every
+   * real submission and benchmark comparisons never fired for a real
+   * client. Kept as raw strings in state (not numbers) so an in-progress,
+   * not-yet-valid entry (e.g. "6" while typing "68") doesn't get silently
+   * coerced — parsed to MetricInput[] only at submit time, in metricsFor().
+   */
+  const [metricValues, setMetricValues] = useState<Record<string, string>>(initialDraft?.metricValues ?? {});
   const [namedCompetitors, setNamedCompetitors] = useState(initialDraft?.namedCompetitors ?? "");
   const [marketChangeNotes, setMarketChangeNotes] = useState(initialDraft?.marketChangeNotes ?? "");
   const [pricingPressureNotes, setPricingPressureNotes] = useState(initialDraft?.pricingPressureNotes ?? "");
@@ -157,6 +171,7 @@ export function EvidenceIntakeForm({
     debounceTimer.current = setTimeout(() => {
       saveEvidenceIntakeDraft(companyId, {
         fieldValues,
+        metricValues,
         namedCompetitors,
         marketChangeNotes,
         pricingPressureNotes,
@@ -173,6 +188,7 @@ export function EvidenceIntakeForm({
   }, [
     companyId,
     fieldValues,
+    metricValues,
     namedCompetitors,
     marketChangeNotes,
     pricingPressureNotes,
@@ -189,6 +205,25 @@ export function EvidenceIntakeForm({
       const value = fieldValues[`${lens}.${f.key}`]?.trim() || null;
       return { fieldName: f.key, fieldValue: value, source: "manual" as const, isBlank: value === null };
     });
+  }
+
+  /**
+   * Real numeric metrics (added 2026-08-07) — parses only at submit time,
+   * skipping anything blank or non-numeric rather than coercing it (an
+   * invalid/in-progress entry should be silently dropped, not become a
+   * wrong number the deterministic comparison then trusts as real).
+   */
+  function metricsFor(lens: "financial" | "execution" | "product"): MetricInput[] {
+    const set = FIELD_SETS.find((s) => s.lens === lens)!;
+    const result: MetricInput[] = [];
+    for (const m of set.metrics) {
+      const raw = metricValues[`${lens}.${m.metricKey}`]?.trim();
+      if (!raw) continue;
+      const value = Number(raw);
+      if (Number.isNaN(value)) continue;
+      result.push({ metricKey: m.metricKey, value });
+    }
+    return result;
   }
 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -218,9 +253,9 @@ export function EvidenceIntakeForm({
       companyId,
       goalId,
       privacyAcknowledged,
-      financial: { evidenceFields: evidenceFieldsFor("financial") },
-      execution: { evidenceFields: evidenceFieldsFor("execution") },
-      product: { evidenceFields: evidenceFieldsFor("product") },
+      financial: { evidenceFields: evidenceFieldsFor("financial"), metrics: metricsFor("financial") },
+      execution: { evidenceFields: evidenceFieldsFor("execution"), metrics: metricsFor("execution") },
+      product: { evidenceFields: evidenceFieldsFor("product"), metrics: metricsFor("product") },
       commercial: {
         namedCompetitors: namedCompetitors
           .split(",")
@@ -278,6 +313,34 @@ export function EvidenceIntakeForm({
         <section key={set.lens}>
           <h2 className="mb-3 text-lg font-medium">{set.title}</h2>
           <ExportHints lens={set.lens} />
+
+          {set.metrics.length > 0 && (
+            <div className="mb-4">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                Key metrics (optional — used for benchmark comparisons in your report)
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {set.metrics.map((m) => (
+                  <label key={m.metricKey} className="block space-y-1">
+                    <span className="text-sm font-medium">
+                      {m.label}
+                      {m.unit && <span className="text-neutral-400"> ({m.unit})</span>}
+                    </span>
+                    <input
+                      type="number"
+                      step="any"
+                      inputMode="decimal"
+                      className="w-full rounded border px-3 py-2 text-sm"
+                      placeholder={m.placeholder}
+                      value={metricValues[`${set.lens}.${m.metricKey}`] ?? ""}
+                      onChange={(e) => setMetricValues((prev) => ({ ...prev, [`${set.lens}.${m.metricKey}`]: e.target.value }))}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-3">
             {set.fields.map((f) => (
               <label key={f.key} className="block space-y-1">

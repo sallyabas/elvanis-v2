@@ -22,10 +22,32 @@ export interface EvidenceFieldDefinition {
   placeholder: string;
 }
 
+/**
+ * Real numeric metric fields (added 2026-08-07, closing a real gap found
+ * live: the compareFinancialMetric()/compareExecutionMetric()/
+ * compareProductMetric() deterministic-comparison machinery in
+ * financial-benchmarks.ts etc. was built and tested, but the live
+ * fill-in-template form never had a UI to actually collect the
+ * `metrics: MetricInput[]` it runs on — `submitEvidence()` hardcoded
+ * `NO_METRICS` on every real submission, so benchmark comparisons never
+ * fired for a real client. `metricKey` here must exactly match the
+ * `FinancialMetricKey`/`ExecutionMetricKey`/`ProductMetricKey` union each
+ * lens's compare function switches on — a mismatch would silently fall
+ * back to null (treated as qualitative-only), so these are deliberately
+ * copied verbatim from those files, not re-derived.
+ */
+export interface EvidenceMetricDefinition {
+  metricKey: string;
+  label: string;
+  unit: string;
+  placeholder: string;
+}
+
 export interface EvidenceFieldSet {
   lens: "financial" | "execution" | "product";
   title: string;
   fields: EvidenceFieldDefinition[];
+  metrics: EvidenceMetricDefinition[];
 }
 
 export const EVIDENCE_FIELD_SETS: EvidenceFieldSet[] = [
@@ -42,6 +64,11 @@ export const EVIDENCE_FIELD_SETS: EvidenceFieldSet[] = [
       { key: "cost_structure", label: "Cost structure notes", placeholder: "What are the biggest cost drivers? Anything creeping up?" },
       { key: "customer_concentration", label: "Customer concentration", placeholder: "Is revenue concentrated in a few large customers?" },
     ],
+    metrics: [
+      { metricKey: "gross_margin_percent", label: "Gross margin", unit: "%", placeholder: "e.g. 68" },
+      { metricKey: "cash_runway_months", label: "Cash runway", unit: "months", placeholder: "e.g. 14" },
+      { metricKey: "customer_concentration_percent", label: "Revenue from largest customer", unit: "%", placeholder: "e.g. 22" },
+    ],
   },
   {
     lens: "execution",
@@ -51,6 +78,13 @@ export const EVIDENCE_FIELD_SETS: EvidenceFieldSet[] = [
       { key: "delivery_speed", label: "Recent delivery speed / delays", placeholder: "Any recent delays or slowdowns in shipping work?" },
       { key: "meeting_load", label: "Meeting load / decision-making friction", placeholder: "How much time goes to meetings? Do decisions get stuck?" },
       { key: "financial_visibility", label: "Visibility into financial data", placeholder: "How easily can the team see financial numbers day-to-day?" },
+    ],
+    metrics: [
+      { metricKey: "delivery_lead_time_for_changes_days", label: "Delivery lead time (commit to production)", unit: "days", placeholder: "e.g. 3 — only if you track engineering delivery data" },
+      { metricKey: "pr_cycle_time_hours", label: "PR / code review cycle time", unit: "hours", placeholder: "e.g. 40" },
+      { metricKey: "pr_review_pickup_time_hours", label: "PR review pickup time", unit: "hours", placeholder: "e.g. 20" },
+      { metricKey: "decision_approval_latency_hours", label: "Decision / approval latency", unit: "hours", placeholder: "e.g. 60 — any sign-off chain, not just engineering" },
+      { metricKey: "weekly_meeting_hours_per_manager", label: "Weekly meeting hours (manager average)", unit: "hours/week", placeholder: "e.g. 11" },
     ],
   },
   {
@@ -69,6 +103,13 @@ export const EVIDENCE_FIELD_SETS: EvidenceFieldSet[] = [
         label: "Onboarding notes",
         placeholder: "How well do new customers get set up and start actually using it?",
       },
+    ],
+    metrics: [
+      { metricKey: "annual_logo_churn_percent", label: "Annual logo churn", unit: "%", placeholder: "e.g. 8" },
+      { metricKey: "nps_score", label: "Net Promoter Score (NPS)", unit: "", placeholder: "e.g. 35" },
+      { metricKey: "core_feature_adoption_percent", label: "Core feature adoption", unit: "%", placeholder: "e.g. 20" },
+      { metricKey: "activation_rate_percent", label: "Activation rate", unit: "%", placeholder: "e.g. 40" },
+      { metricKey: "support_csat_percent", label: "Support CSAT", unit: "%", placeholder: "e.g. 80" },
     ],
   },
 ];

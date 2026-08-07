@@ -32,6 +32,12 @@ const NO_METRICS: MetricInput[] = [];
 
 interface EvidenceForLensSnapshot {
   evidenceFields: EvidenceFieldInput[];
+  /**
+   * Optional (added 2026-08-07, real numeric metrics landing in Evidence
+   * Intake) — a snapshot from before this date won't have it, so `?? NO_METRICS`
+   * below is a real fallback, not defensive boilerplate.
+   */
+  metrics?: MetricInput[];
 }
 
 interface SourceEvidenceSnapshot {
@@ -117,9 +123,9 @@ export async function rerunAudit(reportId: string): Promise<RerunAuditResult> {
     company: companyProfile,
     goalId: report.goal_id as string,
     goal: goalContext,
-    financial: { evidenceFields: snapshot.financial.evidenceFields, metrics: NO_METRICS },
-    execution: { evidenceFields: snapshot.execution.evidenceFields, metrics: NO_METRICS },
-    product: { evidenceFields: snapshot.product.evidenceFields, metrics: NO_METRICS },
+    financial: { evidenceFields: snapshot.financial.evidenceFields, metrics: snapshot.financial.metrics ?? NO_METRICS },
+    execution: { evidenceFields: snapshot.execution.evidenceFields, metrics: snapshot.execution.metrics ?? NO_METRICS },
+    product: { evidenceFields: snapshot.product.evidenceFields, metrics: snapshot.product.metrics ?? NO_METRICS },
     commercial: { selfReport: snapshot.commercial, independentResearch: [] },
     aiGovernance: snapshot.aiGovernance,
     sourceEvidenceSnapshot: snapshot as unknown as Record<string, unknown>,
