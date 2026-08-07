@@ -36,8 +36,15 @@ export default function ClientLoginPage() {
     const result = await verifyClientCode(email, code);
 
     if (result.success) {
+      // router.refresh() removed, confirmed 2026-08-07 — the same
+      // real bug found and fixed in OnboardingWizard.tsx: calling it
+      // immediately after push() races with the push's own navigation and
+      // can leave the UI stuck mid-transition. Redundant here regardless —
+      // /business-profile is fully dynamic (session-dependent), so push()
+      // alone already forces a fresh server render; there's no stale
+      // cached version of a page never visited yet this session for
+      // refresh() to bust.
       router.push("/business-profile");
-      router.refresh();
     } else {
       setVerifying(false);
       setVerifyError(result.error ?? "Something went wrong.");

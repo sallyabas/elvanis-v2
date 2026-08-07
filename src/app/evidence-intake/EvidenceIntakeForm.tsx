@@ -244,8 +244,12 @@ export function EvidenceIntakeForm({
     });
 
     if (result.success) {
+      // router.refresh() removed, confirmed 2026-08-07 — same fix as
+      // OnboardingWizard.tsx and the login pages: redundant and racy
+      // immediately after push(). The report page is fully dynamic
+      // (session-dependent), so push() alone already forces a fresh
+      // server render of it.
       router.push(`/reports/${result.reportId}`);
-      router.refresh();
     } else {
       setStatus("error");
       setError(result.error ?? "Something went wrong.");

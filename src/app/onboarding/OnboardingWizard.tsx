@@ -71,8 +71,17 @@ export function OnboardingWizard() {
     });
 
     if (result.success) {
+      // Real bug found and fixed live 2026-08-07: router.refresh() called
+      // immediately after router.push() raced with the push's own
+      // navigation and left the wizard stuck on "Creating..." forever —
+      // the company/goal were genuinely created (confirmed via direct DB
+      // read), but the client never committed the navigation to
+      // /evidence-intake. push() alone is sufficient here: every target
+      // page in this app is already fully dynamic (session/cookie-
+      // dependent, confirmed via the build output's own `ƒ` markers), so
+      // there's no stale cached RSC payload for refresh() to bust — it was
+      // pure redundant risk, not a real safeguard.
       router.push("/evidence-intake");
-      router.refresh();
     } else {
       setStatus("error");
       setError(result.error ?? "Something went wrong.");
