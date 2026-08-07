@@ -328,16 +328,34 @@ export default async function LandingPage() {
             numbers, not yet pilot-validated. (Standalone module pricing is shown above, alongside each module.)
           </p>
 
+          {/* Per-card CTAs, confirmed 2026-08-07: Standard gets a direct
+              self-serve link into the real signup flow (solid amber,
+              matching this page's own established convention for direct
+              actions — "Start your free audit," "Book a demo now"). No
+              in-app checkout exists for Concierge, so its CTA is "Request
+              a demo," routed to the same real Calendly link used as the
+              primary "talk to us now" path elsewhere on this page — not a
+              bare payment button, and not the slower Discovery Session
+              request flow, which is the sign-up-first / human-follow-up
+              path already offered its own section further down. Outline
+              style, matching this page's convention for the consultative
+              (as opposed to self-serve) action in every other CTA pair. */}
           <div className="mt-10 grid gap-6 sm:grid-cols-2">
-            <div className="rounded-lg border-2 border-neutral-300 p-6 dark:border-neutral-700">
+            <div className="flex flex-col rounded-lg border-2 border-neutral-300 p-6 dark:border-neutral-700">
               <p className="text-sm font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">Standard</p>
               <p className="mt-2 text-3xl font-semibold text-neutral-900 dark:text-neutral-50">Free</p>
               <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
                 Your first completed audit — all five lenses, full human review, top 3 priorities and a 30/60/90
                 roadmap. Re-audits are always paid.
               </p>
+              <Link
+                href="/client-login"
+                className="mt-6 inline-block self-start rounded bg-accent px-5 py-2.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+              >
+                Get started
+              </Link>
             </div>
-            <div className="rounded-lg border-2 border-accent p-6">
+            <div className="flex flex-col rounded-lg border-2 border-accent p-6">
               <p className="text-sm font-medium uppercase tracking-wide text-accent">Concierge</p>
               <p className="mt-2 text-3xl font-semibold text-neutral-900 dark:text-neutral-50">
                 {formatPrice(pricingByKey.get("concierge_tier") ?? { priceAmount: 300, currency: "GBP" })}
@@ -346,6 +364,14 @@ export default async function LandingPage() {
                 Everything in Standard, plus a Discovery Session and a Delivery Session included by default, and
                 deeper reviewer attention on ambiguous findings.
               </p>
+              <Link
+                href={CALENDLY_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-6 inline-block self-start rounded border border-accent px-5 py-2.5 text-sm font-medium text-accent hover:bg-accent hover:text-accent-ink"
+              >
+                Request a demo
+              </Link>
             </div>
           </div>
         </section>

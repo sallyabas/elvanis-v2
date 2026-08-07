@@ -18,21 +18,56 @@ export interface RequestMagicLinkResult {
  * able to sign up. The corresponding `public.users` row (role defaults to
  * 'client' at the schema level) is ensured to exist by the (app) layout on
  * first authenticated page load, not here — see layout.tsx.
+ *
+ * Real bug found and fixed 2026-08-07: a first-time signup was three
+ * steps instead of one — enter email, click a "confirm your email" link
+ * that didn't establish a session, then re-enter email to finally get a
+ * working code. Root-caused by reading scripts/grant-reviewer.ts's own
+ * existing comment: reviewer accounts are admin-created with
+ * `email_confirm: true` specifically because "unconfirmed email flow not
+ * needed" — i.e. this project's Supabase "Confirm email" setting requires
+ * a separate confirmation step before a plain `signInWithOtp` on a brand-
+ * new user will actually establish a session, and that bypass was only
+ * ever built for the reviewer path, never for this self-serve one. Fixed
+ * the same way reviewers already are, not by touching the dashboard
+ * setting: a brand-new email is now explicitly pre-confirmed via
+ * `admin.createUser({ email_confirm: true })` before the real sign-in OTP
+ * is requested, so Supabase treats it as an already-confirmed returning
+ * user and sends one working Magic Link email, not a Confirm-signup email
+ * that requires a second round-trip. `email_exists` (confirmed via direct
+ * testing — Supabase's real error code/status for a duplicate) is treated
+ * as success, not a failure, since it just means another concurrent
+ * request already created the account — same "atomic conflict handling
+ * over check-then-write" pattern already used by ensureClientUserRow.
  */
 export async function requestClientMagicLink(email: string, origin: string): Promise<RequestMagicLinkResult> {
   const trimmed = email.trim().toLowerCase();
   if (!trimmed) return { sent: false, error: "Enter an email address." };
 
+  const admin = createAdminClient();
+  const { error: createError } = await admin.auth.admin.createUser({ email: trimmed, email_confirm: true });
+  if (createError && createError.code !== "email_exists") {
+    return { sent: false, error: "Couldn't send the login link. Try again in a moment." };
+  }
+
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithOtp({
     email: trimmed,
-    // loginPath, confirmed 2026-08-07 — a real bug found live: the shared
-    // /auth/callback route used to fall back to a hardcoded
-    // /reviewer-login on any exchange failure (cross-device link opens,
-    // email prescanning), regardless of which flow initiated it. Each flow
-    // now names its own fallback explicitly rather than the callback
-    // guessing — see auth/callback/route.ts for the full root-cause.
-    options: { emailRedirectTo: `${origin}/auth/callback?next=/business-profile&loginPath=/client-login` },
+    options: {
+      // shouldCreateUser: false — the account above is guaranteed to
+      // exist (either just created here, or already existed) by this
+      // point, so there's nothing left for signInWithOtp to create; this
+      // also keeps it from ever re-triggering the Confirm-signup path.
+      shouldCreateUser: false,
+      // loginPath, confirmed 2026-08-07 — a real bug found live: the
+      // shared /auth/callback route used to fall back to a hardcoded
+      // /reviewer-login on any exchange failure (cross-device link opens,
+      // email prescanning), regardless of which flow initiated it. Each
+      // flow now names its own fallback explicitly rather than the
+      // callback guessing — see auth/callback/route.ts for the full
+      // root-cause.
+      emailRedirectTo: `${origin}/auth/callback?next=/business-profile&loginPath=/client-login`,
+    },
   });
 
   if (error) return { sent: false, error: "Couldn't send the login link. Try again in a moment." };
