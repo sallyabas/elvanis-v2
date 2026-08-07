@@ -71,7 +71,7 @@ export default function ReviewerLoginPage() {
             <button
               type="submit"
               disabled={verifying}
-              className="w-full rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+              className="w-full rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
             >
               {verifying ? "Verifying…" : "Verify code"}
             </button>
@@ -91,7 +91,7 @@ export default function ReviewerLoginPage() {
           <button
             type="submit"
             disabled={status === "sending"}
-            className="w-full rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+            className="w-full rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
           >
             {status === "sending" ? "Sending…" : "Send sign-in link"}
           </button>

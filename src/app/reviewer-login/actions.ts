@@ -34,7 +34,11 @@ export async function requestReviewerMagicLink(email: string, origin: string): P
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithOtp({
     email: trimmed,
-    options: { emailRedirectTo: `${origin}/auth/callback?next=/queue` },
+    // loginPath, confirmed 2026-08-07 — see client-login/actions.ts and
+    // auth/callback/route.ts for the full root-cause this closes: the
+    // shared callback's failure fallback used to be hardcoded to
+    // /reviewer-login for every flow; each flow now names its own.
+    options: { emailRedirectTo: `${origin}/auth/callback?next=/queue&loginPath=/reviewer-login` },
   });
 
   if (error) return { sent: false, error: "Couldn't send the login link. Try again in a moment." };

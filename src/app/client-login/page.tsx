@@ -46,10 +46,17 @@ export default function ClientLoginPage() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
-      <h1 className="mb-1 text-xl font-semibold">Sign in</h1>
+      {/* Copy confirmed 2026-08-07 — the landing page's nav CTA now reads
+          "Get started" with no further explanation, and its old "No
+          password — we'll email you a code" note was removed as visual
+          clutter. This page is now the one place that explanation lives,
+          led with the founder's own exact wording: a first-time visitor
+          needs to know clicking through creates their account
+          automatically, not just that there's no password. */}
+      <h1 className="mb-1 text-xl font-semibold">Get started</h1>
       <p className="mb-6 text-sm text-neutral-500 dark:text-neutral-400">
-        Enter your email and we&apos;ll send you a sign-in link and code — no password needed. New here? The same
-        link creates your account.
+        Enter your email to get started — we&apos;ll create your account or log you in automatically. No password
+        needed: we&apos;ll send you a sign-in link and a 6-digit backup code.
       </p>
 
       {status === "sent" ? (
@@ -72,7 +79,7 @@ export default function ClientLoginPage() {
             <button
               type="submit"
               disabled={verifying}
-              className="w-full rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+              className="w-full rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
             >
               {verifying ? "Verifying…" : "Verify code"}
             </button>
@@ -92,7 +99,7 @@ export default function ClientLoginPage() {
           <button
             type="submit"
             disabled={status === "sending"}
-            className="w-full rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+            className="w-full rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
           >
             {status === "sending" ? "Sending…" : "Send sign-in link"}
           </button>

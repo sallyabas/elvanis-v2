@@ -293,7 +293,7 @@ export function OnboardingWizard() {
             type="button"
             onClick={next}
             disabled={(step === 0 && !canProceedFromCompany) || (step === 1 && !canProceedFromGoal)}
-            className="flex-1 rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+            className="flex-1 rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
           >
             Continue
           </button>
@@ -302,7 +302,7 @@ export function OnboardingWizard() {
             type="button"
             onClick={handleSubmit}
             disabled={status === "submitting"}
-            className="flex-1 rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+            className="flex-1 rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
           >
             {status === "submitting" ? "Creating…" : "Get started"}
           </button>

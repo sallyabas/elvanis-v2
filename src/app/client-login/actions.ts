@@ -26,7 +26,13 @@ export async function requestClientMagicLink(email: string, origin: string): Pro
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithOtp({
     email: trimmed,
-    options: { emailRedirectTo: `${origin}/auth/callback?next=/business-profile` },
+    // loginPath, confirmed 2026-08-07 — a real bug found live: the shared
+    // /auth/callback route used to fall back to a hardcoded
+    // /reviewer-login on any exchange failure (cross-device link opens,
+    // email prescanning), regardless of which flow initiated it. Each flow
+    // now names its own fallback explicitly rather than the callback
+    // guessing — see auth/callback/route.ts for the full root-cause.
+    options: { emailRedirectTo: `${origin}/auth/callback?next=/business-profile&loginPath=/client-login` },
   });
 
   if (error) return { sent: false, error: "Couldn't send the login link. Try again in a moment." };

@@ -482,7 +482,7 @@ export function ReviewWorkspaceClient({
         <button
           disabled={pending || reportStatus !== "pending_review"}
           onClick={handleApprove}
-          className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+          className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
         >
           Approve report
         </button>
@@ -502,7 +502,7 @@ export function ReviewWorkspaceClient({
           <button
             disabled={pending || reportStatus !== "approved"}
             onClick={handleDeliver}
-            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+            className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
           >
             Deliver report
           </button>

@@ -46,7 +46,7 @@ export function SprintInterestButton({
         type="button"
         onClick={handleRequest}
         disabled={status === "sending"}
-        className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
+        className="rounded border border-accent px-2 py-1 text-xs font-medium text-accent hover:bg-accent hover:text-accent-ink disabled:opacity-40"
       >
         {status === "sending" ? "Sending…" : "Interested in help implementing this?"}
       </button>
