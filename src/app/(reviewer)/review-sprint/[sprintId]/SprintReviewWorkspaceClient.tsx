@@ -131,7 +131,7 @@ export function SprintReviewWorkspaceClient({ sprintId, companyName, findingTitl
         <button
           disabled={pending || sprintStatus !== "scoped"}
           onClick={handleApprove}
-          className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+          className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink disabled:opacity-40"
         >
           Approve sprint plan
         </button>
@@ -154,7 +154,7 @@ export function SprintReviewWorkspaceClient({ sprintId, companyName, findingTitl
           <button
             disabled={pending}
             onClick={handleSaveCommentary}
-            className="mt-2 rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+            className="mt-2 rounded bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink disabled:opacity-40"
           >
             Save commentary
           </button>

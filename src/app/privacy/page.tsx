@@ -52,14 +52,14 @@ export default function PrivacyPolicyPage() {
         <p>
           We retain your evidence and reports for as long as your account is active, so you can refer back to past
           audits and track progress over time. If you delete your account, we delete your data along with it, other
-          than what we're required to keep for legal or accounting purposes.
+          than what we&apos;re required to keep for legal or accounting purposes.
         </p>
       </section>
 
       <section className="mb-6">
         <h2 className="mb-2 text-base font-medium">Requesting deletion</h2>
         <p>
-          You can request deletion of your account and all associated data at any time by contacting us. We'll
+          You can request deletion of your account and all associated data at any time by contacting us. We&apos;ll
           confirm once the deletion is complete.
         </p>
       </section>

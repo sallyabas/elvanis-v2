@@ -47,7 +47,7 @@ export function DesiredFutureStateField({ goalId, field, initialValue, label }: 
       <button
         onClick={handleSave}
         disabled={status === "saving"}
-        className="rounded bg-neutral-900 px-3 py-1.5 text-sm text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+        className="rounded bg-accent px-3 py-1.5 text-sm text-accent-ink disabled:opacity-40"
       >
         {status === "saving" ? "Saving…" : status === "saved" ? "Saved" : "Save"}
       </button>

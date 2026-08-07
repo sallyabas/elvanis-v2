@@ -55,21 +55,29 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div>
-      <div className="flex items-center justify-between border-b border-neutral-200 bg-neutral-50 px-6 py-2 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
-        <nav className="flex gap-4">
-          <Link href="/dashboard" className="hover:underline">
-            Dashboard
-          </Link>
-          <Link href="/business-profile" className="hover:underline">
-            Business Profile
-          </Link>
-          <Link href="/reports" className="hover:underline">
-            Reports &amp; History
-          </Link>
-          <Link href="/account-settings" className="hover:underline">
-            Account Settings
-          </Link>
-        </nav>
+      {/* Charcoal nav — confirmed brand identity 2026-08-06 ("headers/nav/
+          dark surfaces" is the charcoal color's stated role). This one
+          shared layout renders on every client-facing page, so this single
+          change is the highest-leverage piece of "consistent branding
+          across the internal app." */}
+      <div className="flex items-center justify-between bg-neutral-900 px-6 py-2 text-sm text-neutral-300">
+        <div className="flex items-center gap-6">
+          <span className="font-semibold tracking-tight text-neutral-50">Elvanis</span>
+          <nav className="flex gap-4">
+            <Link href="/dashboard" className="hover:text-neutral-50 hover:underline">
+              Dashboard
+            </Link>
+            <Link href="/business-profile" className="hover:text-neutral-50 hover:underline">
+              Business Profile
+            </Link>
+            <Link href="/reports" className="hover:text-neutral-50 hover:underline">
+              Reports &amp; History
+            </Link>
+            <Link href="/account-settings" className="hover:text-neutral-50 hover:underline">
+              Account Settings
+            </Link>
+          </nav>
+        </div>
         <div className="flex items-center gap-3">
           <span>{user.email}</span>
           <SignOutButton />

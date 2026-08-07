@@ -42,8 +42,14 @@ export default async function ReviewerLayout({ children }: { children: React.Rea
 
   return (
     <div>
-      <div className="flex items-center justify-between border-b border-neutral-200 bg-neutral-50 px-6 py-2 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
-        <span>Internal reviewer tools — signed in as {user.email}</span>
+      {/* Charcoal nav (confirmed brand identity 2026-08-06) — same treatment
+          as the client (app) layout, so the internal reviewer tooling reads
+          as the same product, not a visually separate admin panel. */}
+      <div className="flex items-center justify-between bg-neutral-900 px-6 py-2 text-sm text-neutral-300">
+        <span>
+          <span className="font-semibold tracking-tight text-neutral-50">Elvanis</span> — internal reviewer tools, signed in as{" "}
+          {user.email}
+        </span>
         <SignOutButton />
       </div>
       {children}

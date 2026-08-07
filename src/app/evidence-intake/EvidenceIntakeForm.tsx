@@ -395,7 +395,7 @@ export function EvidenceIntakeForm({
         <button
           type="submit"
           disabled={status === "submitting" || !privacyAcknowledged}
-          className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+          className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
         >
           {status === "submitting" ? "Submitting…" : "Submit for review"}
         </button>
@@ -421,7 +421,7 @@ export function EvidenceIntakeForm({
               <button
                 type="button"
                 onClick={handleConfirmSubmit}
-                className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900"
+                className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
               >
                 Confirm
               </button>

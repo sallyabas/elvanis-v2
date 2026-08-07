@@ -185,7 +185,7 @@ export default function DemoPage() {
               </p>
               <button
                 onClick={() => setShowConfirm(true)}
-                className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+                className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover"
               >
                 Submit for Review
               </button>
@@ -295,7 +295,7 @@ export default function DemoPage() {
               </button>
               <button
                 onClick={handleConfirmSubmit}
-                className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+                className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover"
               >
                 Confirm
               </button>

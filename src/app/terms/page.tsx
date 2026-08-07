@@ -11,7 +11,7 @@ export default function TermsOfServicePage() {
         <h2 className="mb-2 text-base font-medium">What Elvanis is</h2>
         <p>
           Elvanis is an AI-assisted execution audit — we analyze the evidence you submit and produce findings and
-          recommendations, reviewed by a human before you see them. It's advisory, not a guarantee of outcomes. The
+          recommendations, reviewed by a human before you see them. It&apos;s advisory, not a guarantee of outcomes. The
           quality of the analysis depends on the quality and completeness of the evidence you provide.
         </p>
       </section>
@@ -19,8 +19,8 @@ export default function TermsOfServicePage() {
       <section className="mb-6">
         <h2 className="mb-2 text-base font-medium">Not formal legal advice</h2>
         <p>
-          Where Elvanis touches regulatory topics — such as Tender Readiness's AI Act/DIFC Regulation 10/SDAIA
-          content, or Data Protection Compliance's GDPR/PDPL content — that output is informational, based on
+          Where Elvanis touches regulatory topics — such as Tender Readiness&apos;s AI Act/DIFC Regulation 10/SDAIA
+          content, or Data Protection Compliance&apos;s GDPR/PDPL content — that output is informational, based on
           externally researched regulatory content, and is not formal legal advice. Consult a qualified professional
           for advice specific to your situation.
         </p>
@@ -29,8 +29,8 @@ export default function TermsOfServicePage() {
       <section className="mb-6">
         <h2 className="mb-2 text-base font-medium">Your responsibilities</h2>
         <p>
-          You're responsible for the accuracy of the evidence you submit, and for having the right to share it with
-          us. Don't submit evidence you don't have the right to share.
+          You&apos;re responsible for the accuracy of the evidence you submit, and for having the right to share it with
+          us. Don&apos;t submit evidence you don&apos;t have the right to share.
         </p>
       </section>
 

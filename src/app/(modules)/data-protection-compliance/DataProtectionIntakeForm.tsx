@@ -103,7 +103,7 @@ export function DataProtectionIntakeForm({
       <button
         disabled={status === "submitting" || !anyFilled}
         onClick={handleSubmit}
-        className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+        className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink disabled:opacity-40"
       >
         {status === "submitting" ? "Submitting…" : "Submit for review"}
       </button>
