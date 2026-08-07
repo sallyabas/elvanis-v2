@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { CompanyJurisdictionInput } from "@/lib/modules/tender-readiness/jurisdiction";
 import { submitTenderReadinessAudit } from "./actions";
+import { Textarea } from "@/app/_components/ui/Textarea";
+import { Button } from "@/app/_components/ui/Button";
 
 export function TenderReadinessIntakeForm({
   companyId,
@@ -36,7 +38,7 @@ export function TenderReadinessIntakeForm({
 
   if (status === "done") {
     return (
-      <p className="rounded border border-green-300 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+      <p className="rounded-md border border-green-300 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
         Submitted for review. Request ID: {requestId}
       </p>
     );
@@ -44,34 +46,24 @@ export function TenderReadinessIntakeForm({
 
   return (
     <section className="space-y-4">
-      <label className="block space-y-1">
-        <span className="text-sm font-medium">Describe the AI systems/features your company uses or builds</span>
-        <textarea
-          className="w-full rounded border px-3 py-2 text-sm"
-          rows={4}
-          placeholder="e.g. a customer-facing chatbot for support, an internal automation that auto-approves refunds under $50…"
-          value={aiUseCaseInventory}
-          onChange={(e) => setAiUseCaseInventory(e.target.value)}
-        />
-      </label>
-      <label className="block space-y-1">
-        <span className="text-sm font-medium">Existing compliance documentation, if any (optional)</span>
-        <textarea
-          className="w-full rounded border px-3 py-2 text-sm"
-          rows={3}
-          placeholder="Any risk assessments, AI use inventories, or procurement-readiness material already prepared…"
-          value={existingDocumentation}
-          onChange={(e) => setExistingDocumentation(e.target.value)}
-        />
-      </label>
-      {status === "error" && error && <p className="text-sm text-red-600">{error}</p>}
-      <button
-        disabled={status === "submitting" || aiUseCaseInventory.trim().length === 0}
-        onClick={handleSubmit}
-        className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink disabled:opacity-40"
-      >
+      <Textarea
+        label="Describe the AI systems/features your company uses or builds"
+        rows={4}
+        placeholder="e.g. a customer-facing chatbot for support, an internal automation that auto-approves refunds under $50…"
+        value={aiUseCaseInventory}
+        onChange={(e) => setAiUseCaseInventory(e.target.value)}
+      />
+      <Textarea
+        label="Existing compliance documentation, if any (optional)"
+        rows={3}
+        placeholder="Any risk assessments, AI use inventories, or procurement-readiness material already prepared…"
+        value={existingDocumentation}
+        onChange={(e) => setExistingDocumentation(e.target.value)}
+      />
+      {status === "error" && error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      <Button disabled={status === "submitting" || aiUseCaseInventory.trim().length === 0} onClick={handleSubmit}>
         {status === "submitting" ? "Submitting…" : "Submit for review"}
-      </button>
+      </Button>
     </section>
   );
 }

@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { GOAL_LABELS, GOAL_DESCRIPTIONS, GOAL_METRIC_EXAMPLES } from "@/lib/lenses/goals";
 import type { PrimaryGoal } from "@/lib/lenses/types";
 import { createCompanyAndGoal } from "./actions";
+import { Input } from "@/app/_components/ui/Input";
+import { Textarea } from "@/app/_components/ui/Textarea";
+import { Select } from "@/app/_components/ui/Select";
+import { Button } from "@/app/_components/ui/Button";
 
 /**
  * Multi-step onboarding wizard (confirmed 2026-08-05) — replaces the
@@ -111,18 +115,15 @@ export function OnboardingWizard() {
             <h2 className="text-lg font-medium">What&apos;s your company called?</h2>
             <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">This is the name we&apos;ll use across your reports and dashboard.</p>
           </div>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">Company name</span>
-            <input
-              type="text"
-              required
-              autoFocus
-              value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
-              className="w-full rounded border px-3 py-2 text-sm"
-              placeholder="Acme Ltd"
-            />
-          </label>
+          <Input
+            label="Company name"
+            type="text"
+            required
+            autoFocus
+            value={companyName}
+            onChange={(e) => setCompanyName(e.target.value)}
+            placeholder="Acme Ltd"
+          />
         </div>
       )}
 
@@ -169,36 +170,27 @@ export function OnboardingWizard() {
               The more specific you are, the more targeted your findings will be — but none of this is required to continue.
             </p>
           </div>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">What metric would you use to measure this?</span>
-            <input
-              type="text"
-              value={targetMetric}
-              onChange={(e) => setTargetMetric(e.target.value)}
-              className="w-full rounded border px-3 py-2 text-sm"
-              placeholder={GOAL_METRIC_EXAMPLES[primaryGoal]}
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">What&apos;s your time horizon?</span>
-            <input
-              type="text"
-              value={timeHorizon}
-              onChange={(e) => setTimeHorizon(e.target.value)}
-              className="w-full rounded border px-3 py-2 text-sm"
-              placeholder="e.g. next quarter, 6 months"
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">What would success look like?</span>
-            <textarea
-              value={successDefinition}
-              onChange={(e) => setSuccessDefinition(e.target.value)}
-              className="w-full rounded border px-3 py-2 text-sm"
-              rows={3}
-              placeholder="In your own words — this helps the reviewer understand what 'done' means to you."
-            />
-          </label>
+          <Input
+            label="What metric would you use to measure this?"
+            type="text"
+            value={targetMetric}
+            onChange={(e) => setTargetMetric(e.target.value)}
+            placeholder={GOAL_METRIC_EXAMPLES[primaryGoal]}
+          />
+          <Input
+            label="What's your time horizon?"
+            type="text"
+            value={timeHorizon}
+            onChange={(e) => setTimeHorizon(e.target.value)}
+            placeholder="e.g. next quarter, 6 months"
+          />
+          <Textarea
+            label="What would success look like?"
+            value={successDefinition}
+            onChange={(e) => setSuccessDefinition(e.target.value)}
+            rows={3}
+            placeholder="In your own words — this helps the reviewer understand what 'done' means to you."
+          />
         </div>
       )}
 
@@ -207,31 +199,25 @@ export function OnboardingWizard() {
           <div>
             <h2 className="text-lg font-medium">A couple more details (optional)</h2>
           </div>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">Is there a secondary goal?</span>
-            <select
-              value={secondaryGoal}
-              onChange={(e) => setSecondaryGoal(e.target.value as PrimaryGoal | "")}
-              className="w-full rounded border px-3 py-2 text-sm"
-            >
-              <option value="">None</option>
-              {GOAL_KEYS.filter((key) => key !== primaryGoal).map((key) => (
-                <option key={key} value={key}>
-                  {GOAL_LABELS[key]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">How urgent is this?</span>
-            <input
-              type="text"
-              value={urgencyLevel}
-              onChange={(e) => setUrgencyLevel(e.target.value)}
-              className="w-full rounded border px-3 py-2 text-sm"
-              placeholder="e.g. we need to fix this in the next month"
-            />
-          </label>
+          <Select
+            label="Is there a secondary goal?"
+            value={secondaryGoal}
+            onChange={(e) => setSecondaryGoal(e.target.value as PrimaryGoal | "")}
+          >
+            <option value="">None</option>
+            {GOAL_KEYS.filter((key) => key !== primaryGoal).map((key) => (
+              <option key={key} value={key}>
+                {GOAL_LABELS[key]}
+              </option>
+            ))}
+          </Select>
+          <Input
+            label="How urgent is this?"
+            type="text"
+            value={urgencyLevel}
+            onChange={(e) => setUrgencyLevel(e.target.value)}
+            placeholder="e.g. we need to fix this in the next month"
+          />
         </div>
       )}
 
@@ -241,7 +227,7 @@ export function OnboardingWizard() {
             <h2 className="text-lg font-medium">Review</h2>
             <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Everything here can be changed later from Business Profile.</p>
           </div>
-          <dl className="space-y-3 rounded border border-neutral-200 p-4 text-sm dark:border-neutral-800">
+          <dl className="space-y-3 rounded-md border border-neutral-300 bg-white p-4 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
             <div>
               <dt className="text-xs font-medium uppercase text-neutral-400">Company</dt>
               <dd>{companyName}</dd>
@@ -284,37 +270,27 @@ export function OnboardingWizard() {
         </div>
       )}
 
-      {status === "error" && error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+      {status === "error" && error && <p className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <div className="mt-6 flex gap-2">
         {step > 0 && (
-          <button
-            type="button"
-            onClick={back}
-            disabled={status === "submitting"}
-            className="rounded border px-4 py-2 text-sm font-medium disabled:opacity-40"
-          >
+          <Button type="button" variant="secondary" onClick={back} disabled={status === "submitting"}>
             Back
-          </button>
+          </Button>
         )}
         {step < STEP_LABELS.length - 1 ? (
-          <button
+          <Button
             type="button"
             onClick={next}
             disabled={(step === 0 && !canProceedFromCompany) || (step === 1 && !canProceedFromGoal)}
-            className="flex-1 rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
+            className="flex-1"
           >
             Continue
-          </button>
+          </Button>
         ) : (
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={status === "submitting"}
-            className="flex-1 rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
-          >
+          <Button type="button" onClick={handleSubmit} disabled={status === "submitting"} className="flex-1">
             {status === "submitting" ? "Creating…" : "Get started"}
-          </button>
+          </Button>
         )}
       </div>
     </div>

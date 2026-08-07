@@ -2,6 +2,11 @@
 
 import { useState } from "react";
 import { updateTaskStatusAction, updateKpiActualAction, submitChangeRequestNoteAction, signOffSprintAction } from "./actions";
+import { Card } from "@/app/_components/ui/Card";
+import { Select } from "@/app/_components/ui/Select";
+import { Input } from "@/app/_components/ui/Input";
+import { Textarea } from "@/app/_components/ui/Textarea";
+import { Button } from "@/app/_components/ui/Button";
 
 interface SprintTaskRow {
   id: string;
@@ -145,7 +150,7 @@ export function ExecutionSprintClient({
       </div>
 
       {sprintStatus === "complete" && (
-        <div className="mt-6 rounded border border-green-300 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
+        <div className="mt-6 rounded-md border border-green-300 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
           <p className="text-sm font-medium text-green-800 dark:text-green-300">Signed off {signedOffAt ? new Date(signedOffAt).toLocaleDateString() : ""}</p>
           {reviewerCommentary ? (
             <div className="mt-2 text-sm text-green-900 dark:text-green-200">
@@ -163,8 +168,8 @@ export function ExecutionSprintClient({
           const relatedItems = queueItems.filter((q) => q.sprint_task_id === task.id);
           const isOpen = noteOpenFor === task.id;
           return (
-            <div key={task.id} className="rounded border p-4">
-              <p className="font-medium">{task.task_description}</p>
+            <Card key={task.id}>
+              <p className="font-medium text-neutral-900 dark:text-neutral-50">{task.task_description}</p>
               <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500 dark:text-neutral-400">
                 <span>Owner: {task.owner}</span>
                 {task.due_date && <span>Due {task.due_date}</span>}
@@ -176,67 +181,63 @@ export function ExecutionSprintClient({
                 </p>
               )}
 
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <label className="text-sm">
-                  Status:{" "}
-                  <select
-                    value={task.status}
-                    disabled={savingId === task.id || sprintStatus === "complete"}
-                    onChange={(e) => handleStatusChange(task.id, e.target.value as SprintTaskRow["status"])}
-                    className="rounded border px-2 py-1 text-sm dark:bg-neutral-900"
-                  >
-                    {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <Select
+                  label="Status"
+                  value={task.status}
+                  disabled={savingId === task.id || sprintStatus === "complete"}
+                  onChange={(e) => handleStatusChange(task.id, e.target.value as SprintTaskRow["status"])}
+                  className="w-40"
+                >
+                  {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </Select>
 
                 {task.kpi_target_value !== null && (
-                  <label className="text-sm">
-                    Actual:{" "}
-                    <input
-                      type="number"
-                      defaultValue={task.kpi_actual_value ?? undefined}
-                      disabled={savingId === task.id || sprintStatus === "complete"}
-                      onBlur={(e) => e.target.value !== "" && handleKpiActualSave(task.id, e.target.value)}
-                      className="w-24 rounded border px-2 py-1 text-sm dark:bg-neutral-900"
-                    />
-                  </label>
+                  <Input
+                    label="Actual"
+                    type="number"
+                    defaultValue={task.kpi_actual_value ?? undefined}
+                    disabled={savingId === task.id || sprintStatus === "complete"}
+                    onBlur={(e) => e.target.value !== "" && handleKpiActualSave(task.id, e.target.value)}
+                    className="w-24"
+                  />
                 )}
 
                 {sprintStatus !== "complete" && (
-                  <button type="button" onClick={() => setNoteOpenFor(isOpen ? null : task.id)} className="text-sm text-neutral-500 underline dark:text-neutral-400">
+                  <button type="button" onClick={() => setNoteOpenFor(isOpen ? null : task.id)} className="pb-2 text-sm text-neutral-500 underline hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
                     Request a change
                   </button>
                 )}
               </div>
 
-              {errorById[task.id] && <p className="mt-1 text-xs text-red-600">{errorById[task.id]}</p>}
+              {errorById[task.id] && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errorById[task.id]}</p>}
 
               {isOpen && (
-                <div className="mt-3 rounded border-t pt-3">
-                  <textarea
+                <div className="mt-3 space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+                  <Textarea
                     value={noteDrafts[task.id] ?? ""}
                     onChange={(e) => setNoteDrafts((prev) => ({ ...prev, [task.id]: e.target.value }))}
                     placeholder="What would you like changed about this task?"
-                    className="w-full rounded border px-2 py-1.5 text-sm dark:bg-neutral-900"
                     rows={3}
                   />
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
                     onClick={() => handleSubmitNote(task.id)}
                     disabled={savingId === task.id || !noteDrafts[task.id]?.trim()}
-                    className="mt-2 rounded border px-3 py-1.5 text-sm font-medium disabled:opacity-40"
+                    className="px-3 py-1.5"
                   >
                     {savingId === task.id ? "Sending…" : "Send note"}
-                  </button>
+                  </Button>
                 </div>
               )}
 
               {relatedItems.length > 0 && (
-                <div className="mt-3 space-y-2 border-t pt-3">
+                <div className="mt-3 space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
                   {relatedItems.map((item) => (
                     <div key={item.id} className="text-xs">
                       <p className="text-neutral-500 dark:text-neutral-400">
@@ -245,36 +246,33 @@ export function ExecutionSprintClient({
                       {item.status === "resolved" && item.reviewer_reply ? (
                         <p className="mt-0.5 text-neutral-700 dark:text-neutral-300">Reply: {item.reviewer_reply}</p>
                       ) : (
-                        <p className="mt-0.5 italic text-neutral-400">Awaiting reviewer reply</p>
+                        <p className="mt-0.5 italic text-neutral-400 dark:text-neutral-500">Awaiting reviewer reply</p>
                       )}
                     </div>
                   ))}
                 </div>
               )}
-            </div>
+            </Card>
           );
         })}
       </div>
 
       {sprintStatus === "in_progress" && (
-        <div className="mt-8 rounded border p-4">
+        <Card className="mt-8">
           {signoffStatus === "done" ? (
             <p className="text-sm text-green-700 dark:text-green-400">Signed off — thanks. Your reviewer will follow up with a final report.</p>
           ) : (
             <>
-              <p className="text-sm">{allDone ? "All tasks are marked done." : "You can sign off at any time, even if some tasks aren't marked done."}</p>
-              <button
-                type="button"
-                onClick={handleSignOff}
-                disabled={signoffStatus === "saving"}
-                className="mt-2 rounded border px-3 py-1.5 text-sm font-medium disabled:opacity-40"
-              >
+              <p className="text-sm text-neutral-800 dark:text-neutral-200">
+                {allDone ? "All tasks are marked done." : "You can sign off at any time, even if some tasks aren't marked done."}
+              </p>
+              <Button type="button" variant="secondary" onClick={handleSignOff} disabled={signoffStatus === "saving"} className="mt-2 px-3 py-1.5">
                 {signoffStatus === "saving" ? "Signing off…" : "Sign off on this sprint"}
-              </button>
-              {signoffStatus === "error" && signoffError && <p className="mt-1 text-xs text-red-600">{signoffError}</p>}
+              </Button>
+              {signoffStatus === "error" && signoffError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{signoffError}</p>}
             </>
           )}
-        </div>
+        </Card>
       )}
     </div>
   );

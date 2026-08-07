@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AccountSettingsForm } from "./AccountSettingsForm";
 import type { NotificationPreferences } from "./actions";
+import { Card } from "@/app/_components/ui/Card";
 
 const DEFAULT_PREFERENCES: NotificationPreferences = {
   reportReady: true,
@@ -42,20 +43,24 @@ export default async function AccountSettingsPage() {
       <h1 className="mb-1 text-2xl font-semibold">Account Settings</h1>
       <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">Your personal account, not the business.</p>
 
-      <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-        <p className="mb-4 text-sm">
-          <span className="font-medium">Email:</span> {profile?.email ?? user.email}
-          <span className="ml-2 text-xs text-neutral-400">(sign-in identity — not editable here)</span>
-        </p>
-        <AccountSettingsForm initialName={profile?.name ?? ""} initialPreferences={preferences} />
-      </section>
+      <div className="space-y-6">
+        <Card>
+          <p className="mb-4 text-sm text-neutral-800 dark:text-neutral-200">
+            <span className="font-medium">Email:</span> {profile?.email ?? user.email}
+            <span className="ml-2 text-xs text-neutral-400 dark:text-neutral-500">(sign-in identity — not editable here)</span>
+          </p>
+          <AccountSettingsForm initialName={profile?.name ?? ""} initialPreferences={preferences} />
+        </Card>
 
-      <section className="rounded-lg border border-neutral-200 bg-white p-5 text-sm dark:border-neutral-800 dark:bg-neutral-900">
-        <p className="mb-1">
-          <span className="font-medium">Plan:</span> {profile?.plan_tier ?? "free"}
-        </p>
-        <p className="text-xs text-neutral-400">Billing management isn&apos;t available yet — no payment provider is connected.</p>
-      </section>
+        <Card>
+          <p className="mb-1 text-sm text-neutral-800 dark:text-neutral-200">
+            <span className="font-medium">Plan:</span> {profile?.plan_tier ?? "free"}
+          </p>
+          <p className="text-xs text-neutral-400 dark:text-neutral-500">
+            Billing management isn&apos;t available yet — no payment provider is connected.
+          </p>
+        </Card>
+      </div>
     </div>
   );
 }
