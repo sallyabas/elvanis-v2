@@ -36,8 +36,12 @@ export default function ReviewerLoginPage() {
     const result = await verifyReviewerCode(email, code);
 
     if (result.success) {
+      // router.refresh() removed, confirmed 2026-08-07 — same fix as
+      // OnboardingWizard.tsx and client-login/page.tsx: redundant and
+      // racy immediately after push(). /queue is fully dynamic
+      // (session-dependent), so push() alone already forces a fresh
+      // server render.
       router.push("/queue");
-      router.refresh();
     } else {
       setVerifying(false);
       setVerifyError(result.error ?? "Something went wrong.");
