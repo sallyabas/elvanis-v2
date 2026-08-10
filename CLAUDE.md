@@ -831,6 +831,20 @@ Continued the design-system pass through every remaining page in one sitting, sa
 
 **Design-system pass is now complete across the entire app** — every page originally listed as "still open" in the earlier reference-implementation writeup has been rolled out.
 
+## Cron scheduling moved off Vercel's built-in cron, staying on Hobby tier (confirmed 2026-08-07)
+
+Real cost decision, founder-researched and confirmed before building: Vercel's Hobby (free) tier caps cron jobs at once/day — the `*/15 * * * *` schedule `vercel.json` had shipped with would have **failed at deploy time** on Hobby, not just run less precisely. Explicit decision: stay on Vercel's free tier until the first 10 clients, rather than upgrade to Pro just for cron frequency.
+
+**Solution — an external free scheduler hitting the existing route, zero code changes** ([.github/workflows/cron-tick.yml](.github/workflows/cron-tick.yml)): `/api/cron/tick` already only checks a bearer token against `CRON_SECRET` and has no idea (or need to know) whether Vercel or something else is calling it — confirmed by reading the route directly before building anything, exactly matching the ask. A GitHub Actions scheduled workflow (`*/20 * * * *`, using the repo's own free Actions minutes — negligible for a few-second curl call) now does the frequent check, calling the same route with `Authorization: Bearer ${{ secrets.CRON_SECRET }}`. [vercel.json](vercel.json) keeps its own once-daily cron (`0 3 * * *`, Hobby-compatible) pointed at the same route as a harmless backstop — if the GitHub Actions workflow ever silently stops firing, the worst case is exactly the once-daily cadence Hobby would have given standalone.
+
+**Real caveats disclosed, not hidden**: GitHub Actions scheduled workflows are documented as "best effort" — a run can be delayed by several minutes during high platform load, occasionally more. Acceptable here since the one genuinely time-sensitive check (the 24h edit-window notification) tolerates a few minutes of slack. Also: GitHub auto-disables a scheduled workflow after 60 days with zero commits to the repo — not a concern for an actively-developed repo, but worth knowing if development ever goes quiet for two months during the pilot.
+
+**Manual setup still needed (secrets were deliberately not handled by the agent — see the standing credential-handling rule)**: the repo needs two GitHub Actions configuration values set once, via `gh` CLI or the repo's Settings → Secrets and variables → Actions page:
+- `CRON_SECRET` (secret) — same value already set as the `CRON_SECRET` Vercel project env var.
+- `SITE_URL` (variable, not secret — it's just the deployed URL) — e.g. the live Vercel URL once deployed.
+
+Via `gh` CLI: `gh secret set CRON_SECRET` (paste the value when prompted) and `gh variable set SITE_URL --body "https://<your-deployed-url>"`. Until both are set, the workflow will run on schedule but fail its curl call (visible as a red X in the repo's Actions tab) — a loud, visible failure, not a silent one.
+
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
 - Don't over-build ahead of proof. Exception: modules built from external research (Tender Readiness, AI Reliability, Data Protection) don't need a live client first — they're sequenced by engine-readiness, not by demand signal.
