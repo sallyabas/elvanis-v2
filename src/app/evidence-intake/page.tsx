@@ -81,6 +81,7 @@ export default async function EvidenceIntakePage() {
         governanceDimensions={governanceDimensions}
         editWindowHours={editWindowHours}
         isFreeAudit={isFreeAudit}
+        inProgressReportId={journeyStatus.stage === "in_review" ? journeyStatus.latestReportId : null}
       />
     </div>
   );

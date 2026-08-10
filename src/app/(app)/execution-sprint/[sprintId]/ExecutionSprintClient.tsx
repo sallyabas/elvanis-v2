@@ -7,6 +7,7 @@ import { Select } from "@/app/_components/ui/Select";
 import { Input } from "@/app/_components/ui/Input";
 import { Textarea } from "@/app/_components/ui/Textarea";
 import { Button } from "@/app/_components/ui/Button";
+import { Alert } from "@/app/_components/ui/Alert";
 
 interface SprintTaskRow {
   id: string;
@@ -214,7 +215,11 @@ export function ExecutionSprintClient({
                 )}
               </div>
 
-              {errorById[task.id] && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errorById[task.id]}</p>}
+              {errorById[task.id] && (
+                <Alert variant="error" className="mt-1 py-2 text-xs">
+                  {errorById[task.id]}
+                </Alert>
+              )}
 
               {isOpen && (
                 <div className="mt-3 space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
@@ -269,7 +274,11 @@ export function ExecutionSprintClient({
               <Button type="button" variant="secondary" onClick={handleSignOff} disabled={signoffStatus === "saving"} className="mt-2 px-3 py-1.5">
                 {signoffStatus === "saving" ? "Signing off…" : "Sign off on this sprint"}
               </Button>
-              {signoffStatus === "error" && signoffError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{signoffError}</p>}
+              {signoffStatus === "error" && signoffError && (
+                <Alert variant="error" className="mt-2 py-2 text-xs">
+                  {signoffError}
+                </Alert>
+              )}
             </>
           )}
         </Card>

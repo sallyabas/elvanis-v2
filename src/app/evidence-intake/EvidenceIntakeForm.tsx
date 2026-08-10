@@ -15,6 +15,7 @@ import { Textarea } from "@/app/_components/ui/Textarea";
 import { Select } from "@/app/_components/ui/Select";
 import { Card } from "@/app/_components/ui/Card";
 import { Button } from "@/app/_components/ui/Button";
+import { Alert } from "@/app/_components/ui/Alert";
 
 /** Shape of the draft blob saved/restored — mirrors this form's own local state, not a typed evidence submission (see evidence_intake_drafts migration docblock). */
 interface EvidenceIntakeDraft {
@@ -98,6 +99,7 @@ export function EvidenceIntakeForm({
   governanceDimensions,
   editWindowHours,
   isFreeAudit,
+  inProgressReportId,
 }: {
   companyId: string;
   goalId: string;
@@ -119,6 +121,19 @@ export function EvidenceIntakeForm({
   editWindowHours: number;
   /** Computed server-side from whether this company has any already-`sent` report — real free-tier state, not assumed. */
   isFreeAudit: boolean;
+  /**
+   * Real duplicate-submission warning (confirmed 2026-08-10, real bug list
+   * from live testing) — set when this company already has a
+   * `pending_review`/`approved` report (computeJourneyStatus's "in_review"
+   * stage) that hasn't been delivered yet. There is no "edit an existing
+   * report in place" mechanism anywhere in this codebase (see run-audit.ts
+   * — every submission creates a brand-new report and re-runs all five
+   * lenses from scratch), so submitting again here does NOT edit that
+   * report, it creates a second, separate one. Rather than silently allow
+   * that confusion (or silently block a feature that might be intended),
+   * this surfaces it honestly before the client resubmits.
+   */
+  inProgressReportId: string | null;
 }) {
   const router = useRouter();
 
@@ -307,6 +322,17 @@ export function EvidenceIntakeForm({
         </p>
       </div>
 
+      {inProgressReportId && (
+        <Alert variant="warning">
+          You already have an audit in progress.{" "}
+          <Link href={`/reports/${inProgressReportId}`} className="underline">
+            View its status
+          </Link>
+          . Submitting this form starts a <span className="font-medium">second, separate</span> audit — it won&apos;t
+          update or replace the one already in progress.
+        </Alert>
+      )}
+
       {/* Upload-point micro-copy (spec §1.8, confirmed 2026-08-03) — shown right where evidence is entered, not buried in a footer link. */}
       <p className="rounded-md border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
         What you submit here is analyzed by Groq, our AI provider, to draft findings — every finding is reviewed by a
@@ -331,6 +357,7 @@ export function EvidenceIntakeForm({
                     step="any"
                     inputMode="decimal"
                     label={m.unit ? `${m.label} (${m.unit})` : m.label}
+                    hint={m.hint}
                     placeholder={m.placeholder}
                     value={metricValues[`${set.lens}.${m.metricKey}`] ?? ""}
                     onChange={(e) => setMetricValues((prev) => ({ ...prev, [`${set.lens}.${m.metricKey}`]: e.target.value }))}
@@ -449,7 +476,7 @@ export function EvidenceIntakeForm({
           </span>
         </label>
 
-        {status === "error" && error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {status === "error" && error && <Alert variant="error">{error}</Alert>}
 
         <Button type="submit" disabled={status === "submitting" || !privacyAcknowledged}>
           {status === "submitting" ? "Submitting…" : "Submit for review"}
@@ -460,9 +487,39 @@ export function EvidenceIntakeForm({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg dark:bg-neutral-900">
             <h3 className="mb-2 text-base font-semibold text-neutral-900 dark:text-neutral-50">Ready to submit?</h3>
+            {/* Wording corrected 2026-08-10 (direct founder request, following
+                the real bug list pass) — "edit or add evidence" previously
+                implied true in-place editing, which doesn't exist in this
+                codebase: submitting again during the window creates a
+                separate, new report rather than updating this one (see
+                run-audit.ts — every submission is a fresh audit run, full
+                stop). Confirmed decision: for pilot, this real behavior is
+                fine as-is — the fix needed is honest copy, not building
+                real edit-in-place. */}
+            {/*
+             * Real, subtle bug found and fixed 2026-08-10 while verifying
+             * the fix above: a literal space immediately after an
+             * expression (e.g. "{editWindowHours} hours") is silently
+             * dropped by JSX's whitespace-collapse rule whenever that text
+             * node spans multiple source lines (confirmed live via
+             * childNodes inspection — rendered as "24hours", no space,
+             * despite a real space in the source). This is very likely
+             * the exact mechanism behind the "missing space in '72hours'"
+             * typo from the original bug report — a real, reproducible
+             * JSX gotcha, not something a source grep for the literal
+             * string would ever catch. Fixed everywhere in this paragraph
+             * by using an explicit {" "} right after every expression
+             * whose following text could wrap onto a new line, instead of
+             * relying on a plain space character surviving JSX's
+             * line-based trimming.
+             */}
             <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
-              You&apos;ll have {editWindowHours} hours to edit or add evidence — after that, review begins, and your
-              report will be ready within {editWindowHours + REVIEW_PERIOD_HOURS} hours total.{" "}
+              You&apos;ll have {editWindowHours}{" "}
+              hours before review begins. There&apos;s no in-place editing — if you
+              need to change or add anything during that window, submitting again creates a separate, new report
+              rather than updating this one. After {editWindowHours}h, reviewers take over and your report will be
+              ready within {editWindowHours + REVIEW_PERIOD_HOURS}{" "}
+              hours total.{" "}
               {isFreeAudit ? "This will use your free audit." : "This is a paid re-audit."}
             </p>
             <div className="flex justify-end gap-2">
@@ -473,6 +530,33 @@ export function EvidenceIntakeForm({
                 Confirm
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Real loading indicator (confirmed 2026-08-10, real bug list from
+          live testing) — closes a real gap: submitEvidence() runs all five
+          lenses server-side (staggered ~1.5s apart, each a real Groq call,
+          see run-audit.ts), which can genuinely take well over a minute.
+          Before this, the only feedback was a disabled button reading
+          "Submitting…" — easy to miss entirely if the client had scrolled
+          away from it, making the page look frozen/broken rather than
+          working. This overlay is impossible to miss and explains what's
+          actually happening rather than leaving a blank wait. */}
+      {status === "submitting" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-lg dark:bg-neutral-900">
+            <div
+              className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-neutral-200 border-t-accent dark:border-neutral-700"
+              aria-hidden="true"
+            />
+            <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">
+              Analyzing your evidence…
+            </h3>
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+              We&apos;re running your Financial, Execution, Product, Commercial, and AI &amp; Governance analysis.
+              This usually takes under a minute — please don&apos;t close this tab.
+            </p>
           </div>
         </div>
       )}

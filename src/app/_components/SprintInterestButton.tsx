@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { requestSprintInterest } from "@/lib/execution-sprint/interest-requests";
+import { Alert } from "@/app/_components/ui/Alert";
 
 /**
  * Client-facing Execution Sprint interest button (confirmed 2026-08-06,
@@ -37,7 +38,11 @@ export function SprintInterestButton({
   }
 
   if (status === "sent") {
-    return <p className="mt-2 text-xs text-green-700 dark:text-green-400">Interest sent — your reviewer will follow up.</p>;
+    return (
+      <Alert variant="success" className="mt-2 py-2 text-xs">
+        Interest sent — your reviewer will follow up.
+      </Alert>
+    );
   }
 
   return (
@@ -50,7 +55,11 @@ export function SprintInterestButton({
       >
         {status === "sending" ? "Sending…" : "Interested in help implementing this?"}
       </button>
-      {status === "error" && error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {status === "error" && error && (
+        <Alert variant="error" className="mt-2 py-2 text-xs">
+          {error}
+        </Alert>
+      )}
     </div>
   );
 }

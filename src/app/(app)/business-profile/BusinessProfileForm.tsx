@@ -7,6 +7,7 @@ import { Select } from "@/app/_components/ui/Select";
 import { Textarea } from "@/app/_components/ui/Textarea";
 import { TagInput } from "@/app/_components/ui/TagInput";
 import { Button } from "@/app/_components/ui/Button";
+import { Alert } from "@/app/_components/ui/Alert";
 
 /**
  * Real design pass, confirmed 2026-08-07 — Business Profile treated as
@@ -165,7 +166,7 @@ export function BusinessProfileForm({ companyId, initial }: { companyId: string;
         onChange={(e) => update("teamStructureSummary", e.target.value || null)}
       />
 
-      {status === "error" && error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {status === "error" && error && <Alert variant="error">{error}</Alert>}
       {status === "saved" && <p className="text-sm text-green-600 dark:text-green-400">Saved.</p>}
 
       <Button onClick={handleSave} disabled={status === "saving"}>

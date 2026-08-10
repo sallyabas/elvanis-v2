@@ -41,6 +41,15 @@ export interface EvidenceMetricDefinition {
   label: string;
   unit: string;
   placeholder: string;
+  /**
+   * Optional plain-language clarification shown under the field (confirmed
+   * 2026-08-10, real bug list from live testing) — "logo churn" is a real,
+   * standard SaaS term (the % of *customers*, not revenue, lost in a
+   * period — distinct from revenue churn), correct to keep rather than
+   * remove, but genuinely unexplained jargon to a first-time reader. Only
+   * populated where a term actually needs it, not added everywhere.
+   */
+  hint?: string;
 }
 
 export interface EvidenceFieldSet {
@@ -105,7 +114,13 @@ export const EVIDENCE_FIELD_SETS: EvidenceFieldSet[] = [
       },
     ],
     metrics: [
-      { metricKey: "annual_logo_churn_percent", label: "Annual logo churn", unit: "%", placeholder: "e.g. 8" },
+      {
+        metricKey: "annual_logo_churn_percent",
+        label: "Annual logo churn",
+        unit: "%",
+        placeholder: "e.g. 8",
+        hint: "The % of customers (by count) who cancelled in the last 12 months — not revenue lost, just how many left.",
+      },
       { metricKey: "nps_score", label: "Net Promoter Score (NPS)", unit: "", placeholder: "e.g. 35" },
       { metricKey: "core_feature_adoption_percent", label: "Core feature adoption", unit: "%", placeholder: "e.g. 20" },
       { metricKey: "activation_rate_percent", label: "Activation rate", unit: "%", placeholder: "e.g. 40" },

@@ -13,6 +13,8 @@ import { SprintInterestButton } from "@/app/_components/SprintInterestButton";
 import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
 import { loadGovernanceDimensions } from "@/lib/lenses/benchmarks-repository";
 import { getTotalTurnaroundHours } from "@/lib/reports/sla";
+import { Card } from "@/app/_components/ui/Card";
+import { LinkButton } from "@/app/_components/ui/LinkButton";
 
 interface SourceEvidenceSnapshot {
   financial: { evidenceFields: EvidenceFieldInput[]; metrics?: MetricInput[] };
@@ -86,7 +88,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
   const admin = createAdminClient();
   const { data: reportStatus, error: statusError } = await admin
     .from("reports")
-    .select("id, status, company_id, companies(user_id)")
+    .select("id, status, company_id, submitted_at, edit_window_closes_at, companies(user_id)")
     .eq("id", reportId)
     .maybeSingle();
 
@@ -100,14 +102,75 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
     // moment earlier correctly computed the total from the DB-backed
     // edit_window_hours setting — the two could silently diverge the
     // moment that setting changed. Both now read getTotalTurnaroundHours().
-    const { totalHours } = await getTotalTurnaroundHours();
+    const { editWindowHours, totalHours } = await getTotalTurnaroundHours();
+
+    // Edit-window-aware copy + a real, reachable edit path (confirmed
+    // 2026-08-10, real bug list from live testing) — this page previously
+    // said nothing about whether the client could still add evidence, and
+    // had zero link anywhere back to /evidence-intake even though the
+    // submit confirmation modal explicitly promises "you'll have N hours
+    // to edit or add evidence." A client on this page during that window
+    // had no way to act on that promise from here.
+    //
+    // Real, deliberate scope note: there is no "edit an existing report in
+    // place" mechanism anywhere in this codebase — every submission to
+    // /evidence-intake runs a brand-new audit and creates a brand-new
+    // report row, full stop (see run-audit.ts). So "editing" during this
+    // window today actually means "submit again, get a second, separate
+    // report" — the original isn't updated or replaced.
+    //
+    // Confirmed 2026-08-10, direct founder decision: for pilot, this real
+    // behavior (resubmit = new report, not true in-place editing) is fine
+    // as-is — real edit-in-place is not being built right now. The fix
+    // needed was honest copy, not a new feature: this page's own wording
+    // (below) and the confirmation modal (EvidenceIntakeForm.tsx) both now
+    // say plainly that submitting again starts a separate report, instead
+    // of implying literal editing the way "add or revise evidence" did.
+    const now = new Date().getTime();
+    const closesAt = reportStatus.edit_window_closes_at ? new Date(reportStatus.edit_window_closes_at as string) : null;
+    const stillEditable = reportStatus.status === "pending_review" && closesAt !== null && closesAt.getTime() > now;
+    const hoursRemaining = stillEditable ? Math.max(1, Math.ceil((closesAt!.getTime() - now) / (60 * 60 * 1000))) : 0;
+
     return (
-      <div className="mx-auto max-w-2xl px-6 py-16 text-center">
-        <h1 className="mb-2 text-xl font-semibold">Your report is being reviewed</h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          We&apos;ll have this ready within {totalHours} hours. We&apos;ll email you the moment it&apos;s ready — no
-          need to keep checking back.
-        </p>
+      <div className="mx-auto max-w-2xl px-6 py-16">
+        <Card className="text-center">
+          <h1 className="mb-2 text-xl font-semibold text-neutral-900 dark:text-neutral-50">
+            {stillEditable ? "Evidence received — review starts soon" : "Your report is being reviewed"}
+          </h1>
+          {/*
+           * Same JSX whitespace-collapse bug found and fixed here as in
+           * EvidenceIntakeForm.tsx's confirmation modal (confirmed
+           * 2026-08-10) — a literal space right after an expression is
+           * silently dropped whenever that text node spans multiple
+           * source lines, e.g. "{totalHours} hours\n  total..." rendered
+           * live as "72hourstotal" with both spaces gone. Fixed with
+           * explicit {" "} after every expression whose following text
+           * wraps to a new line, rather than trusting a plain space to
+           * survive JSX's line-based trimming.
+           */}
+          {stillEditable ? (
+            <>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                Review begins in about {hoursRemaining}{" "}
+                more hour{hoursRemaining === 1 ? "" : "s"}. There&apos;s no
+                in-place editing — if you need to change or add anything now, submitting again creates a separate,
+                new report rather than updating this one. We&apos;ll have a report ready within {totalHours}{" "}
+                hours total from your original submission ({editWindowHours}h before review starts, then up to
+                review). We&apos;ll email you the moment it&apos;s ready.
+              </p>
+              <div className="mt-5">
+                <LinkButton href="/evidence-intake">Submit new evidence</LinkButton>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+              The window for changes has closed and a reviewer is on it now. We&apos;ll have this ready within{" "}
+              {totalHours}{" "}
+              hours of your original submission, and we&apos;ll email you the moment it&apos;s ready — no need to
+              keep checking back.
+            </p>
+          )}
+        </Card>
       </div>
     );
   }

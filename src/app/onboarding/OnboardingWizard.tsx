@@ -9,6 +9,7 @@ import { Input } from "@/app/_components/ui/Input";
 import { Textarea } from "@/app/_components/ui/Textarea";
 import { Select } from "@/app/_components/ui/Select";
 import { Button } from "@/app/_components/ui/Button";
+import { Alert } from "@/app/_components/ui/Alert";
 
 /**
  * Multi-step onboarding wizard (confirmed 2026-08-05) — replaces the
@@ -270,7 +271,11 @@ export function OnboardingWizard() {
         </div>
       )}
 
-      {status === "error" && error && <p className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {status === "error" && error && (
+        <Alert variant="error" className="mt-4">
+          {error}
+        </Alert>
+      )}
 
       <div className="mt-6 flex gap-2">
         {step > 0 && (

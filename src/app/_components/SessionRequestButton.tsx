@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { requestSession, type SessionType } from "@/lib/service-layer/session-requests";
+import { Alert } from "@/app/_components/ui/Alert";
 
 // Framing text + spelled-out F2F wording added 2026-08-06 (honest UX
 // review pass) — the report page previously offered Delivery Session and
@@ -54,11 +55,7 @@ export function SessionRequestButton({ companyId, sessionType }: { companyId: st
   }
 
   if (status === "sent") {
-    return (
-      <div className="rounded border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
-        <p className="text-sm text-green-700 dark:text-green-400">{LABELS[sessionType].sentLabel} — we&apos;ll follow up to schedule it.</p>
-      </div>
-    );
+    return <Alert variant="success">{LABELS[sessionType].sentLabel} — we&apos;ll follow up to schedule it.</Alert>;
   }
 
   // Self-contained framed widget, not just a bare button (confirmed
@@ -79,7 +76,11 @@ export function SessionRequestButton({ companyId, sessionType }: { companyId: st
       >
         {status === "sending" ? "Requesting…" : LABELS[sessionType].cta}
       </button>
-      {status === "error" && error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {status === "error" && error && (
+        <Alert variant="error" className="mt-2 py-2 text-xs">
+          {error}
+        </Alert>
+      )}
     </div>
   );
 }

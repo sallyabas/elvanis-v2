@@ -8,6 +8,7 @@ import { Textarea } from "@/app/_components/ui/Textarea";
 import { Select } from "@/app/_components/ui/Select";
 import { Card } from "@/app/_components/ui/Card";
 import { Button } from "@/app/_components/ui/Button";
+import { Alert } from "@/app/_components/ui/Alert";
 
 export function AiReliabilityIntakeForm({ companyId }: { companyId: string }) {
   const [systemType, setSystemType] = useState<AiReliabilitySystemType | null>(null);
@@ -124,7 +125,7 @@ export function AiReliabilityIntakeForm({ companyId }: { companyId: string }) {
               />
             </Card>
           ))}
-          {status === "error" && error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+          {status === "error" && error && <Alert variant="error">{error}</Alert>}
           <div className="flex gap-2">
             <Button type="button" variant="secondary" onClick={() => setSystemType(null)}>
               Back
@@ -184,7 +185,7 @@ export function AiReliabilityIntakeForm({ companyId }: { companyId: string }) {
               onChange={(e) => setEvidence((prev) => ({ ...prev, escalationDescription: e.target.value }))}
             />
           )}
-          {status === "error" && error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+          {status === "error" && error && <Alert variant="error">{error}</Alert>}
           <div className="flex gap-2">
             <Button type="button" variant="secondary" onClick={() => setSystemType(null)}>
               Back

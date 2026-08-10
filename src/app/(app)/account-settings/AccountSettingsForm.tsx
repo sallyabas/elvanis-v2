@@ -4,6 +4,7 @@ import { useState } from "react";
 import { updateAccountSettings, type NotificationPreferences } from "./actions";
 import { Input } from "@/app/_components/ui/Input";
 import { Button } from "@/app/_components/ui/Button";
+import { Alert } from "@/app/_components/ui/Alert";
 
 export function AccountSettingsForm({ initialName, initialPreferences }: { initialName: string; initialPreferences: NotificationPreferences }) {
   const [name, setName] = useState(initialName);
@@ -60,7 +61,7 @@ export function AccountSettingsForm({ initialName, initialPreferences }: { initi
         </div>
       </div>
 
-      {status === "error" && error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {status === "error" && error && <Alert variant="error">{error}</Alert>}
       {status === "saved" && <p className="text-sm text-green-600 dark:text-green-400">Saved.</p>}
 
       <Button onClick={handleSave} disabled={status === "saving"}>

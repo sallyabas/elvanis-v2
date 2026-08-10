@@ -13,6 +13,7 @@ import { Input } from "@/app/_components/ui/Input";
 import { Textarea } from "@/app/_components/ui/Textarea";
 import { Select } from "@/app/_components/ui/Select";
 import { Button } from "@/app/_components/ui/Button";
+import { Alert } from "@/app/_components/ui/Alert";
 
 interface SprintTaskRow {
   id: string;
@@ -133,7 +134,11 @@ export function SprintReviewWorkspaceClient({ sprintId, companyName, findingTitl
       </Card>
 
       <Card>
-        {blockedReason && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{blockedReason}</p>}
+        {blockedReason && (
+          <Alert variant="warning" className="mb-3">
+            {blockedReason}
+          </Alert>
+        )}
         <Button disabled={pending || sprintStatus !== "scoped"} onClick={handleApprove}>
           Approve sprint plan
         </Button>

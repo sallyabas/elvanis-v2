@@ -4,6 +4,7 @@ import { useState } from "react";
 import { updateDesiredFutureState } from "@/lib/goals/desired-future-state";
 import { Textarea } from "@/app/_components/ui/Textarea";
 import { Button } from "@/app/_components/ui/Button";
+import { Alert } from "@/app/_components/ui/Alert";
 
 interface Props {
   goalId: string;
@@ -42,7 +43,7 @@ export function DesiredFutureStateField({ goalId, field, initialValue, label }: 
           setStatus("idle");
         }}
       />
-      {status === "error" && error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {status === "error" && error && <Alert variant="error">{error}</Alert>}
       <Button onClick={handleSave} disabled={status === "saving"} className="px-3 py-1.5">
         {status === "saving" ? "Saving…" : status === "saved" ? "Saved" : "Save"}
       </Button>

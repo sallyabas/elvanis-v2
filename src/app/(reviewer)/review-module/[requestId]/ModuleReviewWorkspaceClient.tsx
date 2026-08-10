@@ -17,6 +17,7 @@ import { Input } from "@/app/_components/ui/Input";
 import { Textarea } from "@/app/_components/ui/Textarea";
 import { Select } from "@/app/_components/ui/Select";
 import { Button } from "@/app/_components/ui/Button";
+import { Alert } from "@/app/_components/ui/Alert";
 
 /**
  * Common shape every standalone module's findings follow (confirmed
@@ -239,7 +240,11 @@ export function ModuleReviewWorkspaceClient({ requestId, companyName, moduleLabe
       </Card>
 
       <Card>
-        {blockedReason && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{blockedReason}</p>}
+        {blockedReason && (
+          <Alert variant="warning" className="mb-3">
+            {blockedReason}
+          </Alert>
+        )}
         <Button disabled={pending || requestStatus !== "pending_review"} onClick={handleApprove}>
           Approve request
         </Button>
@@ -258,7 +263,11 @@ export function ModuleReviewWorkspaceClient({ requestId, companyName, moduleLabe
           </div>
           {procurementAnswers.length === 0 ? (
             <div>
-              {procurementError && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{procurementError}</p>}
+              {procurementError && (
+                <Alert variant="error" className="mb-3">
+                  {procurementError}
+                </Alert>
+              )}
               <Button disabled={pending} onClick={handleGenerateProcurementAnswers}>
                 Generate procurement answers
               </Button>

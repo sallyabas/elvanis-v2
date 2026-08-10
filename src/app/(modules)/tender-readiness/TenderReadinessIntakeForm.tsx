@@ -5,6 +5,7 @@ import type { CompanyJurisdictionInput } from "@/lib/modules/tender-readiness/ju
 import { submitTenderReadinessAudit } from "./actions";
 import { Textarea } from "@/app/_components/ui/Textarea";
 import { Button } from "@/app/_components/ui/Button";
+import { Alert } from "@/app/_components/ui/Alert";
 
 export function TenderReadinessIntakeForm({
   companyId,
@@ -60,7 +61,7 @@ export function TenderReadinessIntakeForm({
         value={existingDocumentation}
         onChange={(e) => setExistingDocumentation(e.target.value)}
       />
-      {status === "error" && error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {status === "error" && error && <Alert variant="error">{error}</Alert>}
       <Button disabled={status === "submitting" || aiUseCaseInventory.trim().length === 0} onClick={handleSubmit}>
         {status === "submitting" ? "Submitting…" : "Submit for review"}
       </Button>

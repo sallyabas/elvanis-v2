@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, type ButtonHTMLAttributes } from "react";
+import { VARIANTS } from "./button-variants";
 
 /**
  * Shared button component (confirmed 2026-08-07) — two variants,
@@ -13,14 +14,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary";
 }
 
-// Exported so LinkButton.tsx (an <a>/next/link variant, for real navigation
-// rather than a form action) can render the identical visual style without
-// duplicating the className string.
-export const VARIANTS: Record<NonNullable<ButtonProps["variant"]>, string> = {
-  primary: "bg-accent text-accent-ink hover:bg-accent-hover",
-  secondary:
-    "border border-neutral-300 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800",
-};
+// VARIANTS now lives in ./button-variants.ts, not here — see that file's
+// docblock (confirmed 2026-08-10) for why: LinkButton.tsx needs the same
+// values but is rendered from Server Components, which can't reliably
+// resolve a named export from a "use client" module like this one.
+export { VARIANTS };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { variant = "primary", className, ...props },

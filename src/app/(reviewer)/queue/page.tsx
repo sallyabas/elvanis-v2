@@ -64,6 +64,26 @@ export default async function ReviewerQueuePage() {
     return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {reportsError.message}</div>;
   }
 
+  // "Still with client" visibility (confirmed 2026-08-10, real bug list
+  // from live testing) — closes a real, confusing gap: a report whose
+  // 24h edit window hasn't closed yet is *correctly* excluded from the
+  // ready-for-review list above (working as designed, see the docblock
+  // below), but until now there was zero indication anywhere on this page
+  // that such a report even existed. A reviewer checking right after a
+  // client submits saw an empty queue and no way to tell "nothing has
+  // happened yet" apart from "there's a real submission, just not ready."
+  // Not actionable (no review link — the client's business, not the
+  // reviewer's yet, unchanged) — purely visibility.
+  const { data: notYetReadyReports, error: notYetReadyError } = await supabase
+    .from("reports")
+    .select("id, edit_window_closes_at, companies(name)")
+    .eq("status", "pending_review")
+    .gt("edit_window_closes_at", new Date().toISOString());
+
+  if (notYetReadyError) {
+    return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {notYetReadyError.message}</div>;
+  }
+
   const { data: moduleRequests, error: moduleError } = await supabase
     .from("module_requests")
     .select("id, module_type, status, created_at, reviewer_notified_at, companies(name)")
@@ -114,6 +134,33 @@ export default async function ReviewerQueuePage() {
       href: `/review-module/${r.id}`,
     })),
   ].sort((a, b) => new Date(a.readyAt ?? 0).getTime() - new Date(b.readyAt ?? 0).getTime());
+
+  // Grouped-by-company restructure (confirmed 2026-08-10, real bug list
+  // from live testing) — the ready-for-review list was previously one
+  // flat, undifferentiated list; a reviewer with several items for the
+  // same company (e.g. a Core Audit report and a module request both
+  // pending at once) had no visual way to associate them together short
+  // of reading every company name individually. Grouped here, sorted by
+  // each group's earliest-ready item — still linking out to each item's
+  // own real review workspace (/review, /review-module, /review-sprint)
+  // for full details/actions, rather than duplicating those workspaces
+  // into a new page.
+  const itemsByCompany = new Map<string, QueueItem[]>();
+  for (const item of items) {
+    itemsByCompany.set(item.companyName, [...(itemsByCompany.get(item.companyName) ?? []), item]);
+  }
+  const groupedItems = [...itemsByCompany.entries()].sort(
+    ([, a], [, b]) => new Date(a[0].readyAt ?? 0).getTime() - new Date(b[0].readyAt ?? 0).getTime(),
+  );
+
+  const notYetReadyByCompany = new Map<string, { id: string; closesAt: string | null }[]>();
+  for (const r of notYetReadyReports ?? []) {
+    const name = (r.companies as unknown as { name: string } | null)?.name ?? "Unknown company";
+    notYetReadyByCompany.set(name, [
+      ...(notYetReadyByCompany.get(name) ?? []),
+      { id: r.id as string, closesAt: r.edit_window_closes_at as string | null },
+    ]);
+  }
 
   const regulatoryStatus = await listRegulatoryContentReviewStatus();
   const sessionRequests = await listPendingSessionRequests();
@@ -290,35 +337,69 @@ export default async function ReviewerQueuePage() {
         </Card>
       </div>
 
-      <p className="my-6 text-sm text-neutral-500 dark:text-neutral-400">
-        Everything ready for review — Core Audit reports and standalone module requests together, oldest first.
-        Still-editable Core Audit reports don&apos;t appear here yet.
+      <h2 className="mb-3 mt-8 text-lg font-medium text-neutral-900 dark:text-neutral-50">Ready for review</h2>
+      <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
+        Grouped by company (confirmed 2026-08-10, real bug list from live testing) — each item still links to its own
+        full workspace (findings, actions, everything), grouping just makes it obvious at a glance when the same
+        company has more than one thing waiting.
       </p>
 
-      {items.length === 0 ? (
+      {groupedItems.length === 0 ? (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">Nothing waiting on review right now.</p>
       ) : (
-        <ul className="space-y-3">
-          {items.map((item) => (
-            <li
-              key={item.id}
-              className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900"
-            >
-              <div>
-                <div className="font-medium text-neutral-900 dark:text-neutral-50">
-                  {item.companyName} <span className="font-normal text-neutral-500 dark:text-neutral-400">· {item.label}</span>
-                </div>
-                <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                  Ready {item.readyAt ? new Date(item.readyAt).toLocaleString() : "unknown"}
-                  {item.notified ? " · reviewer notified" : " · not yet notified"}
-                </div>
-              </div>
-              <LinkButton href={item.href} className="px-3 py-1.5 text-sm">
-                Review
-              </LinkButton>
-            </li>
+        <div className="space-y-5">
+          {groupedItems.map(([companyName, companyItems]) => (
+            <div key={companyName} className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+              <h3 className="mb-3 font-semibold text-neutral-900 dark:text-neutral-50">{companyName}</h3>
+              <ul className="space-y-2">
+                {companyItems.map((item) => (
+                  <li key={item.id} className="flex items-center justify-between rounded-md border border-neutral-100 p-3 dark:border-neutral-800">
+                    <div>
+                      <div className="text-sm font-medium text-neutral-800 dark:text-neutral-200">{item.label}</div>
+                      <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                        Ready {item.readyAt ? new Date(item.readyAt).toLocaleString() : "unknown"}
+                        {item.notified ? " · reviewer notified" : " · not yet notified"}
+                      </div>
+                    </div>
+                    <LinkButton href={item.href} className="px-3 py-1.5 text-sm">
+                      Review
+                    </LinkButton>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ))}
-        </ul>
+        </div>
+      )}
+
+      {/* "Still with client" visibility (confirmed 2026-08-10, real bug list
+          from live testing) — see the query docblock above. Purely
+          informational: these reports are correctly not actionable yet
+          (the client's 24h edit window is still open), but a reviewer
+          should be able to see "yes, a real submission exists, it's just
+          not ready" instead of an unexplained empty queue. */}
+      {notYetReadyByCompany.size > 0 && (
+        <div className="mt-8">
+          <h2 className="mb-3 text-lg font-medium text-neutral-900 dark:text-neutral-50">Still with client</h2>
+          <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
+            Submitted, but the client&apos;s edit window hasn&apos;t closed yet — not ready for review, nothing to do
+            here yet.
+          </p>
+          <ul className="space-y-2">
+            {[...notYetReadyByCompany.entries()].map(([companyName, reports]) => (
+              <li key={companyName} className="rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-3 text-sm dark:border-neutral-700 dark:bg-neutral-900/50">
+                <span className="font-medium text-neutral-700 dark:text-neutral-300">{companyName}</span>{" "}
+                <span className="text-neutral-500 dark:text-neutral-400">
+                  · {reports.length} submission{reports.length === 1 ? "" : "s"} · opens for review{" "}
+                  {reports
+                    .map((r) => (r.closesAt ? new Date(r.closesAt).toLocaleString() : "unknown"))
+                    .sort()
+                    .join(", ")}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

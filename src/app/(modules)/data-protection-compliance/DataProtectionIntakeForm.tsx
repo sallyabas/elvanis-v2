@@ -5,6 +5,7 @@ import type { CompanyJurisdictionInput } from "@/lib/modules/data-protection-com
 import { submitDataProtectionComplianceAudit } from "./actions";
 import { Textarea } from "@/app/_components/ui/Textarea";
 import { Button } from "@/app/_components/ui/Button";
+import { Alert } from "@/app/_components/ui/Alert";
 
 const CATEGORY_FIELDS: { key: "consentFlow" | "dataSubjectRights" | "retentionPolicy" | "breachResponse" | "crossBorderTransfer"; label: string; placeholder: string }[] = [
   {
@@ -99,7 +100,7 @@ export function DataProtectionIntakeForm({
           onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
         />
       ))}
-      {status === "error" && error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {status === "error" && error && <Alert variant="error">{error}</Alert>}
       <Button disabled={status === "submitting" || !anyFilled} onClick={handleSubmit}>
         {status === "submitting" ? "Submitting…" : "Submit for review"}
       </Button>

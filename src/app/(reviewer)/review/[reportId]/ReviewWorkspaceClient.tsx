@@ -24,6 +24,7 @@ import { Input } from "@/app/_components/ui/Input";
 import { Textarea } from "@/app/_components/ui/Textarea";
 import { Select } from "@/app/_components/ui/Select";
 import { Button } from "@/app/_components/ui/Button";
+import { Alert } from "@/app/_components/ui/Alert";
 
 interface FindingRow {
   id: string;
@@ -489,7 +490,11 @@ export function ReviewWorkspaceClient({
       ))}
 
       <Card>
-        {blockedReason && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{blockedReason}</p>}
+        {blockedReason && (
+          <Alert variant="warning" className="mb-3">
+            {blockedReason}
+          </Alert>
+        )}
         <Button disabled={pending || reportStatus !== "pending_review"} onClick={handleApprove}>
           Approve report
         </Button>
@@ -501,7 +506,11 @@ export function ReviewWorkspaceClient({
           Makes the report visible to the client and logs a real &quot;report ready&quot; notification. Separate from Approve on
           purpose — the report is reviewer-done but not yet client-visible until this step.
         </p>
-        {deliverError && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{deliverError}</p>}
+        {deliverError && (
+          <Alert variant="error" className="mb-3">
+            {deliverError}
+          </Alert>
+        )}
         {delivered || reportStatus === "sent" ? (
           <p className="text-sm text-green-700 dark:text-green-400">Delivered — the client can now see this report.</p>
         ) : (
@@ -519,7 +528,11 @@ export function ReviewWorkspaceClient({
             confirmed outside the app. Creates the sprint and AI-drafts its task breakdown; you&apos;ll land on a
             review pass before the client ever sees it.
           </p>
-          {sprintError && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{sprintError}</p>}
+          {sprintError && (
+            <Alert variant="error" className="mb-3">
+              {sprintError}
+            </Alert>
+          )}
           <ul className="space-y-2">
             {undisputedFindings
               .filter((f) => f.reviewer_status === "approved" || f.reviewer_status === "edited")
@@ -556,7 +569,11 @@ export function ReviewWorkspaceClient({
             <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
               Re-executes all five lenses fresh against the same evidence, using the company&apos;s current profile. Produces a new report in pending review — the mandatory review gate applies to it exactly as it does to this one.
             </p>
-            {rerunError && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{rerunError}</p>}
+            {rerunError && (
+              <Alert variant="error" className="mb-3">
+                {rerunError}
+              </Alert>
+            )}
             {rerunResultId ? (
               <p className="text-sm text-green-700 dark:text-green-400">
                 New report created —{" "}
