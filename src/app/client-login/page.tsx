@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { requestClientMagicLink, verifyClientCode } from "./actions";
+import { Input } from "@/app/_components/ui/Input";
+import { Button } from "@/app/_components/ui/Button";
 
 export default function ClientLoginPage() {
   const router = useRouter();
@@ -68,48 +70,38 @@ export default function ClientLoginPage() {
 
       {status === "sent" ? (
         <div className="space-y-4">
-          <p className="rounded border border-green-300 bg-green-50 p-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+          <p className="rounded-md border border-green-300 bg-green-50 p-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
             Check your email — click the link, or enter the code below (use the code if the link says
             expired/invalid, which some email providers cause by prescanning links).
           </p>
           <form onSubmit={handleVerifyCode} className="space-y-3">
-            <input
+            <Input
               type="text"
               inputMode="numeric"
               required
               placeholder="6-digit code"
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              className="w-full rounded border px-3 py-2 text-sm"
+              error={verifyError ?? undefined}
             />
-            {verifyError && <p className="text-sm text-red-600">{verifyError}</p>}
-            <button
-              type="submit"
-              disabled={verifying}
-              className="w-full rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
-            >
+            <Button type="submit" disabled={verifying} className="w-full">
               {verifying ? "Verifying…" : "Verify code"}
-            </button>
+            </Button>
           </form>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-3">
-          <input
+          <Input
             type="email"
             required
             placeholder="you@company.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded border px-3 py-2 text-sm"
+            error={status === "error" ? (errorMessage ?? undefined) : undefined}
           />
-          {status === "error" && errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
-          <button
-            type="submit"
-            disabled={status === "sending"}
-            className="w-full rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
-          >
+          <Button type="submit" disabled={status === "sending"} className="w-full">
             {status === "sending" ? "Sending…" : "Send sign-in link"}
-          </button>
+          </Button>
         </form>
       )}
     </div>

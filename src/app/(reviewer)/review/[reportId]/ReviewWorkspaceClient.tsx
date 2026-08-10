@@ -19,6 +19,11 @@ import {
 } from "./actions";
 import type { DisputeResolution } from "@/lib/reviewer/workspace";
 import { matchRecommendationLibraryEntries, type RecommendationLibraryEntry } from "@/lib/recommendations/recommendation-library";
+import { Card } from "@/app/_components/ui/Card";
+import { Input } from "@/app/_components/ui/Input";
+import { Textarea } from "@/app/_components/ui/Textarea";
+import { Select } from "@/app/_components/ui/Select";
+import { Button } from "@/app/_components/ui/Button";
 
 interface FindingRow {
   id: string;
@@ -276,7 +281,7 @@ export function ReviewWorkspaceClient({
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <div className="mb-1 flex items-center gap-2">
-        <h1 className="text-2xl font-semibold">{companyName}</h1>
+        <h1 className="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">{companyName}</h1>
         <span
           className={`rounded-full px-2 py-0.5 text-xs font-medium ${
             planTier === "concierge"
@@ -288,7 +293,7 @@ export function ReviewWorkspaceClient({
         </span>
         {companyUserId && (
           <select
-            className="rounded border px-1.5 py-0.5 text-xs"
+            className="rounded-md border border-neutral-300 bg-white px-1.5 py-0.5 text-xs text-neutral-900 shadow-sm outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
             value={planTier}
             disabled={tierPending}
             onChange={(e) => handleSetPlanTier(e.target.value as "free" | "concierge")}
@@ -331,21 +336,28 @@ export function ReviewWorkspaceClient({
       )}
 
       {top3FindingIds.length > 0 && (
-        <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-          <h2 className="mb-3 font-medium">Top 3 priorities</h2>
+        <Card title="Top 3 priorities" className="mb-8">
           <ol className="space-y-2">
             {top3FindingIds.map((id, i) => {
               const f = findingById.get(id);
               return (
-                <li key={id} className="flex items-center justify-between text-sm">
+                <li key={id} className="flex items-center justify-between text-sm text-neutral-800 dark:text-neutral-200">
                   <span>
                     {i + 1}. {f ? displayedContent(f).title : id}
                   </span>
                   <span className="flex gap-1">
-                    <button disabled={pending || i === 0} onClick={() => handleMoveTop3(i, -1)} className="rounded border px-2 py-0.5 disabled:opacity-30">
+                    <button
+                      disabled={pending || i === 0}
+                      onClick={() => handleMoveTop3(i, -1)}
+                      className="rounded-md border border-neutral-300 px-2 py-0.5 hover:bg-neutral-50 disabled:opacity-30 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                    >
                       ↑
                     </button>
-                    <button disabled={pending || i === top3FindingIds.length - 1} onClick={() => handleMoveTop3(i, 1)} className="rounded border px-2 py-0.5 disabled:opacity-30">
+                    <button
+                      disabled={pending || i === top3FindingIds.length - 1}
+                      onClick={() => handleMoveTop3(i, 1)}
+                      className="rounded-md border border-neutral-300 px-2 py-0.5 hover:bg-neutral-50 disabled:opacity-30 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                    >
                       ↓
                     </button>
                   </span>
@@ -353,19 +365,19 @@ export function ReviewWorkspaceClient({
               );
             })}
           </ol>
-        </section>
+        </Card>
       )}
 
       {fixFirstCandidates.length > 0 && (
         <section className="mb-8 rounded-lg border border-neutral-300 bg-neutral-50 p-5 dark:border-neutral-700 dark:bg-neutral-900/50">
-          <h2 className="mb-1 font-medium">Suggested fix-first (not yet in top 3)</h2>
+          <h2 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">Suggested fix-first (not yet in top 3)</h2>
           <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
             Deterministically flagged: critical severity, or high severity directly blocking the client&apos;s stated goal. A suggestion only — promote
             manually if it belongs in the top 3.
           </p>
           <ul className="space-y-2">
             {fixFirstCandidates.map((f) => (
-              <li key={f.id} className="flex items-center justify-between text-sm">
+              <li key={f.id} className="flex items-center justify-between text-sm text-neutral-800 dark:text-neutral-200">
                 <span>
                   <span className={`mr-2 rounded-full px-2 py-0.5 text-xs ${SEVERITY_BADGE[displayedContent(f).severity]}`}>
                     {displayedContent(f).severity}
@@ -373,11 +385,11 @@ export function ReviewWorkspaceClient({
                   {displayedContent(f).title}
                 </span>
                 {f.reviewer_status === "draft" ? (
-                  <span className="text-xs text-neutral-400">decide this finding first</span>
+                  <span className="text-xs text-neutral-400 dark:text-neutral-500">decide this finding first</span>
                 ) : (
-                  <button disabled={pending} onClick={() => handlePromoteToTop3(f.id)} className="rounded border px-2 py-0.5 text-xs">
+                  <Button variant="secondary" disabled={pending} onClick={() => handlePromoteToTop3(f.id)} className="px-2 py-0.5 text-xs">
                     Add to top 3
-                  </button>
+                  </Button>
                 )}
               </li>
             ))}
@@ -387,14 +399,14 @@ export function ReviewWorkspaceClient({
 
       {conflicts.length > 0 && (
         <section className="mb-8 rounded-lg border border-orange-300 bg-orange-50 p-5 dark:border-orange-800 dark:bg-orange-950">
-          <h2 className="mb-3 font-medium">Flagged conflicts</h2>
+          <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Flagged conflicts</h2>
           <ul className="space-y-4">
             {conflicts.map((c) => {
               const a = findingById.get(c.finding_a_id);
               const b = findingById.get(c.finding_b_id);
               return (
                 <li key={c.id} className="text-sm">
-                  <p className="mb-1">
+                  <p className="mb-1 text-neutral-900 dark:text-neutral-50">
                     <strong>{a ? displayedContent(a).title : c.finding_a_id}</strong> vs.{" "}
                     <strong>{b ? displayedContent(b).title : c.finding_b_id}</strong>
                   </p>
@@ -404,9 +416,9 @@ export function ReviewWorkspaceClient({
                   ) : resolvingConflictId === c.id ? (
                     <ConflictResolutionForm onCancel={() => setResolvingConflictId(null)} onSave={(notes) => handleResolveConflict(c.id, notes)} />
                   ) : (
-                    <button onClick={() => setResolvingConflictId(c.id)} className="rounded border px-2 py-1 text-xs">
+                    <Button variant="secondary" onClick={() => setResolvingConflictId(c.id)} className="px-2 py-1 text-xs">
                       Resolve Conflict
-                    </button>
+                    </Button>
                   )}
                 </li>
               );
@@ -417,7 +429,7 @@ export function ReviewWorkspaceClient({
 
       {disputedFindings.length > 0 && (
         <section className="mb-8 rounded-lg border border-purple-300 bg-purple-50 p-5 dark:border-purple-800 dark:bg-purple-950">
-          <h2 className="mb-3 font-medium">Disputed findings (client marked not confident)</h2>
+          <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Disputed findings (client marked not confident)</h2>
           <ul className="space-y-4">
             {disputedFindings.map((f) => (
               <li key={f.id}>
@@ -431,9 +443,9 @@ export function ReviewWorkspaceClient({
                     onSave={(resolution, notes, changes) => handleResolveDispute(f, resolution, notes, changes)}
                   />
                 ) : (
-                  <button onClick={() => setDisputingId(f.id)} className="mt-2 rounded border px-2 py-1 text-xs">
+                  <Button variant="secondary" onClick={() => setDisputingId(f.id)} className="mt-2 px-2 py-1 text-xs">
                     Resolve Dispute
-                  </button>
+                  </Button>
                 )}
               </li>
             ))}
@@ -442,8 +454,7 @@ export function ReviewWorkspaceClient({
       )}
 
       {LENS_ORDER.filter((lens) => undisputedFindings.some((f) => f.lens === lens)).map((lens) => (
-        <section key={lens} className="mb-8 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-          <h2 className="mb-3 font-medium">{LENS_LABELS[lens]}</h2>
+        <Card key={lens} title={LENS_LABELS[lens]} className="mb-8">
           <ul className="space-y-4">
             {undisputedFindings
               .filter((f) => f.lens === lens)
@@ -460,87 +471,77 @@ export function ReviewWorkspaceClient({
                     />
                   ) : (
                     <div className="mt-2 flex gap-2">
-                      <button disabled={pending} onClick={() => handleAccept(f.id)} className="rounded border px-2 py-1 text-xs">
+                      <Button variant="secondary" disabled={pending} onClick={() => handleAccept(f.id)} className="px-2 py-1 text-xs">
                         Accept
-                      </button>
-                      <button disabled={pending} onClick={() => setEditingId(f.id)} className="rounded border px-2 py-1 text-xs">
+                      </Button>
+                      <Button variant="secondary" disabled={pending} onClick={() => setEditingId(f.id)} className="px-2 py-1 text-xs">
                         Edit
-                      </button>
-                      <button disabled={pending} onClick={() => handleReject(f.id)} className="rounded border px-2 py-1 text-xs">
+                      </Button>
+                      <Button variant="secondary" disabled={pending} onClick={() => handleReject(f.id)} className="px-2 py-1 text-xs">
                         Reject
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </li>
               ))}
           </ul>
-        </section>
+        </Card>
       ))}
 
-      <section className="rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-        {blockedReason && <p className="mb-3 text-sm text-red-600">{blockedReason}</p>}
-        <button
-          disabled={pending || reportStatus !== "pending_review"}
-          onClick={handleApprove}
-          className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
-        >
+      <Card>
+        {blockedReason && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{blockedReason}</p>}
+        <Button disabled={pending || reportStatus !== "pending_review"} onClick={handleApprove}>
           Approve report
-        </button>
-      </section>
+        </Button>
+      </Card>
 
       {/* Real "Deliver" button (confirmed 2026-08-06) — closes the gap flagged across multiple end-to-end passes where deliverReport() had no UI caller. */}
-      <section className="mt-6 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-        <h2 className="mb-2 font-medium">Deliver to client</h2>
+      <Card title="Deliver to client" className="mt-6">
         <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
           Makes the report visible to the client and logs a real &quot;report ready&quot; notification. Separate from Approve on
           purpose — the report is reviewer-done but not yet client-visible until this step.
         </p>
-        {deliverError && <p className="mb-3 text-sm text-red-600">{deliverError}</p>}
+        {deliverError && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{deliverError}</p>}
         {delivered || reportStatus === "sent" ? (
           <p className="text-sm text-green-700 dark:text-green-400">Delivered — the client can now see this report.</p>
         ) : (
-          <button
-            disabled={pending || reportStatus !== "approved"}
-            onClick={handleDeliver}
-            className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
-          >
+          <Button disabled={pending || reportStatus !== "approved"} onClick={handleDeliver}>
             Deliver report
-          </button>
+          </Button>
         )}
-      </section>
+      </Card>
 
       {/* Execution Sprint entry point (confirmed 2026-08-06) — reviewer-triggered from an approved/edited finding, no in-app checkout (payment confirmed externally first). */}
       {(reportStatus === "approved" || reportStatus === "sent") && (
-        <section className="mt-6 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-          <h2 className="mb-2 font-medium">Start an Execution Sprint</h2>
+        <Card title="Start an Execution Sprint" className="mt-6">
           <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
             A bounded 2-4 week paid implementation engagement fixing ONE finding below — only once payment is
             confirmed outside the app. Creates the sprint and AI-drafts its task breakdown; you&apos;ll land on a
             review pass before the client ever sees it.
           </p>
-          {sprintError && <p className="mb-3 text-sm text-red-600">{sprintError}</p>}
+          {sprintError && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{sprintError}</p>}
           <ul className="space-y-2">
             {undisputedFindings
               .filter((f) => f.reviewer_status === "approved" || f.reviewer_status === "edited")
               .map((f) => (
-                <li key={f.id} className="flex items-center justify-between gap-2 text-sm">
+                <li key={f.id} className="flex items-center justify-between gap-2 text-sm text-neutral-800 dark:text-neutral-200">
                   <span>{displayedContent(f).title}</span>
-                  <button
+                  <Button
+                    variant="secondary"
                     disabled={pending || startingSprintFor !== null}
                     onClick={() => handleStartSprint(f.id)}
-                    className="shrink-0 rounded border px-2 py-1 text-xs"
+                    className="shrink-0 px-2 py-1 text-xs"
                   >
                     {startingSprintFor === f.id ? "Drafting tasks…" : "Start Execution Sprint"}
-                  </button>
+                  </Button>
                 </li>
               ))}
           </ul>
-        </section>
+        </Card>
       )}
 
       {/* Basic re-run/refresh button (confirmed 2026-08-05) — reviewer-triggered, see rerun-audit.ts for why. */}
-      <section className="mt-6 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-        <h2 className="mb-2 font-medium">Re-run analysis</h2>
+      <Card title="Re-run analysis" className="mt-6">
         {rerunOfReportId && (
           <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">
             This report is itself a re-run of{" "}
@@ -555,7 +556,7 @@ export function ReviewWorkspaceClient({
             <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
               Re-executes all five lenses fresh against the same evidence, using the company&apos;s current profile. Produces a new report in pending review — the mandatory review gate applies to it exactly as it does to this one.
             </p>
-            {rerunError && <p className="mb-3 text-sm text-red-600">{rerunError}</p>}
+            {rerunError && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{rerunError}</p>}
             {rerunResultId ? (
               <p className="text-sm text-green-700 dark:text-green-400">
                 New report created —{" "}
@@ -565,13 +566,9 @@ export function ReviewWorkspaceClient({
                 .
               </p>
             ) : (
-              <button
-                disabled={pending}
-                onClick={handleRerun}
-                className="rounded border px-4 py-2 text-sm font-medium disabled:opacity-40"
-              >
+              <Button variant="secondary" disabled={pending} onClick={handleRerun}>
                 Re-run analysis
-              </button>
+              </Button>
             )}
           </>
         ) : (
@@ -579,11 +576,10 @@ export function ReviewWorkspaceClient({
             This report predates evidence-snapshot support and can&apos;t be re-run — no stored evidence to re-run against.
           </p>
         )}
-      </section>
+      </Card>
 
       {/* Dormant similar-patterns infrastructure, surfaced 2026-08-06 — genuinely empty until real case volume exists (see case-library.ts). Reviewer-only, never client-facing. */}
-      <section className="mt-6 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-        <h2 className="mb-2 font-medium">Similar patterns across other companies</h2>
+      <Card title="Similar patterns across other companies" className="mt-6">
         {similarPatterns.length === 0 ? (
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Not enough real case volume yet — this only surfaces once at least 3 genuinely distinct other companies
@@ -592,7 +588,7 @@ export function ReviewWorkspaceClient({
         ) : (
           <ul className="space-y-2">
             {similarPatterns.map((p) => (
-              <li key={p.reportId} className="text-sm">
+              <li key={p.reportId} className="text-sm text-neutral-800 dark:text-neutral-200">
                 <span className="font-medium">{p.companyName}</span>{" "}
                 <span className="text-neutral-500 dark:text-neutral-400">
                   · {(p.similarityScore * 100).toFixed(0)}% overlap · {p.overlappingTags.join(", ")}
@@ -601,7 +597,7 @@ export function ReviewWorkspaceClient({
             ))}
           </ul>
         )}
-      </section>
+      </Card>
     </div>
   );
 }
@@ -610,25 +606,27 @@ function FindingCard({ f }: { f: FindingRow }) {
   const content = displayedContent(f);
   const isDraft = f.reviewer_status === "draft";
   return (
-    <div className={`rounded border p-3 ${isDraft ? "border-amber-300 dark:border-amber-800" : "border-neutral-200 dark:border-neutral-700"}`}>
-      <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+    <div
+      className={`rounded-md border bg-white p-3 shadow-sm dark:bg-neutral-900 ${isDraft ? "border-amber-300 dark:border-amber-800" : "border-neutral-300 dark:border-neutral-700"}`}
+    >
+      <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
         <span className={`rounded-full px-2 py-0.5 ${SEVERITY_BADGE[content.severity]}`}>{content.severity}</span>
         {f.origin && <span>· {f.origin}</span>}
         <span>· confidence: {content.confidenceLevel}</span>
         <span className={`rounded-full px-2 py-0.5 ${STATUS_BADGE[f.reviewer_status]}`}>{isDraft ? "needs decision" : f.reviewer_status}</span>
       </div>
-      <div className="font-medium">{content.title}</div>
+      <div className="font-medium text-neutral-900 dark:text-neutral-50">{content.title}</div>
       <dl className="mt-2 space-y-1 text-sm">
         <div>
-          <dt className="text-xs font-medium uppercase text-neutral-400">Diagnosis</dt>
+          <dt className="text-xs font-medium uppercase text-neutral-400 dark:text-neutral-500">Diagnosis</dt>
           <dd className="text-neutral-600 dark:text-neutral-400">{content.diagnosis}</dd>
         </div>
         <div>
-          <dt className="text-xs font-medium uppercase text-neutral-400">Root cause</dt>
+          <dt className="text-xs font-medium uppercase text-neutral-400 dark:text-neutral-500">Root cause</dt>
           <dd className="text-neutral-600 dark:text-neutral-400">{content.rootCause}</dd>
         </div>
         <div>
-          <dt className="text-xs font-medium uppercase text-neutral-400">Recommended action</dt>
+          <dt className="text-xs font-medium uppercase text-neutral-400 dark:text-neutral-500">Recommended action</dt>
           <dd className="text-neutral-600 dark:text-neutral-400">{content.recommendedAction}</dd>
         </div>
       </dl>
@@ -677,30 +675,13 @@ function EditForm({
   const suggestions = matchRecommendationLibraryEntries(recommendationLibrary, lens, title, diagnosis);
 
   return (
-    <div className="mt-2 space-y-2 rounded border border-blue-300 p-3 dark:border-blue-800">
-      <label className="block text-xs font-medium uppercase text-neutral-400">
-        Title
-        <input className="mt-0.5 w-full rounded border px-2 py-1 text-sm" value={title} onChange={(e) => setTitle(e.target.value)} />
-      </label>
-      <label className="block text-xs font-medium uppercase text-neutral-400">
-        Diagnosis
-        <textarea className="mt-0.5 w-full rounded border px-2 py-1 text-sm" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} rows={2} />
-      </label>
-      <label className="block text-xs font-medium uppercase text-neutral-400">
-        Root cause
-        <textarea className="mt-0.5 w-full rounded border px-2 py-1 text-sm" value={rootCause} onChange={(e) => setRootCause(e.target.value)} rows={2} />
-      </label>
-      <label className="block text-xs font-medium uppercase text-neutral-400">
-        Recommended action
-        <textarea
-          className="mt-0.5 w-full rounded border px-2 py-1 text-sm"
-          value={recommendedAction}
-          onChange={(e) => setRecommendedAction(e.target.value)}
-          rows={2}
-        />
-      </label>
+    <div className="mt-2 space-y-3 rounded-md border border-blue-300 bg-white p-3 shadow-sm dark:border-blue-800 dark:bg-neutral-900">
+      <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <Textarea label="Diagnosis" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} rows={2} />
+      <Textarea label="Root cause" value={rootCause} onChange={(e) => setRootCause(e.target.value)} rows={2} />
+      <Textarea label="Recommended action" value={recommendedAction} onChange={(e) => setRecommendedAction(e.target.value)} rows={2} />
       {suggestions.length > 0 && (
-        <div className="rounded border border-dashed border-neutral-300 bg-neutral-50 p-2 text-xs dark:border-neutral-700 dark:bg-neutral-900">
+        <div className="rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-2 text-xs dark:border-neutral-700 dark:bg-neutral-900">
           <p className="mb-1 font-medium text-neutral-500 dark:text-neutral-400">
             Suggested playbook (reference only — not auto-applied):
           </p>
@@ -713,39 +694,36 @@ function EditForm({
         </div>
       )}
       <div className="flex gap-2">
-        <select className="rounded border px-2 py-1 text-xs" value={severity} onChange={(e) => setSeverity(e.target.value as Severity)}>
+        <Select value={severity} onChange={(e) => setSeverity(e.target.value as Severity)} className="text-xs">
           {(["critical", "high", "medium", "low"] as const).map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
           ))}
-        </select>
-        <select className="rounded border px-2 py-1 text-xs" value={confidenceLevel} onChange={(e) => setConfidenceLevel(e.target.value as ConfidenceLevel)}>
+        </Select>
+        <Select value={confidenceLevel} onChange={(e) => setConfidenceLevel(e.target.value as ConfidenceLevel)} className="text-xs">
           {(["high", "medium", "low", "insufficient"] as const).map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
           ))}
-        </select>
-        <select className="rounded border px-2 py-1 text-xs" value={goalRelevance} onChange={(e) => setGoalRelevance(e.target.value as GoalRelevance)}>
+        </Select>
+        <Select value={goalRelevance} onChange={(e) => setGoalRelevance(e.target.value as GoalRelevance)} className="text-xs">
           {(["directly_blocks", "directly_affects", "directly_supports", "indirectly_affects", "unrelated"] as const).map((g) => (
             <option key={g} value={g}>
               {g}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
-      <input className="w-full rounded border px-2 py-1 text-xs" placeholder="Reviewer notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
+      <Input placeholder="Reviewer notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} className="text-xs" />
       <div className="flex gap-2">
-        <button className="rounded border px-2 py-1 text-xs" onClick={onCancel}>
+        <Button variant="secondary" className="px-2 py-1 text-xs" onClick={onCancel}>
           Cancel
-        </button>
-        <button
-          className="rounded bg-blue-600 px-2 py-1 text-xs text-white"
-          onClick={() => onSave({ title, diagnosis, rootCause, recommendedAction, severity, confidenceLevel, goalRelevance }, notes)}
-        >
+        </Button>
+        <Button className="px-2 py-1 text-xs" onClick={() => onSave({ title, diagnosis, rootCause, recommendedAction, severity, confidenceLevel, goalRelevance }, notes)}>
           Save edit
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -769,49 +747,38 @@ function DisputeResolutionForm({
   const [severity, setSeverity] = useState<Severity>(initial.severity);
 
   return (
-    <div className="mt-2 space-y-2 rounded border border-purple-400 p-3 dark:border-purple-700">
-      <div className="flex gap-3 text-xs">
+    <div className="mt-2 space-y-3 rounded-md border border-purple-400 bg-white p-3 shadow-sm dark:border-purple-700 dark:bg-neutral-900">
+      <div className="flex gap-3 text-xs text-neutral-800 dark:text-neutral-200">
         {(["keep_ai_version", "side_with_client", "edit"] as const).map((r) => (
           <label key={r} className="flex items-center gap-1">
-            <input type="radio" name="resolution" checked={resolution === r} onChange={() => setResolution(r)} />
+            <input type="radio" name="resolution" checked={resolution === r} onChange={() => setResolution(r)} className="accent-accent" />
             {r.replaceAll("_", " ")}
           </label>
         ))}
       </div>
       {resolution === "edit" && (
         <>
-          <input className="w-full rounded border px-2 py-1 text-sm" value={title} onChange={(e) => setTitle(e.target.value)} />
-          <textarea className="w-full rounded border px-2 py-1 text-sm" placeholder="Diagnosis" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} rows={2} />
-          <textarea className="w-full rounded border px-2 py-1 text-sm" placeholder="Root cause" value={rootCause} onChange={(e) => setRootCause(e.target.value)} rows={2} />
-          <textarea
-            className="w-full rounded border px-2 py-1 text-sm"
-            placeholder="Recommended action"
-            value={recommendedAction}
-            onChange={(e) => setRecommendedAction(e.target.value)}
-            rows={2}
-          />
-          <select className="rounded border px-2 py-1 text-xs" value={severity} onChange={(e) => setSeverity(e.target.value as Severity)}>
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+          <Textarea placeholder="Diagnosis" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} rows={2} />
+          <Textarea placeholder="Root cause" value={rootCause} onChange={(e) => setRootCause(e.target.value)} rows={2} />
+          <Textarea placeholder="Recommended action" value={recommendedAction} onChange={(e) => setRecommendedAction(e.target.value)} rows={2} />
+          <Select value={severity} onChange={(e) => setSeverity(e.target.value as Severity)} className="text-xs">
             {(["critical", "high", "medium", "low"] as const).map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
             ))}
-          </select>
+          </Select>
         </>
       )}
-      <input
-        className="w-full rounded border px-2 py-1 text-xs"
-        placeholder="Resolution reasoning (required)"
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-      />
+      <Input placeholder="Resolution reasoning (required)" value={notes} onChange={(e) => setNotes(e.target.value)} className="text-xs" />
       <div className="flex gap-2">
-        <button className="rounded border px-2 py-1 text-xs" onClick={onCancel}>
+        <Button variant="secondary" className="px-2 py-1 text-xs" onClick={onCancel}>
           Cancel
-        </button>
-        <button
+        </Button>
+        <Button
           disabled={!notes.trim()}
-          className="rounded bg-purple-600 px-2 py-1 text-xs text-white disabled:opacity-40"
+          className="bg-purple-600 px-2 py-1 text-xs text-white hover:bg-purple-700"
           onClick={() =>
             onSave(
               resolution,
@@ -823,7 +790,7 @@ function DisputeResolutionForm({
           }
         >
           Save resolution
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -833,19 +800,14 @@ function ConflictResolutionForm({ onCancel, onSave }: { onCancel: () => void; on
   const [notes, setNotes] = useState("");
   return (
     <div className="space-y-2">
-      <input
-        className="w-full rounded border px-2 py-1 text-xs"
-        placeholder="Which finding wins, or a merged explanation (required)"
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-      />
+      <Input placeholder="Which finding wins, or a merged explanation (required)" value={notes} onChange={(e) => setNotes(e.target.value)} className="text-xs" />
       <div className="flex gap-2">
-        <button className="rounded border px-2 py-1 text-xs" onClick={onCancel}>
+        <Button variant="secondary" className="px-2 py-1 text-xs" onClick={onCancel}>
           Cancel
-        </button>
-        <button disabled={!notes.trim()} className="rounded bg-orange-600 px-2 py-1 text-xs text-white disabled:opacity-40" onClick={() => onSave(notes)}>
+        </Button>
+        <Button disabled={!notes.trim()} className="bg-orange-600 px-2 py-1 text-xs text-white hover:bg-orange-700" onClick={() => onSave(notes)}>
           Save resolution
-        </button>
+        </Button>
       </div>
     </div>
   );

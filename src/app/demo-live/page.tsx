@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { EvidenceFieldInput, LensFinding, LensType, Severity } from "@/lib/lenses/types";
 import type { CommercialSelfReport } from "@/lib/lenses/commercial";
 import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
+import type { MetricInput } from "@/lib/lenses/metrics";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
 import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
@@ -62,9 +63,9 @@ interface FindingRow {
 }
 
 interface SourceEvidenceSnapshot {
-  financial: { evidenceFields: EvidenceFieldInput[] };
-  execution: { evidenceFields: EvidenceFieldInput[] };
-  product: { evidenceFields: EvidenceFieldInput[] };
+  financial: { evidenceFields: EvidenceFieldInput[]; metrics?: MetricInput[] };
+  execution: { evidenceFields: EvidenceFieldInput[]; metrics?: MetricInput[] };
+  product: { evidenceFields: EvidenceFieldInput[]; metrics?: MetricInput[] };
   commercial: CommercialSelfReport;
   aiGovernance: {
     hasLiveAiInProduction: boolean;

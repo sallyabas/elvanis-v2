@@ -8,6 +8,11 @@ import {
   approveSprintTasksAction,
   addSprintReviewerCommentaryAction,
 } from "./actions";
+import { Card } from "@/app/_components/ui/Card";
+import { Input } from "@/app/_components/ui/Input";
+import { Textarea } from "@/app/_components/ui/Textarea";
+import { Select } from "@/app/_components/ui/Select";
+import { Button } from "@/app/_components/ui/Button";
 
 interface SprintTaskRow {
   id: string;
@@ -81,8 +86,10 @@ export function SprintReviewWorkspaceClient({ sprintId, companyName, findingTitl
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="mb-1 text-2xl font-semibold">{companyName}</h1>
-      <p className="mb-1 text-sm text-neutral-500 dark:text-neutral-400">Execution Sprint · status: <span className="font-medium">{sprintStatus}</span></p>
+      <h1 className="mb-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">{companyName}</h1>
+      <p className="mb-1 text-sm text-neutral-500 dark:text-neutral-400">
+        Execution Sprint · status: <span className="font-medium">{sprintStatus}</span>
+      </p>
       <p className="mb-6 text-xs text-neutral-500 dark:text-neutral-400">Fixing: {findingTitle}</p>
 
       {draftCount > 0 && (
@@ -92,14 +99,13 @@ export function SprintReviewWorkspaceClient({ sprintId, companyName, findingTitl
         </section>
       )}
 
-      <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-        <h2 className="mb-3 font-medium">AI-drafted task breakdown</h2>
+      <Card title="AI-drafted task breakdown" className="mb-8">
         <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
           Once approved, this plan is locked for the client — they can update task status and KPI actuals freely, but
           changing the plan itself goes through a change-request note, not a direct edit.
         </p>
         {tasks.length === 0 ? (
-          <p className="text-sm text-neutral-500">No tasks.</p>
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">No tasks.</p>
         ) : (
           <ul className="space-y-4">
             {tasks.map((t) => (
@@ -109,56 +115,41 @@ export function SprintReviewWorkspaceClient({ sprintId, companyName, findingTitl
                   <EditForm initial={t} onCancel={() => setEditingId(null)} onSave={(edits) => handleSaveEdit(t.id, edits)} />
                 ) : (
                   <div className="mt-2 flex gap-2">
-                    <button disabled={pending} onClick={() => handleAccept(t.id)} className="rounded border px-2 py-1 text-xs">
+                    <Button variant="secondary" disabled={pending} onClick={() => handleAccept(t.id)} className="px-2 py-1 text-xs">
                       Accept
-                    </button>
-                    <button disabled={pending} onClick={() => setEditingId(t.id)} className="rounded border px-2 py-1 text-xs">
+                    </Button>
+                    <Button variant="secondary" disabled={pending} onClick={() => setEditingId(t.id)} className="px-2 py-1 text-xs">
                       Edit
-                    </button>
-                    <button disabled={pending} onClick={() => handleReject(t.id)} className="rounded border px-2 py-1 text-xs">
+                    </Button>
+                    <Button variant="secondary" disabled={pending} onClick={() => handleReject(t.id)} className="px-2 py-1 text-xs">
                       Reject
-                    </button>
+                    </Button>
                   </div>
                 )}
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Card>
 
-      <section className="rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-        {blockedReason && <p className="mb-3 text-sm text-red-600">{blockedReason}</p>}
-        <button
-          disabled={pending || sprintStatus !== "scoped"}
-          onClick={handleApprove}
-          className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink disabled:opacity-40"
-        >
+      <Card>
+        {blockedReason && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{blockedReason}</p>}
+        <Button disabled={pending || sprintStatus !== "scoped"} onClick={handleApprove}>
           Approve sprint plan
-        </button>
-      </section>
+        </Button>
+      </Card>
 
       {signedOffAt && (
-        <section className="mt-8 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-          <h2 className="mb-1 font-medium">Client signed off</h2>
+        <Card title="Client signed off" className="mt-8">
           <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
             Signed off {new Date(signedOffAt).toLocaleString()}. Your commentary below is the final report — not a
             separately AI-generated document.
           </p>
-          <textarea
-            className="w-full rounded border px-3 py-2 text-sm"
-            rows={5}
-            placeholder="What happened, what still needs work..."
-            value={commentary}
-            onChange={(e) => setCommentary(e.target.value)}
-          />
-          <button
-            disabled={pending}
-            onClick={handleSaveCommentary}
-            className="mt-2 rounded bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink disabled:opacity-40"
-          >
+          <Textarea rows={5} placeholder="What happened, what still needs work..." value={commentary} onChange={(e) => setCommentary(e.target.value)} />
+          <Button disabled={pending} onClick={handleSaveCommentary} className="mt-2 px-3 py-1.5">
             Save commentary
-          </button>
-        </section>
+          </Button>
+        </Card>
       )}
     </div>
   );
@@ -167,13 +158,15 @@ export function SprintReviewWorkspaceClient({ sprintId, companyName, findingTitl
 function TaskCard({ t }: { t: SprintTaskRow }) {
   const isDraft = t.reviewer_status === "draft";
   return (
-    <div className={`rounded border p-3 ${isDraft ? "border-amber-300 dark:border-amber-800" : "border-neutral-200 dark:border-neutral-700"}`}>
-      <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+    <div
+      className={`rounded-md border bg-white p-3 shadow-sm dark:bg-neutral-900 ${isDraft ? "border-amber-300 dark:border-amber-800" : "border-neutral-300 dark:border-neutral-700"}`}
+    >
+      <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
         <span className={`rounded-full px-2 py-0.5 ${STATUS_BADGE[t.reviewer_status]}`}>{isDraft ? "needs decision" : t.reviewer_status}</span>
         {t.owner && <span>· owner: {t.owner}</span>}
         {t.due_date && <span>· due {t.due_date}</span>}
       </div>
-      <div className="font-medium">{t.task_description}</div>
+      <div className="font-medium text-neutral-900 dark:text-neutral-50">{t.task_description}</div>
       {t.kpi_description && (
         <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
           KPI: {t.kpi_description} — target {t.kpi_target_value} ({t.kpi_direction === "higher_is_better" ? "higher is better" : "lower is better"})
@@ -205,43 +198,23 @@ function EditForm({
   const [kpiDirection, setKpiDirection] = useState<"higher_is_better" | "lower_is_better">(initial.kpi_direction ?? "higher_is_better");
 
   return (
-    <div className="mt-2 space-y-2 rounded border border-blue-300 p-3 dark:border-blue-800">
-      <label className="block text-xs font-medium uppercase text-neutral-400">
-        Task description
-        <textarea className="mt-0.5 w-full rounded border px-2 py-1 text-sm" value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} rows={2} />
-      </label>
-      <label className="block text-xs font-medium uppercase text-neutral-400">
-        Owner (role label)
-        <input className="mt-0.5 w-full rounded border px-2 py-1 text-sm" value={owner} onChange={(e) => setOwner(e.target.value)} />
-      </label>
-      <label className="block text-xs font-medium uppercase text-neutral-400">
-        KPI description
-        <input className="mt-0.5 w-full rounded border px-2 py-1 text-sm" value={kpiDescription} onChange={(e) => setKpiDescription(e.target.value)} />
-      </label>
+    <div className="mt-2 space-y-3 rounded-md border border-blue-300 bg-white p-3 shadow-sm dark:border-blue-800 dark:bg-neutral-900">
+      <Textarea label="Task description" value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} rows={2} />
+      <Input label="Owner (role label)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+      <Input label="KPI description" value={kpiDescription} onChange={(e) => setKpiDescription(e.target.value)} />
       <div className="flex gap-2">
-        <label className="block text-xs font-medium uppercase text-neutral-400">
-          Target value
-          <input
-            type="number"
-            className="mt-0.5 w-full rounded border px-2 py-1 text-sm"
-            value={kpiTargetValue}
-            onChange={(e) => setKpiTargetValue(e.target.value)}
-          />
-        </label>
-        <label className="block text-xs font-medium uppercase text-neutral-400">
-          Direction
-          <select className="mt-0.5 rounded border px-2 py-1 text-sm" value={kpiDirection} onChange={(e) => setKpiDirection(e.target.value as "higher_is_better" | "lower_is_better")}>
-            <option value="higher_is_better">Higher is better</option>
-            <option value="lower_is_better">Lower is better</option>
-          </select>
-        </label>
+        <Input label="Target value" type="number" value={kpiTargetValue} onChange={(e) => setKpiTargetValue(e.target.value)} />
+        <Select label="Direction" value={kpiDirection} onChange={(e) => setKpiDirection(e.target.value as "higher_is_better" | "lower_is_better")}>
+          <option value="higher_is_better">Higher is better</option>
+          <option value="lower_is_better">Lower is better</option>
+        </Select>
       </div>
       <div className="flex gap-2">
-        <button className="rounded border px-2 py-1 text-xs" onClick={onCancel}>
+        <Button variant="secondary" className="px-2 py-1 text-xs" onClick={onCancel}>
           Cancel
-        </button>
-        <button
-          className="rounded bg-blue-600 px-2 py-1 text-xs text-white"
+        </Button>
+        <Button
+          className="px-2 py-1 text-xs"
           onClick={() =>
             onSave({
               taskDescription,
@@ -253,7 +226,7 @@ function EditForm({
           }
         >
           Save edit
-        </button>
+        </Button>
       </div>
     </div>
   );

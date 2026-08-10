@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { CompanyJurisdictionInput } from "@/lib/modules/data-protection-compliance/jurisdiction";
 import { submitDataProtectionComplianceAudit } from "./actions";
+import { Textarea } from "@/app/_components/ui/Textarea";
+import { Button } from "@/app/_components/ui/Button";
 
 const CATEGORY_FIELDS: { key: "consentFlow" | "dataSubjectRights" | "retentionPolicy" | "breachResponse" | "crossBorderTransfer"; label: string; placeholder: string }[] = [
   {
@@ -76,7 +78,7 @@ export function DataProtectionIntakeForm({
 
   if (status === "done") {
     return (
-      <p className="rounded border border-green-300 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+      <p className="rounded-md border border-green-300 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
         Submitted for review. Request ID: {requestId}
       </p>
     );
@@ -84,29 +86,23 @@ export function DataProtectionIntakeForm({
 
   return (
     <section className="space-y-4">
-      <p className="text-xs text-neutral-400">
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">
         Leave any area blank if nothing is in place yet — that&apos;s meaningful evidence too, not an incomplete submission.
       </p>
       {CATEGORY_FIELDS.map((field) => (
-        <label key={field.key} className="block space-y-1">
-          <span className="text-sm font-medium">{field.label}</span>
-          <textarea
-            className="w-full rounded border px-3 py-2 text-sm"
-            rows={3}
-            placeholder={field.placeholder}
-            value={values[field.key]}
-            onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
-          />
-        </label>
+        <Textarea
+          key={field.key}
+          label={field.label}
+          rows={3}
+          placeholder={field.placeholder}
+          value={values[field.key]}
+          onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
+        />
       ))}
-      {status === "error" && error && <p className="text-sm text-red-600">{error}</p>}
-      <button
-        disabled={status === "submitting" || !anyFilled}
-        onClick={handleSubmit}
-        className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink disabled:opacity-40"
-      >
+      {status === "error" && error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      <Button disabled={status === "submitting" || !anyFilled} onClick={handleSubmit}>
         {status === "submitting" ? "Submitting…" : "Submit for review"}
-      </button>
+      </Button>
     </section>
   );
 }

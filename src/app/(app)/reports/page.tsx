@@ -87,17 +87,17 @@ export default async function ReportsHistoryPage() {
       </p>
 
       {items.length === 0 ? (
-        <p className="text-sm text-neutral-500">Nothing delivered yet.</p>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">Nothing delivered yet.</p>
       ) : (
         <ul className="space-y-3">
           {items.map((item) => (
             <li
               key={item.id}
-              className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900"
+              className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900"
             >
               <div>
-                <div className="font-medium">{item.label}</div>
-                <div className="text-xs text-neutral-500">
+                <div className="font-medium text-neutral-900 dark:text-neutral-50">{item.label}</div>
+                <div className="text-xs text-neutral-500 dark:text-neutral-400">
                   Delivered {item.deliveredAt ? new Date(item.deliveredAt).toLocaleDateString() : "unknown"}
                 </div>
               </div>
@@ -106,7 +106,7 @@ export default async function ReportsHistoryPage() {
                   View
                 </Link>
               ) : (
-                <span className="text-xs text-neutral-400">Detail view coming soon</span>
+                <span className="text-xs text-neutral-400 dark:text-neutral-500">Detail view coming soon</span>
               )}
             </li>
           ))}

@@ -7,6 +7,7 @@ import { deriveRoadmap } from "@/lib/reports/roadmap";
 import { computeJourneyStatus } from "@/lib/reports/journey-status";
 import { NextStepBanner } from "@/app/_components/NextStepBanner";
 import { ProgressStepper } from "@/app/_components/ProgressStepper";
+import { Card } from "@/app/_components/ui/Card";
 
 // Dashboard — current, live state (confirmed 2026-08-04, Priority 3):
 // latest top-3 priorities + roadmap status, drawn from the most recently
@@ -102,13 +103,12 @@ export default async function DashboardPage() {
       {!latestReport && <NextStepBanner journeyStatus={journeyStatus} />}
 
       {latestReport && (
-        <>
-          <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-            <h2 className="mb-3 font-medium">Latest top-3 priorities</h2>
+        <div className="space-y-6">
+          <Card title="Latest top-3 priorities">
             {top3.length === 0 ? (
-              <p className="text-sm text-neutral-500">No priorities to show.</p>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">No priorities to show.</p>
             ) : (
-              <ol className="list-inside list-decimal space-y-2 text-sm">
+              <ol className="list-inside list-decimal space-y-2 text-sm text-neutral-800 dark:text-neutral-200">
                 {top3.map((f) => (
                   <li key={f.findingId}>{f.title}</li>
                 ))}
@@ -117,34 +117,33 @@ export default async function DashboardPage() {
             <Link href={`/reports/${latestReport.id}`} className="mt-3 inline-block text-sm underline">
               View full report
             </Link>
-          </section>
+          </Card>
 
           {activeSprint && (
-            <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-              <h2 className="mb-3 font-medium">Active Execution Sprint</h2>
+            <Card title="Active Execution Sprint">
               <p className="text-sm text-neutral-600 dark:text-neutral-400">{sprintFindingTitle ?? "In progress"}</p>
               {sprintTaskCounts && (
-                <p className="mt-1 text-sm text-neutral-500">
+                <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
                   {sprintTaskCounts.done} of {sprintTaskCounts.total} tasks done
                 </p>
               )}
-              {activeSprint.target_end_date && <p className="mt-1 text-sm text-neutral-500">Target end {activeSprint.target_end_date}</p>}
+              {activeSprint.target_end_date && <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Target end {activeSprint.target_end_date}</p>}
               <Link href={`/execution-sprint/${activeSprint.id}`} className="mt-3 inline-block text-sm underline">
                 View sprint
               </Link>
-            </section>
+            </Card>
           )}
 
-          <section className="mb-8">
-            <h2 className="mb-3 font-medium">Roadmap status</h2>
+          <section>
+            <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Roadmap status</h2>
             <div className="grid gap-4 sm:grid-cols-3">
               {(["day30", "day60", "day90"] as const).map((bucket, i) => (
-                <div key={bucket} className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
-                  <h3 className="mb-2 font-medium">{[30, 60, 90][i]} days</h3>
+                <div key={bucket} className="rounded-md border border-neutral-300 bg-white p-3 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+                  <h3 className="mb-2 font-medium text-neutral-900 dark:text-neutral-50">{[30, 60, 90][i]} days</h3>
                   {roadmap[bucket].length === 0 ? (
-                    <p className="text-neutral-400">Nothing at this horizon</p>
+                    <p className="text-neutral-400 dark:text-neutral-500">Nothing at this horizon</p>
                   ) : (
-                    <ul className="space-y-1">
+                    <ul className="space-y-1 text-neutral-800 dark:text-neutral-200">
                       {roadmap[bucket].map((f) => (
                         <li key={f.findingId}>{f.title}</li>
                       ))}
@@ -154,7 +153,7 @@ export default async function DashboardPage() {
               ))}
             </div>
           </section>
-        </>
+        </div>
       )}
     </div>
   );

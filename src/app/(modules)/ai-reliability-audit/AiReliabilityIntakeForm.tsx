@@ -4,6 +4,10 @@ import { useState } from "react";
 import { SELF_TEST_PROMPTS } from "@/lib/modules/ai-reliability-audit/self-test-prompts";
 import type { AgentAutomationEvidence, AiReliabilityDraftInput, AiReliabilitySystemType } from "@/lib/modules/ai-reliability-audit/types";
 import { submitAiReliabilityAudit } from "./actions";
+import { Textarea } from "@/app/_components/ui/Textarea";
+import { Select } from "@/app/_components/ui/Select";
+import { Card } from "@/app/_components/ui/Card";
+import { Button } from "@/app/_components/ui/Button";
 
 export function AiReliabilityIntakeForm({ companyId }: { companyId: string }) {
   const [systemType, setSystemType] = useState<AiReliabilitySystemType | null>(null);
@@ -62,7 +66,7 @@ export function AiReliabilityIntakeForm({ companyId }: { companyId: string }) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-10">
         <h1 className="mb-2 text-2xl font-semibold">AI Reliability Audit</h1>
-        <p className="rounded border border-green-300 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+        <p className="rounded-md border border-green-300 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
           Submitted for review. Request ID: {requestId}
         </p>
       </div>
@@ -79,20 +83,22 @@ export function AiReliabilityIntakeForm({ companyId }: { companyId: string }) {
 
       {!systemType ? (
         <section className="space-y-3">
-          <h2 className="font-medium">Does your AI have a conversational interface, or does it run autonomously in the background?</h2>
+          <h2 className="font-medium text-neutral-900 dark:text-neutral-50">
+            Does your AI have a conversational interface, or does it run autonomously in the background?
+          </h2>
           <button
             onClick={() => setSystemType("conversational")}
-            className="block w-full rounded border p-4 text-left hover:bg-neutral-50 dark:hover:bg-neutral-900"
+            className="block w-full rounded-md border border-neutral-300 bg-white p-4 text-left shadow-sm transition-colors hover:border-accent hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
           >
-            <div className="font-medium">Conversational (chatbot)</div>
-            <div className="text-sm text-neutral-500">Customers or users interact with it directly through chat.</div>
+            <div className="font-medium text-neutral-900 dark:text-neutral-50">Conversational (chatbot)</div>
+            <div className="text-sm text-neutral-500 dark:text-neutral-400">Customers or users interact with it directly through chat.</div>
           </button>
           <button
             onClick={() => setSystemType("agent_automation")}
-            className="block w-full rounded border p-4 text-left hover:bg-neutral-50 dark:hover:bg-neutral-900"
+            className="block w-full rounded-md border border-neutral-300 bg-white p-4 text-left shadow-sm transition-colors hover:border-accent hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
           >
-            <div className="font-medium">Agent / automation</div>
-            <div className="text-sm text-neutral-500">Runs in the background with no direct user-facing chat interface.</div>
+            <div className="font-medium text-neutral-900 dark:text-neutral-50">Agent / automation</div>
+            <div className="text-sm text-neutral-500 dark:text-neutral-400">Runs in the background with no direct user-facing chat interface.</div>
           </button>
         </section>
       ) : systemType === "conversational" ? (
@@ -102,113 +108,90 @@ export function AiReliabilityIntakeForm({ companyId }: { companyId: string }) {
             didn&apos;t run blank.
           </p>
           {SELF_TEST_PROMPTS.map((p, i) => (
-            <div key={i} className="space-y-2 rounded border p-4">
-              <div className="text-xs font-medium uppercase text-neutral-400">{p.category.replace(/_/g, " ")}</div>
-              <div className="text-sm font-medium">{p.prompt}</div>
-              <div className="text-xs text-neutral-500">{p.whatWereLookingFor}</div>
-              <textarea
-                className="w-full rounded border px-3 py-2 text-sm"
+            <Card key={i}>
+              <div className="mb-2 space-y-1">
+                <div className="text-xs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+                  {p.category.replace(/_/g, " ")}
+                </div>
+                <div className="text-sm font-medium text-neutral-900 dark:text-neutral-50">{p.prompt}</div>
+                <div className="text-xs text-neutral-500 dark:text-neutral-400">{p.whatWereLookingFor}</div>
+              </div>
+              <Textarea
                 rows={3}
                 placeholder="Paste the AI's real response here…"
                 value={responses[i] ?? ""}
                 onChange={(e) => setResponses((prev) => ({ ...prev, [i]: e.target.value }))}
               />
-            </div>
+            </Card>
           ))}
-          {status === "error" && error && <p className="text-sm text-red-600">{error}</p>}
+          {status === "error" && error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           <div className="flex gap-2">
-            <button onClick={() => setSystemType(null)} className="rounded border px-4 py-2 text-sm">
+            <Button type="button" variant="secondary" onClick={() => setSystemType(null)}>
               Back
-            </button>
-            <button
-              disabled={status === "submitting"}
-              onClick={handleSubmit}
-              className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink disabled:opacity-40"
-            >
+            </Button>
+            <Button disabled={status === "submitting"} onClick={handleSubmit}>
               {status === "submitting" ? "Submitting…" : "Submit for review"}
-            </button>
+            </Button>
           </div>
         </section>
       ) : (
         <section className="space-y-4">
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">Do you have trace logs or execution history for this agent?</span>
-            <select
-              className="w-full rounded border px-3 py-2 text-sm"
-              value={evidence.hasTraceLogs ? "yes" : "no"}
-              onChange={(e) => setEvidence((prev) => ({ ...prev, hasTraceLogs: e.target.value === "yes" }))}
-            >
-              <option value="no">No</option>
-              <option value="yes">Yes</option>
-            </select>
-          </label>
+          <Select
+            label="Do you have trace logs or execution history for this agent?"
+            value={evidence.hasTraceLogs ? "yes" : "no"}
+            onChange={(e) => setEvidence((prev) => ({ ...prev, hasTraceLogs: e.target.value === "yes" }))}
+          >
+            <option value="no">No</option>
+            <option value="yes">Yes</option>
+          </Select>
           {evidence.hasTraceLogs && (
-            <label className="block space-y-1">
-              <span className="text-sm font-medium">Briefly summarize what the logs show</span>
-              <textarea
-                className="w-full rounded border px-3 py-2 text-sm"
-                rows={3}
-                value={evidence.traceLogsSummary ?? ""}
-                onChange={(e) => setEvidence((prev) => ({ ...prev, traceLogsSummary: e.target.value }))}
-              />
-            </label>
-          )}
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">What credentials/permissions does it operate under?</span>
-            <textarea
-              className="w-full rounded border px-3 py-2 text-sm"
-              rows={2}
-              value={evidence.operatingCredentialsDescription ?? ""}
-              onChange={(e) => setEvidence((prev) => ({ ...prev, operatingCredentialsDescription: e.target.value }))}
+            <Textarea
+              label="Briefly summarize what the logs show"
+              rows={3}
+              value={evidence.traceLogsSummary ?? ""}
+              onChange={(e) => setEvidence((prev) => ({ ...prev, traceLogsSummary: e.target.value }))}
             />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">Are its actions attributable to it specifically (not a shared account)?</span>
-            <select
-              className="w-full rounded border px-3 py-2 text-sm"
-              value={evidence.actionsAttributable === null ? "" : evidence.actionsAttributable ? "yes" : "no"}
-              onChange={(e) => setEvidence((prev) => ({ ...prev, actionsAttributable: e.target.value === "" ? null : e.target.value === "yes" }))}
-            >
-              <option value="">Unknown</option>
-              <option value="yes">Yes</option>
-              <option value="no">No</option>
-            </select>
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">Does a human review/escalation step exist for its consequential actions?</span>
-            <select
-              className="w-full rounded border px-3 py-2 text-sm"
-              value={evidence.hasHumanEscalation === null ? "" : evidence.hasHumanEscalation ? "yes" : "no"}
-              onChange={(e) => setEvidence((prev) => ({ ...prev, hasHumanEscalation: e.target.value === "" ? null : e.target.value === "yes" }))}
-            >
-              <option value="">Unknown</option>
-              <option value="yes">Yes</option>
-              <option value="no">No</option>
-            </select>
-          </label>
-          {evidence.hasHumanEscalation && (
-            <label className="block space-y-1">
-              <span className="text-sm font-medium">Briefly describe the escalation process</span>
-              <textarea
-                className="w-full rounded border px-3 py-2 text-sm"
-                rows={2}
-                value={evidence.escalationDescription ?? ""}
-                onChange={(e) => setEvidence((prev) => ({ ...prev, escalationDescription: e.target.value }))}
-              />
-            </label>
           )}
-          {status === "error" && error && <p className="text-sm text-red-600">{error}</p>}
+          <Textarea
+            label="What credentials/permissions does it operate under?"
+            rows={2}
+            value={evidence.operatingCredentialsDescription ?? ""}
+            onChange={(e) => setEvidence((prev) => ({ ...prev, operatingCredentialsDescription: e.target.value }))}
+          />
+          <Select
+            label="Are its actions attributable to it specifically (not a shared account)?"
+            value={evidence.actionsAttributable === null ? "" : evidence.actionsAttributable ? "yes" : "no"}
+            onChange={(e) => setEvidence((prev) => ({ ...prev, actionsAttributable: e.target.value === "" ? null : e.target.value === "yes" }))}
+          >
+            <option value="">Unknown</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </Select>
+          <Select
+            label="Does a human review/escalation step exist for its consequential actions?"
+            value={evidence.hasHumanEscalation === null ? "" : evidence.hasHumanEscalation ? "yes" : "no"}
+            onChange={(e) => setEvidence((prev) => ({ ...prev, hasHumanEscalation: e.target.value === "" ? null : e.target.value === "yes" }))}
+          >
+            <option value="">Unknown</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </Select>
+          {evidence.hasHumanEscalation && (
+            <Textarea
+              label="Briefly describe the escalation process"
+              rows={2}
+              value={evidence.escalationDescription ?? ""}
+              onChange={(e) => setEvidence((prev) => ({ ...prev, escalationDescription: e.target.value }))}
+            />
+          )}
+          {status === "error" && error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           <div className="flex gap-2">
-            <button onClick={() => setSystemType(null)} className="rounded border px-4 py-2 text-sm">
+            <Button type="button" variant="secondary" onClick={() => setSystemType(null)}>
               Back
-            </button>
-            <button
-              disabled={status === "submitting"}
-              onClick={handleSubmit}
-              className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink disabled:opacity-40"
-            >
+            </Button>
+            <Button disabled={status === "submitting"} onClick={handleSubmit}>
               {status === "submitting" ? "Submitting…" : "Submit for review"}
-            </button>
+            </Button>
           </div>
         </section>
       )}
