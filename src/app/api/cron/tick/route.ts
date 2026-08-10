@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { checkAndNotifyClosedEditWindows } from "@/lib/reviewer/notifications";
+import { runPendingAudits } from "@/lib/audit/run-pending-audits";
 import { runPendingAiOpportunitySynthesis } from "@/lib/synthesis/run-pending-synthesis";
 import { checkReAuditReminders } from "@/lib/reviewer/re-audit-reminders";
 import { checkEvidenceCompletenessNudges } from "@/lib/reviewer/evidence-nudges";
@@ -34,6 +35,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // runPendingAudits runs alone, before the other checks, not inside the
+  // same Promise.all batch (confirmed 2026-08-10, delayed-execution
+  // architecture) — it's now the primary trigger for the 5-lens Groq run
+  // (see its own docblock), and aiOpportunitySynthesis below also calls
+  // Groq. Every check before this one only ever had ONE Groq-calling path
+  // per tick; running both concurrently would be the first time two real
+  // Groq workloads could burst in the same tick, the exact class of
+  // per-minute rate-limit risk run-audit.ts's own lens-staggering already
+  // exists to avoid within a single company's audit. Kept isolated here
+  // rather than accepted implicitly.
+  const pendingAuditsResult = await runCheck("pendingAudits", runPendingAudits);
+
   const checks = await Promise.all([
     runCheck("editWindowNotifications", checkAndNotifyClosedEditWindows),
     runCheck("aiOpportunitySynthesis", runPendingAiOpportunitySynthesis),
@@ -49,5 +62,5 @@ export async function GET(request: Request) {
   // waiting for the next tick.
   const dispatchResult = await runCheck("sendPendingNotifications", sendPendingNotifications);
 
-  return NextResponse.json({ ranAt: new Date().toISOString(), checks: [...checks, dispatchResult] });
+  return NextResponse.json({ ranAt: new Date().toISOString(), checks: [pendingAuditsResult, ...checks, dispatchResult] });
 }

@@ -20,6 +20,30 @@ const COPY: Record<JourneyStatus["stage"], { title: string; body: string; ctaLab
     ctaLabel: "Submit evidence",
     href: () => "/evidence-intake",
   },
+  // Three new stages, confirmed 2026-08-10 (delayed-execution
+  // architecture) — none of these have a reportId yet, since a `reports`
+  // row is now only ever created once the audit actually runs. All three
+  // route back to /evidence-intake, which itself correctly renders the
+  // editable form or the locked status view depending on which of these
+  // stages is current (see that page's own logic).
+  editing: {
+    title: "Your evidence is saved — you can still make changes",
+    body: "Head back to add more or revise anything before your edit window closes.",
+    ctaLabel: "Continue editing",
+    href: () => "/evidence-intake",
+  },
+  queued_for_audit: {
+    title: "Your evidence is queued for analysis",
+    body: "Your edit window has closed and your evidence is locked in — we'll start analyzing it on our next scheduled run.",
+    ctaLabel: "Check status",
+    href: () => "/evidence-intake",
+  },
+  audit_in_progress: {
+    title: "Your evidence is being analyzed",
+    body: "This usually takes under a minute — check back shortly.",
+    ctaLabel: "Check status",
+    href: () => "/evidence-intake",
+  },
   in_review: {
     title: "Your evidence is being reviewed",
     body: "We're reviewing your submission — you'll get an email once your report is ready.",

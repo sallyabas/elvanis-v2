@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { computeSubmissionDisplayStage, type SubmissionDisplayStage } from "@/lib/evidence/submission-status";
 
 /**
  * Deterministic "what's the next step" signal (confirmed 2026-08-07) —
@@ -10,9 +11,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * single source of truth" discipline already used for deriveRoadmap()/
  * getTotalTurnaroundHours().
  *
- * Deliberately company-journey-only (the core audit's reports table), not
- * module_requests/execution_sprints — this answers "has this company ever
- * gotten a core audit report," the thing both consuming pages actually ask.
+ * Extended 2026-08-10 for the delayed-execution architecture — a company
+ * can now be "in progress" in a way that has no `reports` row at all yet
+ * (editing / queued for audit / audit in progress all happen BEFORE
+ * runAudit() ever creates one). This function checks for an active
+ * (non-'completed') pending_evidence_submissions row FIRST; only once none
+ * exists does it fall back to the original reports-based logic below,
+ * unchanged from before this date.
+ *
+ * Deliberately company-journey-only (the core audit's reports table +
+ * pending_evidence_submissions), not module_requests/execution_sprints —
+ * this answers "has this company ever gotten a core audit report," the
+ * thing both consuming pages actually ask.
  *
  * MUST be called with the admin client, not the caller's session-scoped
  * one — `reports`' client-facing RLS policy only allows `status = 'sent'`
@@ -26,14 +36,33 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * consumer of this function already does) so the companyId passed in here
  * is never attacker-supplied.
  */
-export type JourneyStage = "no_evidence" | "in_review" | "has_report";
+export type JourneyStage = "no_evidence" | "in_review" | "has_report" | SubmissionDisplayStage;
 
 export interface JourneyStatus {
   stage: JourneyStage;
   latestReportId: string | null;
+  /** Set only when stage is editing/queued_for_audit/audit_in_progress — the client's own edit-window deadline, for "X hours remaining" copy without a second query. */
+  editWindowClosesAt: string | null;
 }
 
 export async function computeJourneyStatus(supabase: SupabaseClient, companyId: string): Promise<JourneyStatus> {
+  const { data: pendingSubmission } = await supabase
+    .from("pending_evidence_submissions")
+    .select("status, edit_window_closes_at")
+    .eq("company_id", companyId)
+    .neq("status", "completed")
+    .maybeSingle();
+
+  if (pendingSubmission) {
+    const stage = computeSubmissionDisplayStage({
+      status: pendingSubmission.status as "editing" | "audit_in_progress" | "completed",
+      edit_window_closes_at: pendingSubmission.edit_window_closes_at as string,
+    });
+    if (stage) {
+      return { stage, latestReportId: null, editWindowClosesAt: pendingSubmission.edit_window_closes_at as string };
+    }
+  }
+
   const { data: latestReport } = await supabase
     .from("reports")
     .select("id, status")
@@ -43,12 +72,12 @@ export async function computeJourneyStatus(supabase: SupabaseClient, companyId: 
     .maybeSingle();
 
   if (!latestReport) {
-    return { stage: "no_evidence", latestReportId: null };
+    return { stage: "no_evidence", latestReportId: null, editWindowClosesAt: null };
   }
 
   if (latestReport.status === "sent") {
-    return { stage: "has_report", latestReportId: latestReport.id as string };
+    return { stage: "has_report", latestReportId: latestReport.id as string, editWindowClosesAt: null };
   }
 
-  return { stage: "in_review", latestReportId: latestReport.id as string };
+  return { stage: "in_review", latestReportId: latestReport.id as string, editWindowClosesAt: null };
 }

@@ -21,7 +21,18 @@ function currentStepIndex(stage: JourneyStatus["stage"]): number {
   switch (stage) {
     case "no_evidence":
       return 1; // Evidence
+    case "editing":
+      // Delayed-execution architecture (confirmed 2026-08-10) — evidence
+      // is submitted but still genuinely editable, no audit has run yet.
+      // Still the Evidence step, same as no_evidence.
+      return 1; // Evidence
+    case "queued_for_audit":
+    case "audit_in_progress":
     case "in_review":
+      // All three land on "Review": the client's own part is done (their
+      // window has closed), and this step already conflated "the audit
+      // runs" with "a human reviews it" as one visual step before this
+      // date — queued/in-progress audit execution fits the same slot.
       return 2; // Review
     case "has_report":
       return 3; // Report

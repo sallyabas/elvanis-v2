@@ -7,6 +7,7 @@ import type { GovernanceDimensionDefinition, GovernanceDimensionKey } from "@/li
 import type { MetricInput } from "@/lib/lenses/metrics";
 import { submitEvidence } from "./actions";
 import { saveEvidenceIntakeDraft } from "@/lib/evidence/draft";
+import type { EvidenceIntakeDraft } from "@/lib/evidence/draft-shape";
 import { EXPORT_INSTRUCTIONS_BY_LENS, type EvidenceLensKey } from "@/lib/evidence/export-instructions";
 import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
 import { REVIEW_PERIOD_HOURS } from "@/lib/reports/sla";
@@ -17,19 +18,11 @@ import { Card } from "@/app/_components/ui/Card";
 import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
 
-/** Shape of the draft blob saved/restored — mirrors this form's own local state, not a typed evidence submission (see evidence_intake_drafts migration docblock). */
-interface EvidenceIntakeDraft {
-  fieldValues?: Record<string, string>;
-  metricValues?: Record<string, string>;
-  namedCompetitors?: string;
-  marketChangeNotes?: string;
-  pricingPressureNotes?: string;
-  lostDealsNotes?: string;
-  hasLiveAiInProduction?: boolean;
-  governanceDocsSubmitted?: boolean;
-  governanceEvidenceText?: string;
-  dimensionScores?: Partial<Record<GovernanceDimensionKey, number>>;
-}
+// EvidenceIntakeDraft moved to draft-shape.ts (confirmed 2026-08-10,
+// delayed-execution architecture) — a server component (evidence-intake/
+// page.tsx) now also needs this type, to convert a real
+// pending_evidence_submissions.evidence_payload back into the form's own
+// draft shape when a client returns to actually use their edit window.
 
 // Field labels now live in src/lib/evidence/field-sets.ts (confirmed
 // 2026-08-06), shared with the client report page's "Evidence submitted"
@@ -99,7 +92,7 @@ export function EvidenceIntakeForm({
   governanceDimensions,
   editWindowHours,
   isFreeAudit,
-  inProgressReportId,
+  isEditingExisting,
 }: {
   companyId: string;
   goalId: string;
@@ -122,18 +115,13 @@ export function EvidenceIntakeForm({
   /** Computed server-side from whether this company has any already-`sent` report — real free-tier state, not assumed. */
   isFreeAudit: boolean;
   /**
-   * Real duplicate-submission warning (confirmed 2026-08-10, real bug list
-   * from live testing) — set when this company already has a
-   * `pending_review`/`approved` report (computeJourneyStatus's "in_review"
-   * stage) that hasn't been delivered yet. There is no "edit an existing
-   * report in place" mechanism anywhere in this codebase (see run-audit.ts
-   * — every submission creates a brand-new report and re-runs all five
-   * lenses from scratch), so submitting again here does NOT edit that
-   * report, it creates a second, separate one. Rather than silently allow
-   * that confusion (or silently block a feature that might be intended),
-   * this surfaces it honestly before the client resubmits.
+   * True when a real, active 'editing' pending_evidence_submissions row
+   * already exists for this company (confirmed 2026-08-10, delayed-
+   * execution architecture) — Confirm now genuinely UPDATES that same
+   * record in place rather than creating anything new, so the modal copy
+   * below is worded differently for a first submission vs. a real edit.
    */
-  inProgressReportId: string | null;
+  isEditingExisting: boolean;
 }) {
   const router = useRouter();
 
@@ -299,12 +287,14 @@ export function EvidenceIntakeForm({
     });
 
     if (result.success) {
-      // router.refresh() removed, confirmed 2026-08-07 — same fix as
-      // OnboardingWizard.tsx and the login pages: redundant and racy
-      // immediately after push(). The report page is fully dynamic
-      // (session-dependent), so push() alone already forces a fresh
-      // server render of it.
-      router.push(`/reports/${result.reportId}`);
+      // Redirects to /dashboard, not /reports/[reportId] (confirmed
+      // 2026-08-10, delayed-execution architecture) — submitting evidence
+      // no longer creates a report at all; it only stores the evidence
+      // record (see submitEvidence()'s own docblock). There's no reportId
+      // to navigate to yet. Dashboard already computes journeyStatus and
+      // shows the right "Editing / Queued for audit / Audit in progress"
+      // state via ProgressStepper/NextStepBanner.
+      router.push("/dashboard");
     } else {
       setStatus("error");
       setError(result.error ?? "Something went wrong.");
@@ -321,17 +311,6 @@ export function EvidenceIntakeForm({
           {draftStatus === "saving" ? "Saving…" : draftStatus === "saved" ? "Draft saved" : ""}
         </p>
       </div>
-
-      {inProgressReportId && (
-        <Alert variant="warning">
-          You already have an audit in progress.{" "}
-          <Link href={`/reports/${inProgressReportId}`} className="underline">
-            View its status
-          </Link>
-          . Submitting this form starts a <span className="font-medium">second, separate</span> audit — it won&apos;t
-          update or replace the one already in progress.
-        </Alert>
-      )}
 
       {/* Upload-point micro-copy (spec §1.8, confirmed 2026-08-03) — shown right where evidence is entered, not buried in a footer link. */}
       <p className="rounded-md border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
@@ -486,63 +465,68 @@ export function EvidenceIntakeForm({
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg dark:bg-neutral-900">
-            <h3 className="mb-2 text-base font-semibold text-neutral-900 dark:text-neutral-50">Ready to submit?</h3>
-            {/* Wording corrected 2026-08-10 (direct founder request, following
-                the real bug list pass) — "edit or add evidence" previously
-                implied true in-place editing, which doesn't exist in this
-                codebase: submitting again during the window creates a
-                separate, new report rather than updating this one (see
-                run-audit.ts — every submission is a fresh audit run, full
-                stop). Confirmed decision: for pilot, this real behavior is
-                fine as-is — the fix needed is honest copy, not building
-                real edit-in-place. */}
+            <h3 className="mb-2 text-base font-semibold text-neutral-900 dark:text-neutral-50">
+              {isEditingExisting ? "Save these changes?" : "Ready to submit?"}
+            </h3>
             {/*
-             * Real, subtle bug found and fixed 2026-08-10 while verifying
-             * the fix above: a literal space immediately after an
-             * expression (e.g. "{editWindowHours} hours") is silently
-             * dropped by JSX's whitespace-collapse rule whenever that text
-             * node spans multiple source lines (confirmed live via
-             * childNodes inspection — rendered as "24hours", no space,
-             * despite a real space in the source). This is very likely
-             * the exact mechanism behind the "missing space in '72hours'"
-             * typo from the original bug report — a real, reproducible
-             * JSX gotcha, not something a source grep for the literal
-             * string would ever catch. Fixed everywhere in this paragraph
-             * by using an explicit {" "} right after every expression
-             * whose following text could wrap onto a new line, instead of
-             * relying on a plain space character surviving JSX's
-             * line-based trimming.
+             * Rewritten 2026-08-10 for the real delayed-execution
+             * architecture (direct founder request, following a real
+             * architecture question about when the audit actually runs).
+             * Genuinely accurate now, not honesty-patched: the audit no
+             * longer runs immediately on submit, so "edit or add evidence"
+             * is now literally true — resubmitting during the window
+             * really does update this same record in place (see
+             * pending-submission.ts), not create anything new.
+             *
+             * Explicit {" "} kept after every expression whose following
+             * text could wrap to a new source line — a real, separate JSX
+             * gotcha found and fixed 2026-08-10 (a literal space right
+             * after an expression is silently dropped by JSX's whitespace
+             * collapsing whenever that text node spans multiple lines),
+             * not decorative.
              */}
             <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
-              You&apos;ll have {editWindowHours}{" "}
-              hours before review begins. There&apos;s no in-place editing — if you
-              need to change or add anything during that window, submitting again creates a separate, new report
-              rather than updating this one. After {editWindowHours}h, reviewers take over and your report will be
-              ready within {editWindowHours + REVIEW_PERIOD_HOURS}{" "}
-              hours total.{" "}
-              {isFreeAudit ? "This will use your free audit." : "This is a paid re-audit."}
+              {isEditingExisting ? (
+                <>
+                  This updates your existing submission — no new report, no re-analysis yet. You still have until{" "}
+                  {editWindowHours}{" "}
+                  hours from your original submission to keep making changes; review begins automatically once that
+                  time is up.
+                </>
+              ) : (
+                <>
+                  You&apos;ll have {editWindowHours}{" "}
+                  hours to keep editing or adding evidence — come back to this page any time before then and your
+                  changes save to this same submission. After that, review begins, and your report will be ready
+                  within {editWindowHours + REVIEW_PERIOD_HOURS}{" "}
+                  hours total.{" "}
+                  {isFreeAudit ? "This will use your free audit." : "This is a paid re-audit."}
+                </>
+              )}
             </p>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setShowConfirmModal(false)} className="px-3 py-1.5">
                 Cancel
               </Button>
               <Button type="button" onClick={handleConfirmSubmit} className="px-3 py-1.5">
-                Confirm
+                {isEditingExisting ? "Save changes" : "Confirm"}
               </Button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Real loading indicator (confirmed 2026-08-10, real bug list from
-          live testing) — closes a real gap: submitEvidence() runs all five
-          lenses server-side (staggered ~1.5s apart, each a real Groq call,
-          see run-audit.ts), which can genuinely take well over a minute.
-          Before this, the only feedback was a disabled button reading
-          "Submitting…" — easy to miss entirely if the client had scrolled
-          away from it, making the page look frozen/broken rather than
-          working. This overlay is impossible to miss and explains what's
-          actually happening rather than leaving a blank wait. */}
+      {/* Loading indicator, rewritten 2026-08-10 for the delayed-execution
+          architecture — the previous copy here described a real five-lens
+          Groq run happening synchronously inside submitEvidence(), which
+          was true then but is no longer accurate: submission is now just
+          a fast evidence-record write (see pending-submission.ts), with
+          the actual analysis deferred to a later cron tick. A "please
+          don't close this tab, analysis in progress" message would now be
+          actively misleading. Kept as a real, if brief, indicator rather
+          than removed outright — this still moves through a real
+          server round-trip, and a disabled button alone was already
+          flagged as too easy to miss in the earlier bug-list pass. */}
       {status === "submitting" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-lg dark:bg-neutral-900">
@@ -550,13 +534,7 @@ export function EvidenceIntakeForm({
               className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-neutral-200 border-t-accent dark:border-neutral-700"
               aria-hidden="true"
             />
-            <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">
-              Analyzing your evidence…
-            </h3>
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              We&apos;re running your Financial, Execution, Product, Commercial, and AI &amp; Governance analysis.
-              This usually takes under a minute — please don&apos;t close this tab.
-            </p>
+            <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Saving your evidence…</h3>
           </div>
         </div>
       )}

@@ -5,6 +5,7 @@ import { listPendingSessionRequests } from "@/lib/service-layer/session-requests
 import { listPricing } from "@/lib/pricing";
 import { listOpenSprintQueueItems } from "@/lib/execution-sprint/workspace";
 import { listOpenSprintInterestRequests } from "@/lib/execution-sprint/interest-requests";
+import { computeSubmissionDisplayStage, SUBMISSION_STAGE_LABELS } from "@/lib/evidence/submission-status";
 import {
   markRegulatoryContentReviewedAction,
   updateSessionRequestStatusAction,
@@ -64,24 +65,25 @@ export default async function ReviewerQueuePage() {
     return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {reportsError.message}</div>;
   }
 
-  // "Still with client" visibility (confirmed 2026-08-10, real bug list
-  // from live testing) — closes a real, confusing gap: a report whose
-  // 24h edit window hasn't closed yet is *correctly* excluded from the
-  // ready-for-review list above (working as designed, see the docblock
-  // below), but until now there was zero indication anywhere on this page
-  // that such a report even existed. A reviewer checking right after a
-  // client submits saw an empty queue and no way to tell "nothing has
-  // happened yet" apart from "there's a real submission, just not ready."
-  // Not actionable (no review link — the client's business, not the
-  // reviewer's yet, unchanged) — purely visibility.
-  const { data: notYetReadyReports, error: notYetReadyError } = await supabase
-    .from("reports")
-    .select("id, edit_window_closes_at, companies(name)")
-    .eq("status", "pending_review")
-    .gt("edit_window_closes_at", new Date().toISOString());
+  // "Still with client" visibility, rewritten 2026-08-10 for the delayed-
+  // execution architecture — this used to query `reports` for rows whose
+  // edit window hadn't closed yet, but under the new architecture that
+  // query is now permanently dead: a `reports` row is only ever created
+  // AFTER the window closes (see run-pending-audits.ts), so it could never
+  // return anything again. The real "not ready yet" state now lives in
+  // pending_evidence_submissions instead — and there's a real, third state
+  // to show now beyond "still editing," closing the same visibility gap
+  // this section originally existed for, just against the right table:
+  // Editing / Queued for audit / Audit in progress (see
+  // submission-status.ts). Purely informational — no review action here,
+  // same as before.
+  const { data: pendingSubmissions, error: pendingSubmissionsError } = await supabase
+    .from("pending_evidence_submissions")
+    .select("id, status, edit_window_closes_at, submitted_at, companies(name)")
+    .neq("status", "completed");
 
-  if (notYetReadyError) {
-    return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {notYetReadyError.message}</div>;
+  if (pendingSubmissionsError) {
+    return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {pendingSubmissionsError.message}</div>;
   }
 
   const { data: moduleRequests, error: moduleError } = await supabase
@@ -153,14 +155,18 @@ export default async function ReviewerQueuePage() {
     ([, a], [, b]) => new Date(a[0].readyAt ?? 0).getTime() - new Date(b[0].readyAt ?? 0).getTime(),
   );
 
-  const notYetReadyByCompany = new Map<string, { id: string; closesAt: string | null }[]>();
-  for (const r of notYetReadyReports ?? []) {
+  // At most one active pending_evidence_submissions row per company (see
+  // the migration's own partial unique index), so this is a simple
+  // company → single-row map, not a list-per-company like the old
+  // reports-based version needed.
+  const pendingByCompany = (pendingSubmissions ?? []).map((r) => {
     const name = (r.companies as unknown as { name: string } | null)?.name ?? "Unknown company";
-    notYetReadyByCompany.set(name, [
-      ...(notYetReadyByCompany.get(name) ?? []),
-      { id: r.id as string, closesAt: r.edit_window_closes_at as string | null },
-    ]);
-  }
+    const stage = computeSubmissionDisplayStage({
+      status: r.status as "editing" | "audit_in_progress" | "completed",
+      edit_window_closes_at: r.edit_window_closes_at as string,
+    });
+    return { companyName: name, stage, submittedAt: r.submitted_at as string, editWindowClosesAt: r.edit_window_closes_at as string };
+  });
 
   const regulatoryStatus = await listRegulatoryContentReviewStatus();
   const sessionRequests = await listPendingSessionRequests();
@@ -372,29 +378,32 @@ export default async function ReviewerQueuePage() {
         </div>
       )}
 
-      {/* "Still with client" visibility (confirmed 2026-08-10, real bug list
-          from live testing) — see the query docblock above. Purely
-          informational: these reports are correctly not actionable yet
-          (the client's 24h edit window is still open), but a reviewer
-          should be able to see "yes, a real submission exists, it's just
-          not ready" instead of an unexplained empty queue. */}
-      {notYetReadyByCompany.size > 0 && (
+      {/* "Still with client" visibility, rewritten 2026-08-10 for the
+          delayed-execution architecture — see the query docblock above.
+          Purely informational, no review action here: a submission still
+          'editing' or 'queued_for_audit' has nothing for a reviewer to do
+          yet; 'audit_in_progress' means the scheduled run just started, no
+          action needed there either — this section exists so a reviewer
+          can always see exactly where a submission stands, closing the
+          same original queue-invisibility gap this section was first
+          built for, just against the table that's actually current now. */}
+      {pendingByCompany.length > 0 && (
         <div className="mt-8">
           <h2 className="mb-3 text-lg font-medium text-neutral-900 dark:text-neutral-50">Still with client</h2>
           <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
-            Submitted, but the client&apos;s edit window hasn&apos;t closed yet — not ready for review, nothing to do
-            here yet.
+            Evidence submitted, not ready for review yet — nothing to do here yet.
           </p>
           <ul className="space-y-2">
-            {[...notYetReadyByCompany.entries()].map(([companyName, reports]) => (
-              <li key={companyName} className="rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-3 text-sm dark:border-neutral-700 dark:bg-neutral-900/50">
-                <span className="font-medium text-neutral-700 dark:text-neutral-300">{companyName}</span>{" "}
+            {pendingByCompany.map((p) => (
+              <li
+                key={p.companyName}
+                className="rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-3 text-sm dark:border-neutral-700 dark:bg-neutral-900/50"
+              >
+                <span className="font-medium text-neutral-700 dark:text-neutral-300">{p.companyName}</span>{" "}
                 <span className="text-neutral-500 dark:text-neutral-400">
-                  · {reports.length} submission{reports.length === 1 ? "" : "s"} · opens for review{" "}
-                  {reports
-                    .map((r) => (r.closesAt ? new Date(r.closesAt).toLocaleString() : "unknown"))
-                    .sort()
-                    .join(", ")}
+                  · {p.stage ? SUBMISSION_STAGE_LABELS[p.stage] : "Unknown"} · submitted{" "}
+                  {new Date(p.submittedAt).toLocaleString()}
+                  {p.stage === "editing" && <> · edit window closes {new Date(p.editWindowClosesAt).toLocaleString()}</>}
                 </span>
               </li>
             ))}

@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runAudit, type RunAuditResult } from "./run-audit";
-import type { CompanyProfileForLens, GoalContext, EvidenceFieldInput } from "@/lib/lenses/types";
+import { loadCompanyProfileForLens, loadGoalContext } from "./load-profile";
+import type { EvidenceFieldInput } from "@/lib/lenses/types";
 import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
 import type { CommercialSelfReport } from "@/lib/lenses/commercial";
 import type { MetricInput } from "@/lib/lenses/metrics";
@@ -76,47 +77,13 @@ export async function rerunAudit(reportId: string): Promise<RerunAuditResult> {
 
   // Always re-read the CURRENT company/goal profile, never the state at
   // original submission time — same "living record" principle as every
-  // other lens call in this codebase.
-  const { data: company, error: companyError } = await supabase
-    .from("companies")
-    .select(
-      "id, name, industry, business_model, registration_country, customer_market_countries, employee_count, stage, revenue_range_band, customer_type, main_tools_stack, team_structure_summary",
-    )
-    .eq("id", report.company_id)
-    .single();
-  if (companyError || !company) throw new Error(`rerunAudit: company not found: ${companyError?.message}`);
-
-  const { data: goal, error: goalError } = await supabase
-    .from("goals")
-    .select("primary_goal, secondary_goal, urgency_level, target_metric, time_horizon, success_definition, desired_future_state_primary, desired_future_state_secondary")
-    .eq("id", report.goal_id)
-    .single();
-  if (goalError || !goal) throw new Error(`rerunAudit: goal not found: ${goalError?.message}`);
-
-  const companyProfile: CompanyProfileForLens = {
-    name: company.name as string,
-    industry: company.industry as string | null,
-    businessModel: company.business_model as "B2B" | "B2C" | null,
-    registrationCountry: company.registration_country as string | null,
-    customerMarketCountries: (company.customer_market_countries as string[]) ?? [],
-    employeeCount: company.employee_count as number | null,
-    stage: company.stage as string | null,
-    revenueRangeBand: company.revenue_range_band as string | null,
-    customerType: company.customer_type as string | null,
-    mainToolsStack: company.main_tools_stack as Record<string, unknown> | null,
-    teamStructureSummary: company.team_structure_summary as string | null,
-  };
-
-  const goalContext: GoalContext = {
-    primaryGoal: goal.primary_goal,
-    secondaryGoal: goal.secondary_goal,
-    urgencyLevel: goal.urgency_level,
-    targetMetric: goal.target_metric,
-    timeHorizon: goal.time_horizon,
-    successDefinition: goal.success_definition,
-    desiredFutureStatePrimary: goal.desired_future_state_primary,
-    desiredFutureStateSecondary: goal.desired_future_state_secondary,
-  };
+  // other lens call in this codebase. Shared loader (confirmed 2026-08-10,
+  // delayed-execution architecture) — see load-profile.ts docblock; this
+  // exact block used to be duplicated here and in submitEvidence(), and
+  // was about to become a third copy in run-pending-audits.ts.
+  if (!report.goal_id) throw new Error("rerunAudit: report has no goal_id");
+  const companyProfile = await loadCompanyProfileForLens(supabase, report.company_id as string);
+  const goalContext = await loadGoalContext(supabase, report.goal_id as string);
 
   const result = await runAudit({
     companyId: report.company_id as string,

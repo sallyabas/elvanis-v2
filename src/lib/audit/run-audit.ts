@@ -64,6 +64,19 @@ export interface RunAuditInput {
   sourceEvidenceSnapshot?: Record<string, unknown>;
   /** Set only when this run IS a re-run of an earlier report — links the new report back to it. */
   rerunOfReportId?: string | null;
+  /**
+   * Real, original submission/window timestamps (confirmed 2026-08-10,
+   * delayed-execution architecture) — set by run-pending-audits.ts to the
+   * REAL pending_evidence_submissions.submitted_at/edit_window_closes_at,
+   * not "now." Without this override, a report created by the delayed
+   * audit run would get a fresh 24h reviewer-visibility delay stacked on
+   * top of the real edit window that already elapsed before the audit
+   * ran (a real bug, found and fixed live — see the docblock further
+   * down). Every other caller omits these and gets the previous
+   * "right now" behavior, unchanged.
+   */
+  submittedAt?: Date;
+  editWindowClosesAt?: Date;
 }
 
 export interface RunAuditResult {
@@ -157,13 +170,32 @@ export async function runAudit(input: RunAuditInput): Promise<RunAuditResult> {
   // Report row is created FIRST (empty top_3_finding_ids, filled in below)
   // so every lens_findings row can be linked to it via report_id — required
   // to correctly scope "this report's findings" across re-audit cycles.
-  const submittedAt = new Date();
+  //
+  // Real bug found and fixed 2026-08-10 (delayed-execution architecture) —
+  // this used to unconditionally compute submittedAt/editWindowClosesAt as
+  // "right now," which was correct back when runAudit() ran synchronously
+  // inside the client's own submission request. Once evidence submission
+  // and audit execution became two separate steps (see
+  // pending-submission.ts / run-pending-audits.ts), that made every
+  // delayed-execution report silently stack a SECOND 24h reviewer-
+  // visibility delay on top of the real edit window that had already
+  // elapsed before the audit even ran — e.g. a report created at hour 24
+  // (right when the real window closed) would get its own fresh
+  // edit_window_closes_at of hour 48, invisible to reviewers for another
+  // full day, quietly breaking the "72 hours total" SLA promise the
+  // confirmation modal and holding page both make. Caught via live
+  // verification (the report didn't show up in the reviewer queue), not
+  // assumed. run-pending-audits.ts now passes the REAL original
+  // submittedAt/editWindowClosesAt through explicitly; every other caller
+  // (submitEvidence()'s old direct-call shape, rerunAudit()) keeps the
+  // previous "right now" default, unchanged.
+  const submittedAt = input.submittedAt ?? new Date();
   // DB-backed as of 2026-08-06 (same admin-adjustable pattern as
   // re_audit_reminder_days) — see EvidenceIntakeForm.tsx's confirmation
   // modal, which reads this exact same setting so its copy can never
   // drift from the value actually enforced here.
-  const editWindowHours = await getSettingNumber("edit_window_hours", 24);
-  const editWindowClosesAt = new Date(submittedAt.getTime() + editWindowHours * 60 * 60 * 1000);
+  const editWindowClosesAt =
+    input.editWindowClosesAt ?? new Date(submittedAt.getTime() + (await getSettingNumber("edit_window_hours", 24)) * 60 * 60 * 1000);
 
   const { data: reportRow, error: reportError } = await supabase
     .from("reports")

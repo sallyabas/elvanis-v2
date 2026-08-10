@@ -1,12 +1,12 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { runAudit } from "@/lib/audit/run-audit";
-import type { CompanyProfileForLens, EvidenceFieldInput, GoalContext } from "@/lib/lenses/types";
+import type { EvidenceFieldInput } from "@/lib/lenses/types";
 import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
 import type { CommercialSelfReport } from "@/lib/lenses/commercial";
 import type { MetricInput } from "@/lib/lenses/metrics";
 import { clearEvidenceIntakeDraft } from "@/lib/evidence/draft";
+import { upsertPendingEvidenceSubmission } from "@/lib/evidence/pending-submission";
 
 export interface SubmitEvidenceInput {
   companyId: string;
@@ -26,29 +26,29 @@ export interface SubmitEvidenceInput {
 
 export interface SubmitEvidenceResult {
   success: boolean;
-  reportId?: string;
   error?: string;
 }
 
 /**
- * Real evidence submission (confirmed 2026-08-03, Priority 1) — fill-in-
- * template path first, native CSV/PDF upload/parsing explicitly deferred
- * (see CLAUDE.md "Evidence Intake scope decision" and spec §5). Numeric
- * `metrics` (benchmark-comparable values) are now real (added 2026-08-07,
- * closing a real gap: the deterministic compareFinancialMetric()/
- * compareExecutionMetric()/compareProductMetric() machinery was built and
- * tested, but this form never had a UI to collect the `metrics` those
- * functions run on, so every real submission sent an empty array and
- * benchmark comparisons never fired). `independentResearch` for Commercial
- * remains deferred — the real Tavily
- * research automation already exists (commercial-research.ts) but wiring
- * an automatic trigger into this client-facing submission flow is a
- * separate decision, not assumed here.
+ * Delayed-execution evidence submission (rewritten 2026-08-10, direct
+ * founder architecture request — see pending-submission.ts's own docblock
+ * for the full "why"). This function used to call runAudit() directly and
+ * synchronously here, which meant every resubmission during the 24h
+ * "edit window" silently created a brand-new report and re-ran all five
+ * lenses (real Groq cost) instead of updating anything in place — a real,
+ * confirmed bug, not a design choice. Now it ONLY stores/updates the
+ * evidence record; the audit runs exactly once, later, via the new cron
+ * check once the window has closed (run-pending-audits.ts). No `reportId`
+ * is returned anymore — none exists yet at submission time.
  *
- * Uses the session's own RLS-respecting client to verify ownership before
- * ever touching runAudit() — never trusts a client-supplied companyId
- * blindly, same discipline as every reviewer Server Action in this
- * codebase re-checking session+role before acting.
+ * Still uses the session's own RLS-respecting client to verify ownership
+ * before ever writing anything — never trusts a client-supplied companyId
+ * blindly, same discipline as every other write path in this codebase.
+ * Company/goal PROFILE data (industry, primary_goal, etc.) is no longer
+ * loaded here at all — there's no lens call to feed it to yet; the cron
+ * processor loads the CURRENT profile fresh when the audit actually runs
+ * (see load-profile.ts), same "living record, never cached" principle
+ * already used everywhere else.
  */
 export async function submitEvidence(input: SubmitEvidenceInput): Promise<SubmitEvidenceResult> {
   if (!input.privacyAcknowledged) {
@@ -63,9 +63,7 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
 
   const { data: company, error: companyError } = await supabase
     .from("companies")
-    .select(
-      "id, name, industry, business_model, registration_country, customer_market_countries, employee_count, stage, revenue_range_band, customer_type, main_tools_stack, team_structure_summary",
-    )
+    .select("id, privacy_acknowledged_at")
     .eq("id", input.companyId)
     .eq("user_id", user.id)
     .single();
@@ -73,7 +71,7 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
 
   const { data: goal, error: goalError } = await supabase
     .from("goals")
-    .select("primary_goal, secondary_goal, urgency_level, target_metric, time_horizon, success_definition, desired_future_state_primary, desired_future_state_secondary")
+    .select("id")
     .eq("id", input.goalId)
     .eq("company_id", input.companyId)
     .single();
@@ -82,65 +80,29 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
   // Privacy & Consent acknowledgment gate (spec §1.8, confirmed 2026-08-03)
   // — stamped here, at the actual point of first real evidence submission,
   // not at company creation. Only writes it the first time.
-  await supabase
-    .from("companies")
-    .update({ privacy_acknowledged_at: new Date().toISOString() })
-    .eq("id", input.companyId)
-    .is("privacy_acknowledged_at", null);
-
-  const companyProfile: CompanyProfileForLens = {
-    name: company.name as string,
-    industry: company.industry as string | null,
-    businessModel: company.business_model as "B2B" | "B2C" | null,
-    registrationCountry: company.registration_country as string | null,
-    customerMarketCountries: (company.customer_market_countries as string[]) ?? [],
-    employeeCount: company.employee_count as number | null,
-    stage: company.stage as string | null,
-    revenueRangeBand: company.revenue_range_band as string | null,
-    customerType: company.customer_type as string | null,
-    mainToolsStack: company.main_tools_stack as Record<string, unknown> | null,
-    teamStructureSummary: company.team_structure_summary as string | null,
-  };
-
-  const goalContext: GoalContext = {
-    primaryGoal: goal.primary_goal,
-    secondaryGoal: goal.secondary_goal,
-    urgencyLevel: goal.urgency_level,
-    targetMetric: goal.target_metric,
-    timeHorizon: goal.time_horizon,
-    successDefinition: goal.success_definition,
-    desiredFutureStatePrimary: goal.desired_future_state_primary,
-    desiredFutureStateSecondary: goal.desired_future_state_secondary,
-  };
-
-  try {
-    const result = await runAudit({
-      companyId: input.companyId,
-      company: companyProfile,
-      goalId: input.goalId,
-      goal: goalContext,
-      financial: { evidenceFields: input.financial.evidenceFields, metrics: input.financial.metrics },
-      execution: { evidenceFields: input.execution.evidenceFields, metrics: input.execution.metrics },
-      product: { evidenceFields: input.product.evidenceFields, metrics: input.product.metrics },
-      commercial: { selfReport: input.commercial, independentResearch: [] },
-      aiGovernance: input.aiGovernance,
-      // Basic re-run/refresh button support (confirmed 2026-08-05) — store
-      // the exact evidence this run used so a reviewer can re-run it fresh
-      // later without asking the client to resubmit everything.
-      sourceEvidenceSnapshot: {
-        financial: input.financial,
-        execution: input.execution,
-        product: input.product,
-        commercial: input.commercial,
-        aiGovernance: input.aiGovernance,
-      },
-    });
-    // Saved draft intake (confirmed 2026-08-05) — a successful submission
-    // means there's no longer any in-progress state worth resuming; clear
-    // it so a stale draft doesn't linger and confuse a future re-audit.
-    await clearEvidenceIntakeDraft(input.companyId);
-    return { success: true, reportId: result.reportId };
-  } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : "Something went wrong." };
+  if (!company.privacy_acknowledged_at) {
+    await supabase.from("companies").update({ privacy_acknowledged_at: new Date().toISOString() }).eq("id", input.companyId);
   }
+
+  const evidencePayload = {
+    financial: input.financial,
+    execution: input.execution,
+    product: input.product,
+    commercial: input.commercial,
+    aiGovernance: input.aiGovernance,
+  };
+
+  const result = await upsertPendingEvidenceSubmission({
+    companyId: input.companyId,
+    goalId: input.goalId,
+    evidencePayload,
+  });
+  if (!result.success) return { success: false, error: result.error };
+
+  // Saved draft intake (confirmed 2026-08-05) — a successful submission
+  // means there's no longer any in-progress state worth resuming from the
+  // ephemeral draft; the pending_evidence_submissions row is now the real
+  // record, and the form re-hydrates from THAT on a later visit instead.
+  await clearEvidenceIntakeDraft(input.companyId);
+  return { success: true };
 }
