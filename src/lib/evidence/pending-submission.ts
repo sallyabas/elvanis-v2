@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettingNumber } from "@/lib/app-settings";
 import { computeSubmissionDisplayStage, type SubmissionDisplayStage } from "./submission-status";
+import type { EvidencePayload } from "@/lib/audit/run-pending-audits";
 
 /**
  * Delayed-execution evidence storage (confirmed 2026-08-10, direct founder
@@ -120,4 +121,77 @@ export async function upsertPendingEvidenceSubmission(input: UpsertPendingEviden
     .eq("id", existing.id);
   if (error) return { success: false, error: error.message };
   return { success: true };
+}
+
+export interface ClaimedSubmissionForImmediateAudit {
+  id: string;
+  goalId: string;
+  evidencePayload: EvidencePayload;
+  submittedAt: string;
+  editWindowClosesAt: string;
+}
+
+export type ClaimForImmediateAuditResult =
+  | { claimed: true; row: ClaimedSubmissionForImmediateAudit }
+  | { claimed: false; error: string };
+
+/**
+ * "Submit now, I'm done editing" fast-track (confirmed 2026-08-11, direct
+ * founder request) — a deliberate, separate action from the normal wait-
+ * for-the-window flow, not a variant of it. The single conditional UPDATE
+ * below (status = 'editing' -> 'audit_in_progress', WHERE status is STILL
+ * 'editing' at the moment this runs) is the entire correctness guarantee
+ * against reopening the duplicate-Groq-call bug this whole architecture
+ * exists to prevent: if a scheduled cron tick happens to claim the exact
+ * same row in the same instant (its own edit_window_closes_at having just
+ * passed naturally), only one of the two UPDATEs can actually match a row
+ * still in 'editing' status — the other sees zero rows returned and backs
+ * off cleanly (see run-pending-audits.ts's matching conditional claim,
+ * the other real caller of this same guarantee). No separate lock table,
+ * no advisory lock — Postgres's own row-level UPDATE atomicity is the
+ * whole mechanism, same as everywhere else in this codebase that needs
+ * "exactly one caller wins."
+ *
+ * edit_window_closes_at is deliberately set to NOW here, not left at its
+ * originally-scheduled future value — the client explicitly chose to
+ * close their own window early, so that's genuinely when it closed. This
+ * mirrors the exact reasoning already applied to the cron path's own
+ * "don't stack a second reviewer-visibility delay" fix: the resulting
+ * report's window is already closed by construction, so it's immediately
+ * reviewer-visible and the "N hours total" SLA copy stays honest, measured
+ * from the real original submitted_at (left untouched here).
+ */
+export async function claimPendingEvidenceSubmissionForImmediateAudit(companyId: string): Promise<ClaimForImmediateAuditResult> {
+  const supabase = createAdminClient();
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("pending_evidence_submissions")
+    .update({ status: "audit_in_progress", edit_window_closes_at: now, last_attempted_at: now })
+    .eq("company_id", companyId)
+    .eq("status", "editing")
+    .select("id, goal_id, evidence_payload, submitted_at, edit_window_closes_at")
+    .maybeSingle();
+
+  if (error) return { claimed: false, error: error.message };
+  if (!data) {
+    return {
+      claimed: false,
+      error: "Your evidence is no longer open for editing right now — it may already be queued or being analyzed.",
+    };
+  }
+  if (!data.goal_id) {
+    return { claimed: false, error: "Missing goal — can't run the audit." };
+  }
+
+  return {
+    claimed: true,
+    row: {
+      id: data.id as string,
+      goalId: data.goal_id as string,
+      evidencePayload: data.evidence_payload as EvidencePayload,
+      submittedAt: data.submitted_at as string,
+      editWindowClosesAt: data.edit_window_closes_at as string,
+    },
+  };
 }

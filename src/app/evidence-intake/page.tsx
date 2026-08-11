@@ -135,6 +135,7 @@ export default async function EvidenceIntakePage() {
         editWindowHours={editWindowHours}
         isFreeAudit={isFreeAudit}
         isEditingExisting={activeSubmission !== null}
+        editWindowClosesAt={activeSubmission?.editWindowClosesAt ?? null}
       />
     </div>
   );

@@ -76,9 +76,15 @@ export function NextStepBanner({ journeyStatus }: { journeyStatus: JourneyStatus
     <div className="mb-6 rounded-lg border border-accent/40 bg-accent/10 p-5 dark:border-accent/30 dark:bg-accent/10">
       <h2 className="font-medium text-neutral-900 dark:text-neutral-50">{copy.title}</h2>
       {showCountdown ? (
+        // Explicit, not a bare number (confirmed 2026-08-11, direct
+        // founder feedback: "paired with clear, explicit language... not
+        // just a bare number without context") — "you still have" +
+        // "to review and change" states outright what the timer means and
+        // what it's counting down to lose, instead of assuming the reader
+        // already knows what "closes in 23h 59m" implies.
         <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
-          You can still make changes. Edit window closes in{" "}
-          <EditWindowCountdown closesAt={journeyStatus.editWindowClosesAt!} />.
+          You still have <EditWindowCountdown closesAt={journeyStatus.editWindowClosesAt!} /> to review and change
+          anything in your submission — after that, review begins automatically.
         </p>
       ) : (
         <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">{copy.body}</p>

@@ -9,24 +9,28 @@ import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framewor
 import type { MetricInput } from "@/lib/lenses/metrics";
 
 /**
- * The new PRIMARY audit trigger (confirmed 2026-08-10, direct founder
+ * The PRIMARY audit trigger (confirmed 2026-08-10, direct founder
  * architecture request) — closes the real bug at the heart of this whole
  * rebuild: runAudit() used to fire immediately and synchronously inside
  * submitEvidence(), on every submission including every resubmission
  * during the supposed 24h "edit window" — real Groq cost on every edit,
  * and a brand-new duplicate report every time, since nothing was ever
  * actually being "edited." Evidence submission now only stores/updates a
- * pending_evidence_submissions row (see pending-submission.ts); THIS
- * function, called from the cron tick, is the only place runAudit() gets
- * triggered by a client submission from here on — exactly once, only
- * after edit_window_closes_at has passed, using whatever evidence is on
- * record at that moment. (rerunAudit() is unaffected — that's a separate,
+ * pending_evidence_submissions row (see pending-submission.ts); this
+ * module is now called from TWO places (confirmed 2026-08-11, "Submit
+ * now" fast-track): the cron tick (runPendingAudits, below) once
+ * edit_window_closes_at has passed naturally, and evidence-intake's
+ * submitEvidenceNow() action when a client explicitly chooses to skip the
+ * wait. Both share the exact same race-safe claim discipline (see
+ * runAuditForClaimedSubmission's own docblock) so a client's explicit
+ * click and a cron tick that happens to land at the same moment can never
+ * both run the audit. (rerunAudit() is unaffected — that's a separate,
  * reviewer-triggered, always-immediate path, unchanged by this work.)
  */
 
 const STALE_RETRY_MINUTES = 10;
 
-interface EvidencePayload {
+export interface EvidencePayload {
   financial: { evidenceFields: EvidenceFieldInput[]; metrics: MetricInput[] };
   execution: { evidenceFields: EvidenceFieldInput[]; metrics: MetricInput[] };
   product: { evidenceFields: EvidenceFieldInput[]; metrics: MetricInput[] };
@@ -39,7 +43,7 @@ interface EvidencePayload {
   };
 }
 
-interface PendingRow {
+export interface ClaimedPendingRow {
   id: string;
   company_id: string;
   goal_id: string | null;
@@ -54,7 +58,19 @@ export interface RunPendingAuditsResult {
   stillPending: string[];
 }
 
-async function processRow(supabase: SupabaseClient, row: PendingRow): Promise<{ reportId: string } | { failed: true }> {
+/**
+ * Runs the actual audit for a row that has ALREADY been atomically
+ * claimed by the caller (status flipped away from 'editing' via a
+ * conditional UPDATE that only one concurrent caller can win — see
+ * runPendingAudits()'s claim step below and
+ * claimPendingEvidenceSubmissionForImmediateAudit() in pending-
+ * submission.ts for the two real callers). Never call this speculatively
+ * against a row you haven't already claimed — that's exactly the
+ * duplicate-Groq-call bug this whole architecture exists to prevent.
+ * Exported (confirmed 2026-08-11) so the "Submit now" fast-track can
+ * share this exact code path instead of a second, drifting copy.
+ */
+export async function runAuditForClaimedSubmission(supabase: SupabaseClient, row: ClaimedPendingRow): Promise<{ reportId: string } | { failed: true }> {
   try {
     if (!row.goal_id) throw new Error("pending evidence submission has no goal_id");
 
@@ -86,7 +102,11 @@ async function processRow(supabase: SupabaseClient, row: PendingRow): Promise<{ 
       // means the report is immediately reviewer-visible (its window is
       // already closed by construction) and the "72 hours total" SLA
       // copy stays honest, measured from when the client actually
-      // submitted, not from whenever the cron happened to process it.
+      // submitted, not from whenever this actually ran. For the "Submit
+      // now" caller specifically, edit_window_closes_at is the moment the
+      // client chose to close it early (see claimPendingEvidenceSubmission
+      // ForImmediateAudit) — genuinely when it closed, not the originally
+      // scheduled future time.
       submittedAt: new Date(row.submitted_at),
       editWindowClosesAt: new Date(row.edit_window_closes_at),
     });
@@ -132,7 +152,21 @@ export async function runPendingAudits(): Promise<RunPendingAuditsResult> {
     .or(`last_attempted_at.is.null,last_attempted_at.lte.${staleThreshold}`);
   if (staleError) throw new Error(`runPendingAudits: failed to load stale rows: ${staleError.message}`);
 
-  const rows = [...(dueEditing ?? []), ...(staleInProgress ?? [])] as PendingRow[];
+  // previousStatus tracked per row (confirmed 2026-08-11, "Submit now"
+  // fast-track) — the claim step below must condition its UPDATE on
+  // whatever status this row actually had when selected, not blindly
+  // overwrite by id. Real gap this closes: a client's "Submit now" click
+  // can flip a row from 'editing' to 'audit_in_progress' (and start
+  // running its own audit) in the moment between this SELECT and the
+  // claim UPDATE below — without a conditional claim, this cron tick
+  // would blindly re-claim the same row and run runAuditForClaimedSubmission
+  // a SECOND time against the same evidence, the exact duplicate-Groq-
+  // call bug this whole architecture exists to prevent, just reintroduced
+  // through a new second caller instead of the original resubmit bug.
+  const rows = [
+    ...(dueEditing ?? []).map((r) => ({ ...r, previousStatus: "editing" as const })),
+    ...(staleInProgress ?? []).map((r) => ({ ...r, previousStatus: "audit_in_progress" as const })),
+  ] as (ClaimedPendingRow & { previousStatus: "editing" | "audit_in_progress" })[];
 
   const processedReportIds: string[] = [];
   const stillPending: string[] = [];
@@ -143,16 +177,23 @@ export async function runPendingAudits(): Promise<RunPendingAuditsResult> {
   // risk for no real benefit at current pilot volume. A scalability
   // concern to revisit once tick volume actually grows, not now.
   for (const row of rows) {
-    const { error: markError } = await supabase
+    const { data: claimedRows, error: markError } = await supabase
       .from("pending_evidence_submissions")
       .update({ status: "audit_in_progress", last_attempted_at: now.toISOString() })
-      .eq("id", row.id);
-    if (markError) {
+      .eq("id", row.id)
+      .eq("status", row.previousStatus)
+      .select("id");
+    if (markError || !claimedRows || claimedRows.length === 0) {
+      // Either a real error, or (the case this fix exists for) another
+      // process — most likely a client's "Submit now" click — already
+      // claimed this exact row in the moment since the SELECT above.
+      // Skip it entirely rather than proceed to process stale row data;
+      // whichever caller actually won the claim is already running it.
       stillPending.push(row.company_id);
       continue;
     }
 
-    const outcome = await processRow(supabase, row);
+    const outcome = await runAuditForClaimedSubmission(supabase, row);
     if ("reportId" in outcome) {
       processedReportIds.push(outcome.reportId);
     } else {

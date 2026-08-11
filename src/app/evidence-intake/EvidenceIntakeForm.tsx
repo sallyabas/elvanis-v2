@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { GovernanceDimensionDefinition, GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
 import type { MetricInput } from "@/lib/lenses/metrics";
-import { submitEvidence } from "./actions";
+import { submitEvidence, submitEvidenceNow } from "./actions";
 import { saveEvidenceIntakeDraft } from "@/lib/evidence/draft";
 import type { EvidenceIntakeDraft } from "@/lib/evidence/draft-shape";
 import { EXPORT_INSTRUCTIONS_BY_LENS, type EvidenceLensKey } from "@/lib/evidence/export-instructions";
@@ -17,6 +17,7 @@ import { Select } from "@/app/_components/ui/Select";
 import { Card } from "@/app/_components/ui/Card";
 import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
+import { EditWindowCountdown } from "@/app/_components/EditWindowCountdown";
 
 // EvidenceIntakeDraft moved to draft-shape.ts (confirmed 2026-08-10,
 // delayed-execution architecture) — a server component (evidence-intake/
@@ -93,6 +94,7 @@ export function EvidenceIntakeForm({
   editWindowHours,
   isFreeAudit,
   isEditingExisting,
+  editWindowClosesAt,
 }: {
   companyId: string;
   goalId: string;
@@ -122,6 +124,17 @@ export function EvidenceIntakeForm({
    * below is worded differently for a first submission vs. a real edit.
    */
   isEditingExisting: boolean;
+  /**
+   * The real deadline for the ACTIVE submission, if one exists (confirmed
+   * 2026-08-11, "Submit now" + countdown-clarity pass) — null on a
+   * genuinely first-ever submission, since there's no window to count
+   * down yet. Drives both the live countdown shown directly above this
+   * form (not just on Dashboard/NextStepBanner — the founder specifically
+   * asked for the timer to sit next to "review and change anything
+   * below") and the "Submit now" fast-track, which only makes sense once
+   * an edit window actually exists to close early.
+   */
+  editWindowClosesAt: string | null;
 }) {
   const router = useRouter();
 
@@ -151,7 +164,16 @@ export function EvidenceIntakeForm({
   );
 
   const [privacyAcknowledged, setPrivacyAcknowledged] = useState(false);
-  const [status, setStatus] = useState<"idle" | "submitting" | "error">("idle");
+  /**
+   * "submitting-now" is a genuinely different state from "submitting"
+   * (confirmed 2026-08-11, "Submit now" fast-track), not a cosmetic
+   * rename — "submitting" is the fast, sub-second evidence-record write
+   * every normal submit does; "submitting-now" is a real, synchronous
+   * five-lens Groq run (same actual duration the pre-delayed-execution
+   * architecture used to show a loading state for) and needs its own
+   * honest copy, not the brief "Saving your evidence…" message.
+   */
+  const [status, setStatus] = useState<"idle" | "submitting" | "submitting-now" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
   /**
@@ -271,12 +293,15 @@ export function EvidenceIntakeForm({
     setShowConfirmModal(true);
   }
 
-  async function handleConfirmSubmit() {
-    setShowConfirmModal(false);
-    setStatus("submitting");
-    setError(null);
-
-    const result = await submitEvidence({
+  /**
+   * Shared payload builder (confirmed 2026-08-11, "Submit now" fast-track)
+   * — the normal submit and the fast-track submit must send the EXACT
+   * same evidence shape, since "Submit now" is explicitly meant to close
+   * out whatever's currently in the form, not some separately-derived
+   * subset. Extracted rather than duplicated so the two paths can't drift.
+   */
+  function buildSubmitInput() {
+    return {
       companyId,
       goalId,
       privacyAcknowledged,
@@ -303,7 +328,15 @@ export function EvidenceIntakeForm({
             }
           : { questionnaireScores: dimensionScores }),
       },
-    });
+    };
+  }
+
+  async function handleConfirmSubmit() {
+    setShowConfirmModal(false);
+    setStatus("submitting");
+    setError(null);
+
+    const result = await submitEvidence(buildSubmitInput());
 
     if (result.success) {
       // Redirects to /dashboard, not /reports/[reportId] (confirmed
@@ -320,6 +353,48 @@ export function EvidenceIntakeForm({
     }
   }
 
+  const [showSubmitNowModal, setShowSubmitNowModal] = useState(false);
+
+  /**
+   * "Submit now, I'm done editing" fast-track (confirmed 2026-08-11,
+   * direct founder request) — deliberately its own button/modal/handler,
+   * not a variant of the flow above: it makes a genuinely different
+   * promise ("this runs right now and locks in immediately," not "you'll
+   * have N hours to change your mind"), so it needs its own explicit
+   * confirmation copy, not a shared one. Guarded by
+   * status === "submitting-now" the same way the normal submit is guarded
+   * by "submitting" — a double-click can't fire this twice from the
+   * client side; the real, load-bearing guarantee against a genuine
+   * double-fire (e.g. racing a concurrent cron tick) lives server-side in
+   * claimPendingEvidenceSubmissionForImmediateAudit()'s atomic conditional
+   * claim, not here — this is just the ordinary "don't let a slow network
+   * click twice" UI guard every other submit button in this app already
+   * has.
+   */
+  function handleSubmitNowClick() {
+    if (hasInvalidMetric) return;
+    setShowSubmitNowModal(true);
+  }
+
+  async function handleConfirmSubmitNow() {
+    setShowSubmitNowModal(false);
+    setStatus("submitting-now");
+    setError(null);
+
+    const result = await submitEvidenceNow(buildSubmitInput());
+
+    if (result.success && result.reportId) {
+      // Straight to the report's own holding page, not /dashboard — a
+      // real report now exists (unlike the normal submit above), and this
+      // is the one page that already correctly renders both "still being
+      // reviewed" and, once approved, the real delivered content.
+      router.push(`/reports/${result.reportId}`);
+    } else {
+      setStatus("error");
+      setError(result.error ?? "Something went wrong.");
+    }
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="flex items-center justify-between">
@@ -330,6 +405,60 @@ export function EvidenceIntakeForm({
           {draftStatus === "saving" ? "Saving…" : draftStatus === "saved" ? "Draft saved" : ""}
         </p>
       </div>
+
+      {/*
+       * Live countdown directly above the form (confirmed 2026-08-11,
+       * countdown-copy-clarity pass) — previously the only place a client
+       * saw their edit window was Dashboard/NextStepBanner, away from the
+       * actual fields it applies to. Explicit language paired with the
+       * timer, not a bare number, per direct founder feedback: "You have
+       * 24 hours to review and change anything below" — "below" is
+       * literal, this banner sits directly above the editable fields.
+       * Only rendered once there's a real active submission to count down
+       * (isEditingExisting + editWindowClosesAt) — a first-time visitor
+       * with no submission yet has no window to show.
+       */}
+      {isEditingExisting && editWindowClosesAt && (
+        <div className="rounded-lg border border-accent/40 bg-accent/10 p-4 dark:border-accent/30 dark:bg-accent/10">
+          <p className="text-sm text-neutral-800 dark:text-neutral-100">
+            You have <EditWindowCountdown closesAt={editWindowClosesAt} /> to review and change anything below.
+          </p>
+          <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
+            Come back any time before then — your changes save to this same submission, and review begins
+            automatically once the window closes.
+          </p>
+          {/*
+           * "Submit now, I'm done editing" fast-track (confirmed
+           * 2026-08-11, direct founder request) — a deliberate, separate
+           * option alongside the normal wait, not a replacement for it.
+           * Its own confirmation modal below, not this button's onClick
+           * directly, so the "you won't be able to make further changes"
+           * warning is impossible to skip past accidentally.
+           */}
+          <button
+            type="button"
+            onClick={handleSubmitNowClick}
+            disabled={status === "submitting-now" || hasInvalidMetric}
+            className="mt-3 text-sm font-medium text-accent underline decoration-accent/50 underline-offset-2 hover:decoration-accent disabled:cursor-not-allowed disabled:opacity-50 dark:text-accent"
+          >
+            Submit now, I&apos;m done editing →
+          </button>
+          {/*
+           * Real gap found and fixed during live verification (confirmed
+           * 2026-08-11) — the shared error Alert further down the form (by
+           * the privacy checkbox) is easy to miss when the error was
+           * actually caused by THIS top-of-page button (e.g. clicking
+           * "Submit now" before scrolling down to accept the privacy
+           * policy). Same shared status/error state, rendered a second
+           * time right where the action that could have caused it lives.
+           */}
+          {status === "error" && error && (
+            <Alert variant="error" className="mt-3">
+              {error}
+            </Alert>
+          )}
+        </div>
+      )}
 
       {/* Upload-point micro-copy (spec §1.8, confirmed 2026-08-03) — shown right where evidence is entered, not buried in a footer link. */}
       <p className="rounded-md border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
@@ -477,7 +606,10 @@ export function EvidenceIntakeForm({
 
         {status === "error" && error && <Alert variant="error">{error}</Alert>}
 
-        <Button type="submit" disabled={status === "submitting" || !privacyAcknowledged || hasInvalidMetric}>
+        <Button
+          type="submit"
+          disabled={status === "submitting" || status === "submitting-now" || !privacyAcknowledged || hasInvalidMetric}
+        >
           {status === "submitting" ? "Submitting…" : "Submit for review"}
         </Button>
       </section>
@@ -555,6 +687,59 @@ export function EvidenceIntakeForm({
               aria-hidden="true"
             />
             <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Saving your evidence…</h3>
+          </div>
+        </div>
+      )}
+
+      {/*
+       * "Submit now" confirmation modal (confirmed 2026-08-11) —
+       * deliberately separate copy from the normal "Ready to submit?"
+       * modal above: that one promises N hours to change your mind, this
+       * one promises the opposite. The warning is the whole point of this
+       * modal existing, not boilerplate to click past.
+       */}
+      {showSubmitNowModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg dark:bg-neutral-900">
+            <h3 className="mb-2 text-base font-semibold text-neutral-900 dark:text-neutral-50">Submit now?</h3>
+            <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
+              This closes your edit window right now and starts the analysis immediately — you won&apos;t be able to
+              make further changes after this. Make sure everything below is how you want it before continuing.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setShowSubmitNowModal(false)} className="px-3 py-1.5">
+                Cancel
+              </Button>
+              <Button type="button" onClick={handleConfirmSubmitNow} className="px-3 py-1.5">
+                Submit now
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/*
+       * A genuinely different loading state from the "submitting" overlay
+       * above (confirmed 2026-08-11) — "Submit now" really does run a
+       * synchronous five-lens Groq call in this same request (the same
+       * real duration the pre-delayed-execution architecture used to show
+       * a loading state for, before submission became a fast store-only
+       * write). Reusing "Saving your evidence…" here would be actively
+       * misleading in the other direction now — this one genuinely does
+       * take under a minute and genuinely shouldn't have the tab closed.
+       */}
+      {status === "submitting-now" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-lg dark:bg-neutral-900">
+            <div
+              className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-neutral-200 border-t-accent dark:border-neutral-700"
+              aria-hidden="true"
+            />
+            <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Analyzing your evidence…</h3>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              We&apos;re running your Financial, Execution, Product, Commercial, and AI &amp; Governance analysis. This
+              usually takes under a minute — please don&apos;t close this tab.
+            </p>
           </div>
         </div>
       )}

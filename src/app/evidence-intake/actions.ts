@@ -6,7 +6,9 @@ import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framewor
 import type { CommercialSelfReport } from "@/lib/lenses/commercial";
 import type { MetricInput } from "@/lib/lenses/metrics";
 import { clearEvidenceIntakeDraft } from "@/lib/evidence/draft";
-import { upsertPendingEvidenceSubmission } from "@/lib/evidence/pending-submission";
+import { upsertPendingEvidenceSubmission, claimPendingEvidenceSubmissionForImmediateAudit } from "@/lib/evidence/pending-submission";
+import { runAuditForClaimedSubmission } from "@/lib/audit/run-pending-audits";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface SubmitEvidenceInput {
   companyId: string;
@@ -105,4 +107,56 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
   // record, and the form re-hydrates from THAT on a later visit instead.
   await clearEvidenceIntakeDraft(input.companyId);
   return { success: true };
+}
+
+export interface SubmitEvidenceNowResult {
+  success: boolean;
+  reportId?: string;
+  error?: string;
+}
+
+/**
+ * "Submit now, I'm done editing" fast-track (confirmed 2026-08-11, direct
+ * founder request) — deliberately its own action, not a variant of
+ * submitEvidence() above, since the two make genuinely different promises
+ * to the client ("you'll have N hours to change your mind" vs. "this runs
+ * right now and locks in immediately"). Reuses submitEvidence() itself for
+ * the first step so nothing typed since the last save is silently lost:
+ * whatever is currently in the form gets persisted exactly the same way a
+ * normal submit would, THEN the submission is atomically claimed and run
+ * immediately instead of waiting for the edit window to close naturally.
+ *
+ * The "only ever fire once" guarantee lives entirely in
+ * claimPendingEvidenceSubmissionForImmediateAudit()'s conditional UPDATE,
+ * not here — see that function's own docblock. This function is a thin
+ * orchestrator: upsert, claim, run, report back. If the claim loses the
+ * race (a cron tick grabbed the row microseconds earlier because the
+ * window happened to close at the same moment), that's reported back
+ * honestly as "already queued," not silently retried into a second run.
+ */
+export async function submitEvidenceNow(input: SubmitEvidenceInput): Promise<SubmitEvidenceNowResult> {
+  const upsertResult = await submitEvidence(input);
+  if (!upsertResult.success) return { success: false, error: upsertResult.error };
+
+  const claim = await claimPendingEvidenceSubmissionForImmediateAudit(input.companyId);
+  if (!claim.claimed) return { success: false, error: claim.error };
+
+  const admin = createAdminClient();
+  const outcome = await runAuditForClaimedSubmission(admin, {
+    id: claim.row.id,
+    company_id: input.companyId,
+    goal_id: claim.row.goalId,
+    evidence_payload: claim.row.evidencePayload,
+    submitted_at: claim.row.submittedAt,
+    edit_window_closes_at: claim.row.editWindowClosesAt,
+  });
+
+  if ("reportId" in outcome) {
+    return { success: true, reportId: outcome.reportId };
+  }
+  return {
+    success: false,
+    error:
+      "Your evidence was saved, but something went wrong starting the analysis. It's been queued for an automatic retry shortly — you don't need to resubmit.",
+  };
 }
