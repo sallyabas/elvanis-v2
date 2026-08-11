@@ -114,16 +114,62 @@ export async function listPendingSessionRequests(): Promise<(SessionRequestRow &
   }));
 }
 
+/**
+ * Real workflow, not three inert buttons (confirmed 2026-08-11, live
+ * testing pass — this exact panel was reported "done" before and turned
+ * out to still be a shallow stub: no way to schedule for a REAL date/time
+ * — `scheduled_at` was always just stamped to "now" — no client
+ * notification on decline, and no way to record what a "completed"
+ * session actually covered).
+ *
+ * - `scheduled`: `scheduledAt` is now the reviewer's own chosen future
+ *   date/time (required), not the moment the button was clicked.
+ * - `declined`: `reviewerNotes` is required (the decline reason) and now
+ *   fires a real client-facing notification — see below — so the client
+ *   actually hears back instead of silently never getting a reply.
+ * - `completed`: `reviewerNotes` doubles as the outcome/what-happened
+ *   record — no separate structured "outcome" object exists yet (a real,
+ *   deliberately minimal choice, same "curated free text over inventing
+ *   a new object" pattern already used for dispute_resolution_notes
+ *   elsewhere), but it's now real, persisted, and displayed back on the
+ *   queue instead of not existing at all.
+ */
 export async function updateSessionRequestStatus(
   requestId: string,
   status: "scheduled" | "completed" | "declined",
-  reviewerNotes?: string,
+  options: { scheduledAt?: string; reviewerNotes?: string } = {},
 ): Promise<void> {
   const admin = createAdminClient();
-  const update: Record<string, unknown> = { status, reviewer_notes: reviewerNotes ?? null };
-  if (status === "scheduled") update.scheduled_at = new Date().toISOString();
+  const update: Record<string, unknown> = { status, reviewer_notes: options.reviewerNotes ?? null };
+  if (status === "scheduled") {
+    if (!options.scheduledAt) throw new Error("updateSessionRequestStatus: scheduledAt is required when marking scheduled.");
+    update.scheduled_at = new Date(options.scheduledAt).toISOString();
+  }
   if (status === "completed") update.completed_at = new Date().toISOString();
 
-  const { error } = await admin.from("session_requests").update(update).eq("id", requestId);
+  const { data: request, error } = await admin
+    .from("session_requests")
+    .update(update)
+    .eq("id", requestId)
+    .select("company_id, session_type")
+    .single();
   if (error) throw new Error(`updateSessionRequestStatus: ${error.message}`);
+
+  // Real client notification on decline (confirmed 2026-08-11) — the
+  // client submitted a real request; declining it silently, with no
+  // notification at all, meant they'd just never hear back. Looked up via
+  // companies.user_id, same pattern already used everywhere else in this
+  // codebase for "the client who owns this company."
+  if (status === "declined") {
+    const { data: company } = await admin.from("companies").select("user_id").eq("id", request.company_id as string).maybeSingle();
+    if (company?.user_id) {
+      await admin.from("notifications").insert({
+        recipient_type: "client",
+        recipient_id: company.user_id,
+        event_type: "session_declined",
+        channel: "email",
+        sent_at: null,
+      });
+    }
+  }
 }

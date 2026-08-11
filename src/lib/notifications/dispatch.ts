@@ -164,6 +164,19 @@ async function templateFor(
         subject: "A client signed off on their Execution Sprint",
         html: `<p>A client has signed off on their Execution Sprint. Add your final wrap-up commentary when ready.</p><p><a href="${SITE_URL}/queue">Open the reviewer queue</a></p>`,
       };
+    case "session_declined":
+      // Client-facing (confirmed 2026-08-11, live testing pass) — closes a
+      // real gap: declining a session request previously fired no
+      // notification at all. Kept generic (no specific decline reason in
+      // the email body) — there's no related_session_request_id column
+      // yet to look the reason back up, same pattern related_report_id
+      // already solves for report_ready/re_audit_reminder; a real,
+      // deliberately deferred enrichment, not built here to avoid
+      // stretching this pass's scope.
+      return {
+        subject: "Update on your session request",
+        html: `${greeting}<p>We're not able to schedule the session you requested right now. Feel free to reach back out or submit a new request anytime.</p>${loginReminder}`,
+      };
     case "sprint_reply":
       // Client-facing — normally sent immediately by replyToSprintQueueItem
       // itself, not via this dispatcher; this template is a fallback only

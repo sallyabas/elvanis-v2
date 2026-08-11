@@ -1,4 +1,5 @@
 import { LinkButton } from "@/app/_components/ui/LinkButton";
+import { EditWindowCountdown } from "@/app/_components/EditWindowCountdown";
 import type { JourneyStatus } from "@/lib/reports/journey-status";
 
 /**
@@ -27,6 +28,10 @@ const COPY: Record<JourneyStatus["stage"], { title: string; body: string; ctaLab
   // editable form or the locked status view depending on which of these
   // stages is current (see that page's own logic).
   editing: {
+    // body is overridden below with a real live countdown (confirmed
+    // 2026-08-10, live testing pass) — this static string is only the
+    // fallback for the rare case editWindowClosesAt wasn't set (defensive,
+    // shouldn't happen for a genuinely 'editing'-stage status).
     title: "Your evidence is saved — you can still make changes",
     body: "Head back to add more or revise anything before your edit window closes.",
     ctaLabel: "Continue editing",
@@ -60,10 +65,24 @@ const COPY: Record<JourneyStatus["stage"], { title: string; body: string; ctaLab
 
 export function NextStepBanner({ journeyStatus }: { journeyStatus: JourneyStatus }) {
   const copy = COPY[journeyStatus.stage];
+  // Real live countdown (confirmed 2026-08-10, live testing pass) — closes
+  // a real gap: this banner previously showed a one-time static message
+  // with no ongoing indication of how much of the edit window was left.
+  // Persistent here, not a one-time toast: every time this banner renders
+  // while stage is 'editing', it shows a real, ticking countdown against
+  // the actual edit_window_closes_at value.
+  const showCountdown = journeyStatus.stage === "editing" && journeyStatus.editWindowClosesAt;
   return (
     <div className="mb-6 rounded-lg border border-accent/40 bg-accent/10 p-5 dark:border-accent/30 dark:bg-accent/10">
       <h2 className="font-medium text-neutral-900 dark:text-neutral-50">{copy.title}</h2>
-      <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">{copy.body}</p>
+      {showCountdown ? (
+        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+          You can still make changes. Edit window closes in{" "}
+          <EditWindowCountdown closesAt={journeyStatus.editWindowClosesAt!} />.
+        </p>
+      ) : (
+        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">{copy.body}</p>
+      )}
       <LinkButton href={copy.href(journeyStatus.latestReportId)} className="mt-3">
         {copy.ctaLabel}
       </LinkButton>

@@ -77,6 +77,17 @@ export default async function EvidenceIntakePage() {
               : "Your evidence is being analyzed right now. This usually takes under a minute."}
           </p>
         </Card>
+        {/* Real bug found and fixed (confirmed 2026-08-10, live testing pass)
+            — this locked-status branch previously omitted the Discovery
+            Session offer entirely, so it visibly disappeared the moment a
+            client's evidence left "editing" and hit this view, even though
+            it was correctly always present in the editable view below.
+            Kept unconditional across every evidence-intake page state now.
+            Deliberately NOT adding a link back to the evidence itself from
+            here yet — flagged, founder's own call for later. */}
+        <div className="mt-6">
+          <SessionRequestButton companyId={companyId} sessionType="discovery" />
+        </div>
       </div>
     );
   }

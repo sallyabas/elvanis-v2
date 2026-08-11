@@ -291,6 +291,47 @@ export async function listOpenSprintQueueItems(): Promise<(SprintQueueItemRow & 
   });
 }
 
+export interface SprintListRow {
+  id: string;
+  companyName: string;
+  status: "scoped" | "in_progress" | "complete";
+  findingTitle: string | null;
+  targetEndDate: string | null;
+  createdAt: string | null;
+}
+
+/**
+ * Real gap found and fixed (confirmed 2026-08-11, live testing pass) —
+ * there was previously no way to see every Execution Sprint regardless of
+ * status; the queue's own sprint sections only ever surfaced sprints that
+ * either needed a reviewer decision (still 'scoped') or had an open
+ * change-request/KPI-deviation note. A sprint with neither — genuinely
+ * healthy and in progress, or already complete — was invisible on this
+ * page entirely. Same "full directory, not just an action queue" pattern
+ * as the "Ready for review" section.
+ */
+export async function listAllSprints(): Promise<SprintListRow[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("execution_sprints")
+    .select("id, status, target_end_date, created_at, companies(name), lens_findings(ai_draft, reviewer_edited_content)")
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`listAllSprints: ${error.message}`);
+
+  return (data ?? []).map((row) => {
+    const company = row.companies as unknown as { name: string } | null;
+    const finding = row.lens_findings as unknown as { ai_draft: { title?: string } | null; reviewer_edited_content: { title?: string } | null } | null;
+    return {
+      id: row.id as string,
+      companyName: company?.name ?? "Unknown company",
+      status: row.status as "scoped" | "in_progress" | "complete",
+      findingTitle: finding?.reviewer_edited_content?.title ?? finding?.ai_draft?.title ?? null,
+      targetEndDate: row.target_end_date as string | null,
+      createdAt: row.created_at as string | null,
+    };
+  });
+}
+
 /**
  * Immediate send (confirmed 2026-08-06) — the one case in this codebase
  * where the standard "log a notifications row, actual send happens on the

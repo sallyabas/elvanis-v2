@@ -31,9 +31,38 @@ export async function markRegulatoryContentReviewedAction(jurisdiction: string) 
   revalidatePath("/queue");
 }
 
-export async function updateSessionRequestStatusAction(requestId: string, status: "scheduled" | "completed" | "declined") {
+/**
+ * Real workflow (confirmed 2026-08-11, live testing pass) — replaces the
+ * previous single bound-arg version, which had no way to pass a real
+ * scheduled date/time or reviewer notes at all. FormData, not bound args,
+ * since each action now carries real user-entered values (a date/time, a
+ * decline reason, a completion outcome), not just a fixed identifier.
+ */
+export async function scheduleSessionRequestAction(formData: FormData) {
   await getReviewerId();
-  await updateSessionRequestStatus(requestId, status);
+  const requestId = String(formData.get("requestId"));
+  const scheduledAt = String(formData.get("scheduledAt") ?? "");
+  const notes = String(formData.get("notes") ?? "").trim();
+  if (!requestId || !scheduledAt) throw new Error("A date/time is required to schedule.");
+  await updateSessionRequestStatus(requestId, "scheduled", { scheduledAt, reviewerNotes: notes || undefined });
+  revalidatePath("/queue");
+}
+
+export async function completeSessionRequestAction(formData: FormData) {
+  await getReviewerId();
+  const requestId = String(formData.get("requestId"));
+  const notes = String(formData.get("notes") ?? "").trim();
+  if (!requestId) throw new Error("Missing request id.");
+  await updateSessionRequestStatus(requestId, "completed", { reviewerNotes: notes || undefined });
+  revalidatePath("/queue");
+}
+
+export async function declineSessionRequestAction(formData: FormData) {
+  await getReviewerId();
+  const requestId = String(formData.get("requestId"));
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!requestId || !reason) throw new Error("A reason is required to decline.");
+  await updateSessionRequestStatus(requestId, "declined", { reviewerNotes: reason });
   revalidatePath("/queue");
 }
 

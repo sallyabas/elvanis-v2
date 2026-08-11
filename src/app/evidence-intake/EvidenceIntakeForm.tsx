@@ -207,6 +207,24 @@ export function EvidenceIntakeForm({
     dimensionScores,
   ]);
 
+  /**
+   * Real numeric-field validation (confirmed 2026-08-10, live testing pass)
+   * — closes a real gap: `type="number"` alone doesn't reliably block
+   * every way invalid text can land in the field (paste, some mobile
+   * keyboards), and the previous behavior was to silently DROP an
+   * unparseable value at submit time with zero feedback — a client could
+   * type something that never made it into their report and never know.
+   * Now shown as a real inline error the moment it's typed, and submission
+   * is blocked while any metric field is invalid, not just filtered out
+   * quietly server-side.
+   */
+  function metricError(raw: string | undefined): string | null {
+    const trimmed = raw?.trim();
+    if (!trimmed) return null; // blank is meaningful too, not an error
+    return Number.isFinite(Number(trimmed)) ? null : "Enter a number";
+  }
+  const hasInvalidMetric = Object.values(metricValues).some((v) => metricError(v) !== null);
+
   function evidenceFieldsFor(lens: "financial" | "execution" | "product") {
     const set = FIELD_SETS.find((s) => s.lens === lens)!;
     return set.fields.map((f) => {
@@ -249,6 +267,7 @@ export function EvidenceIntakeForm({
    */
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (hasInvalidMetric) return; // safety guard behind the disabled button, not just decorative
     setShowConfirmModal(true);
   }
 
@@ -340,6 +359,7 @@ export function EvidenceIntakeForm({
                     placeholder={m.placeholder}
                     value={metricValues[`${set.lens}.${m.metricKey}`] ?? ""}
                     onChange={(e) => setMetricValues((prev) => ({ ...prev, [`${set.lens}.${m.metricKey}`]: e.target.value }))}
+                    error={metricError(metricValues[`${set.lens}.${m.metricKey}`]) ?? undefined}
                   />
                 ))}
               </div>
@@ -457,7 +477,7 @@ export function EvidenceIntakeForm({
 
         {status === "error" && error && <Alert variant="error">{error}</Alert>}
 
-        <Button type="submit" disabled={status === "submitting" || !privacyAcknowledged}>
+        <Button type="submit" disabled={status === "submitting" || !privacyAcknowledged || hasInvalidMetric}>
           {status === "submitting" ? "Submitting…" : "Submit for review"}
         </Button>
       </section>

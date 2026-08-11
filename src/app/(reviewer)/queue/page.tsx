@@ -3,12 +3,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { listRegulatoryContentReviewStatus } from "@/lib/reviewer/regulatory-content-review";
 import { listPendingSessionRequests } from "@/lib/service-layer/session-requests";
 import { listPricing } from "@/lib/pricing";
-import { listOpenSprintQueueItems } from "@/lib/execution-sprint/workspace";
+import { listOpenSprintQueueItems, listAllSprints } from "@/lib/execution-sprint/workspace";
 import { listOpenSprintInterestRequests } from "@/lib/execution-sprint/interest-requests";
 import { computeSubmissionDisplayStage, SUBMISSION_STAGE_LABELS } from "@/lib/evidence/submission-status";
 import {
   markRegulatoryContentReviewedAction,
-  updateSessionRequestStatusAction,
+  scheduleSessionRequestAction,
+  completeSessionRequestAction,
+  declineSessionRequestAction,
   updatePricingItemAction,
   replyToSprintQueueItemAction,
   resolveSprintInterestRequestAction,
@@ -173,6 +175,7 @@ export default async function ReviewerQueuePage() {
   const pricing = await listPricing();
   const sprintQueueItems = await listOpenSprintQueueItems();
   const sprintInterestRequests = await listOpenSprintInterestRequests();
+  const allSprints = await listAllSprints();
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
@@ -187,35 +190,68 @@ export default async function ReviewerQueuePage() {
           {sessionRequests.length === 0 ? (
             <p className="text-sm text-neutral-500 dark:text-neutral-400">No pending session requests.</p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-4">
               {sessionRequests.map((r) => (
-                <li key={r.id} className="flex items-center justify-between text-sm text-neutral-800 dark:text-neutral-200">
-                  <div>
-                    <span className="font-medium">{r.companyName}</span>{" "}
-                    <span className="text-neutral-500 dark:text-neutral-400">
-                      · {SESSION_TYPE_LABELS[r.session_type] ?? r.session_type} · {r.status} · requested{" "}
-                      {new Date(r.requested_at).toLocaleDateString()}
-                    </span>
-                    {r.client_notes && <p className="text-xs text-neutral-400 dark:text-neutral-500">&quot;{r.client_notes}&quot;</p>}
+                <li key={r.id} className="rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div>
+                      <Link href={`/company/${r.company_id}`} className="font-medium underline">
+                        {r.companyName}
+                      </Link>{" "}
+                      <span className="text-neutral-500 dark:text-neutral-400">
+                        · {SESSION_TYPE_LABELS[r.session_type] ?? r.session_type} · {r.status} · requested{" "}
+                        {new Date(r.requested_at).toLocaleDateString()}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex gap-1">
+                  {r.client_notes && <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">&quot;{r.client_notes}&quot;</p>}
+                  {r.status === "scheduled" && r.scheduled_at && (
+                    <p className="mb-2 text-xs text-neutral-700 dark:text-neutral-300">
+                      Scheduled for <span className="font-medium">{new Date(r.scheduled_at).toLocaleString()}</span>
+                      {r.reviewer_notes && <> · {r.reviewer_notes}</>}
+                    </p>
+                  )}
+
+                  {/*
+                   * Real workflow, not three inert buttons (confirmed
+                   * 2026-08-11, live testing pass — this exact panel was
+                   * reported "done" before and turned out to still be a
+                   * shallow stub). "Schedule" now takes a real date/time
+                   * and optional notes; "Decline" requires a real reason
+                   * and now notifies the client; "Complete" records a real
+                   * outcome. All three stay visible together (matching
+                   * this page's existing dense reviewer-form convention)
+                   * rather than hidden behind extra clicks.
+                   */}
+                  <div className="flex flex-wrap gap-3">
                     {r.status === "requested" && (
-                      <form action={updateSessionRequestStatusAction.bind(null, r.id, "scheduled")}>
+                      <form action={scheduleSessionRequestAction} className="flex items-end gap-1.5">
+                        <input type="hidden" name="requestId" value={r.id} />
+                        <Input type="datetime-local" name="scheduledAt" label="Schedule for" required className="py-1 text-xs" />
+                        <Input type="text" name="notes" placeholder="Notes (optional)" className="py-1 text-xs" />
                         <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
-                          Mark scheduled
+                          Schedule
                         </Button>
                       </form>
                     )}
-                    <form action={updateSessionRequestStatusAction.bind(null, r.id, "completed")}>
-                      <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
-                        Mark completed
-                      </Button>
-                    </form>
-                    <form action={updateSessionRequestStatusAction.bind(null, r.id, "declined")}>
-                      <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
-                        Decline
-                      </Button>
-                    </form>
+                    {(r.status === "requested" || r.status === "scheduled") && (
+                      <form action={completeSessionRequestAction} className="flex items-end gap-1.5">
+                        <input type="hidden" name="requestId" value={r.id} />
+                        <Input type="text" name="notes" placeholder="Outcome notes" className="py-1 text-xs" />
+                        <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
+                          Mark completed
+                        </Button>
+                      </form>
+                    )}
+                    {(r.status === "requested" || r.status === "scheduled") && (
+                      <form action={declineSessionRequestAction} className="flex items-end gap-1.5">
+                        <input type="hidden" name="requestId" value={r.id} />
+                        <Input type="text" name="reason" placeholder="Reason (required)" required className="py-1 text-xs" />
+                        <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
+                          Decline
+                        </Button>
+                      </form>
+                    )}
                   </div>
                 </li>
               ))}
@@ -311,6 +347,42 @@ export default async function ReviewerQueuePage() {
                       </Button>
                     </form>
                   </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        {/*
+         * Real gap found and fixed (confirmed 2026-08-11, live testing
+         * pass) — the queue previously only ever surfaced a sprint when it
+         * needed a reviewer decision (still 'scoped') or had an open
+         * change-request/KPI-deviation note; a healthy in-progress sprint
+         * or an already-complete one was invisible here entirely. Same
+         * "full directory, not just an action queue" pattern already used
+         * correctly for "Ready for review" above.
+         */}
+        <Card title="All Execution Sprints">
+          <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
+            Every sprint regardless of status — the sections above only ever show sprints that need a decision or
+            have an open note; this is the full list.
+          </p>
+          {allSprints.length === 0 ? (
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">No sprints yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {allSprints.map((s) => (
+                <li key={s.id} className="flex items-center justify-between text-sm text-neutral-800 dark:text-neutral-200">
+                  <div>
+                    <span className="font-medium">{s.companyName}</span>{" "}
+                    <span className="text-neutral-500 dark:text-neutral-400">
+                      · {s.findingTitle ?? "Untitled finding"} · {s.status}
+                      {s.targetEndDate && <> · target end {new Date(s.targetEndDate).toLocaleDateString()}</>}
+                    </span>
+                  </div>
+                  <LinkButton href={`/review-sprint/${s.id}`} variant="secondary" className="px-2 py-1 text-xs">
+                    Open
+                  </LinkButton>
                 </li>
               ))}
             </ul>
