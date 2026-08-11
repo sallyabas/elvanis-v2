@@ -946,7 +946,7 @@ Two additions requested together, both live-verified before being marked done, s
 
 `tsc --noEmit`, `eslint src/ --quiet`, and `npm run build` all clean throughout, re-checked after the privacy-gating bug fix. Disposable test account, company, goal, report, and findings created purely to drive this verification deleted afterward (a verification pass, not a first-of-its-kind proof run worth retaining — same precedent as the prior real-testing-pass batch).
 
-**Not yet committed/pushed** — held for explicit go-ahead, same standing pattern as every other change this session.
+Committed and pushed, per explicit go-ahead.
 
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
