@@ -923,7 +923,7 @@ Direct founder instruction, explicit: "before marking any of these done, actuall
 
 **Verification method, disclosed**: the reviewer-side actions were driven through a disposable test reviewer account (not the founder's real `msally.abas@gmail.com` reviewer identity) via the same `admin.generateLink()` + `verifyOtp()` + temporary local-only `/api/debug-set-session` route technique already established earlier this session — the temp route was deleted immediately after use, never committed (confirmed via `git status` showing a clean tree before this writeup). `tsc --noEmit`, `eslint src/ --quiet`, and `npm run build` all clean throughout, re-checked after cleanup.
 
-**Not yet committed/pushed** — held for explicit go-ahead, same standing pattern as every other change this session.
+Committed and pushed, per explicit go-ahead. The admin-dashboard question from item 5 stays deliberately open — founder's own call, decided to leave `/queue` as queue-only for now and revisit after a full test pass.
 
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
