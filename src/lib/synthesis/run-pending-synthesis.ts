@@ -15,6 +15,27 @@ import type { OverallMaturityTier } from "@/lib/lenses/ai-governance-framework";
  * background pass, not something baked into one request, is what makes
  * that true. Idempotent via reports.ai_opportunity_synthesized_at, same
  * pattern as reviewer_notified_at.
+ *
+ * Real bug found and fixed 2026-08-12, direct founder request, found
+ * while live-verifying the Dashboard rebuild that surfaces this data —
+ * this query originally only matched `status = 'approved'`. A report that
+ * reaches `approved` and then progresses to `sent` (deliverReport(), a
+ * separate step) before this check ever ticks falls PERMANENTLY out of
+ * that filter — nothing re-queues it, since `sent` was never a matched
+ * status. In production this narrow window (approved → cron tick →
+ * delivered) is normally closed by the ~20-minute GitHub Actions cadence,
+ * but confirmed live that every real report created after 2026-08-04 in
+ * this dev environment (where the cron never runs automatically at all)
+ * had silently skipped synthesis entirely, permanently, the moment it was
+ * delivered — the headline feature the Dashboard rebuild was built around
+ * had been non-functional for every real report so far. Fixed by widening
+ * the status match to `('approved', 'sent')` — synthesis's own inputs
+ * (approved/edited findings, the report's own persisted
+ * evidence_sufficiency_by_lens/governance_maturity_tier) are equally valid
+ * whether the report is `approved` or already `sent`; nothing about
+ * delivery invalidates them. Still fully idempotent via
+ * `ai_opportunity_synthesized_at is null` — a `sent` report that already
+ * got synthesized while it was briefly `approved` is correctly skipped.
  */
 
 export interface PendingSynthesisResult {
@@ -84,7 +105,7 @@ export async function runPendingAiOpportunitySynthesis(): Promise<PendingSynthes
     .select(
       "id, company_id, evidence_sufficiency_by_lens, governance_maturity_tier, companies(name, industry, business_model, registration_country, customer_market_countries, employee_count, stage, revenue_range_band, customer_type, main_tools_stack, team_structure_summary), goals(primary_goal, secondary_goal, urgency_level, target_metric, time_horizon, success_definition)",
     )
-    .eq("status", "approved")
+    .in("status", ["approved", "sent"])
     .is("ai_opportunity_synthesized_at", null);
 
   if (error) throw new Error(`runPendingAiOpportunitySynthesis: failed to load reports: ${error.message}`);
