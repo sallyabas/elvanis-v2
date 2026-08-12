@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { computeJourneyStatus } from "@/lib/reports/journey-status";
+import { NextStepBanner } from "@/app/_components/NextStepBanner";
+import { ProgressStepper } from "@/app/_components/ProgressStepper";
 
 const MODULE_LABELS: Record<string, string> = {
   ai_reliability: "AI Reliability Audit",
@@ -64,6 +68,16 @@ export default async function ReportsHistoryPage() {
     .eq("status", "sent")
     .order("delivered_at", { ascending: false });
 
+  // Real gap fixed, confirmed 2026-08-12 (live testing) — the empty state
+  // here was a single bare, unstyled line ("Nothing delivered yet.") with
+  // no visual weight and no next-step guidance, unlike Dashboard/Business
+  // Profile/Evidence Intake, which all replaced the same class of gap with
+  // NextStepBanner back on 2026-08-07. Same computeJourneyStatus() single
+  // source of truth as those pages (admin client required — see that
+  // function's own docblock for why a session-scoped query would silently
+  // misreport an in-review company as no_evidence).
+  const journeyStatus = await computeJourneyStatus(createAdminClient(), company.id as string);
+
   const items: HistoryItem[] = [
     ...(reports ?? []).map((r) => ({
       id: r.id as string,
@@ -81,13 +95,14 @@ export default async function ReportsHistoryPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
+      <ProgressStepper journeyStatus={journeyStatus} />
       <h1 className="mb-1 text-2xl font-semibold">Reports &amp; History</h1>
       <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">
         Every report delivered to you, in one chronological list.
       </p>
 
       {items.length === 0 ? (
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">Nothing delivered yet.</p>
+        <NextStepBanner journeyStatus={journeyStatus} />
       ) : (
         <ul className="space-y-3">
           {items.map((item) => (

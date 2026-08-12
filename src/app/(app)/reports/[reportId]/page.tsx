@@ -2,31 +2,24 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { EvidenceFieldInput, LensFinding, LensType, Severity } from "@/lib/lenses/types";
-import type { CommercialSelfReport } from "@/lib/lenses/commercial";
-import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
-import type { MetricInput } from "@/lib/lenses/metrics";
+import type { LensFinding, LensType, Severity } from "@/lib/lenses/types";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
 import { SessionRequestButton } from "@/app/_components/SessionRequestButton";
 import { SprintInterestButton } from "@/app/_components/SprintInterestButton";
-import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
+import { EvidenceSubmittedDisclosure, type EvidenceSnapshotShape } from "@/app/_components/EvidenceSubmittedDisclosure";
 import { loadGovernanceDimensions } from "@/lib/lenses/benchmarks-repository";
 import { getTotalTurnaroundHours } from "@/lib/reports/sla";
 import { Card } from "@/app/_components/ui/Card";
+import { Alert } from "@/app/_components/ui/Alert";
 
-interface SourceEvidenceSnapshot {
-  financial: { evidenceFields: EvidenceFieldInput[]; metrics?: MetricInput[] };
-  execution: { evidenceFields: EvidenceFieldInput[]; metrics?: MetricInput[] };
-  product: { evidenceFields: EvidenceFieldInput[]; metrics?: MetricInput[] };
-  commercial: CommercialSelfReport;
-  aiGovernance: {
-    hasLiveAiInProduction: boolean;
-    governanceDocsSubmitted: boolean;
-    questionnaireScores?: Partial<Record<GovernanceDimensionKey, number>>;
-    governanceEvidence?: EvidenceFieldInput[];
-  };
-}
+// SourceEvidenceSnapshot renamed to the shared EvidenceSnapshotShape
+// (confirmed 2026-08-12, real bug list item #4) — this type/rendering was
+// extracted into src/app/_components/EvidenceSubmittedDisclosure.tsx so
+// the evidence-intake page's locked view can show a client the same real
+// content while their submission is still in flight, not only after a
+// report is fully delivered. See that file's own docblock.
+type SourceEvidenceSnapshot = EvidenceSnapshotShape;
 
 // Severity color-coding (confirmed 2026-08-06, honest UX review pass) —
 // previously all four severities rendered as identical small gray
@@ -301,7 +294,18 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
         </section>
       ))}
 
-      {visibleFindings.length === 0 && <p className="text-sm text-neutral-500">No findings to show yet.</p>}
+      {/* Real gap fixed, confirmed 2026-08-12 (empty-state audit following
+          the Reports & History fix) — this was a single bare, unstyled
+          line with no visual weight, easy to mistake for a rendering
+          error rather than an honest (rare) edge case: every finding on
+          this delivered report was rejected during review. Given real
+          visual weight via the shared Alert component, same as every
+          other message surface swept in the app-wide message-design pass. */}
+      {visibleFindings.length === 0 && (
+        <Alert variant="info">
+          None of this report&apos;s findings are currently visible — every one was removed during review.
+        </Alert>
+      )}
 
       {/*
        * Next steps — moved here from the top of the page, and no longer
@@ -333,105 +337,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
 
       {evidenceSnapshot && (
         <section className="mt-10">
-          <details className="rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <summary className="cursor-pointer px-5 py-3 text-lg font-medium">Evidence submitted</summary>
-            <div className="space-y-6 border-t border-neutral-200 p-5 dark:border-neutral-800">
-              {EVIDENCE_FIELD_SETS.map((set) => {
-                const submitted = evidenceSnapshot[set.lens].evidenceFields;
-                const submittedMetrics = evidenceSnapshot[set.lens].metrics ?? [];
-                return (
-                  <div key={set.lens}>
-                    <h3 className="mb-2 text-sm font-medium">{set.title}</h3>
-                    {set.metrics.length > 0 && (
-                      <dl className="mb-3 grid gap-2 text-sm sm:grid-cols-2">
-                        {set.metrics.map((m) => {
-                          const match = submittedMetrics.find((v) => v.metricKey === m.metricKey);
-                          return (
-                            <div key={m.metricKey}>
-                              <dt className="text-neutral-500 dark:text-neutral-400">
-                                {m.label}
-                                {m.unit && ` (${m.unit})`}
-                              </dt>
-                              <dd className={match ? "text-neutral-700 dark:text-neutral-300" : "italic text-neutral-400"}>
-                                {match ? match.value : "Not provided"}
-                              </dd>
-                            </div>
-                          );
-                        })}
-                      </dl>
-                    )}
-                    <dl className="space-y-2 text-sm">
-                      {set.fields.map((field) => {
-                        const match = submitted.find((f) => f.fieldName === field.key);
-                        return (
-                          <div key={field.key}>
-                            <dt className="text-neutral-500 dark:text-neutral-400">{field.label}</dt>
-                            <dd className={match?.fieldValue ? "text-neutral-700 dark:text-neutral-300" : "italic text-neutral-400"}>
-                              {match?.fieldValue || "Not provided"}
-                            </dd>
-                          </div>
-                        );
-                      })}
-                    </dl>
-                  </div>
-                );
-              })}
-
-              <div>
-                <h3 className="mb-2 text-sm font-medium">Commercial / Market</h3>
-                <dl className="space-y-2 text-sm">
-                  <div>
-                    <dt className="text-neutral-500 dark:text-neutral-400">Named competitors</dt>
-                    <dd className={evidenceSnapshot.commercial.namedCompetitors.length > 0 ? "text-neutral-700 dark:text-neutral-300" : "italic text-neutral-400"}>
-                      {evidenceSnapshot.commercial.namedCompetitors.length > 0 ? evidenceSnapshot.commercial.namedCompetitors.join(", ") : "Not provided"}
-                    </dd>
-                  </div>
-                  {(
-                    [
-                      ["Market change notes", evidenceSnapshot.commercial.marketChangeNotes],
-                      ["Pricing pressure notes", evidenceSnapshot.commercial.pricingPressureNotes],
-                      ["Lost deals notes", evidenceSnapshot.commercial.lostDealsNotes],
-                    ] as const
-                  ).map(([label, value]) => (
-                    <div key={label}>
-                      <dt className="text-neutral-500 dark:text-neutral-400">{label}</dt>
-                      <dd className={value ? "text-neutral-700 dark:text-neutral-300" : "italic text-neutral-400"}>{value || "Not provided"}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-
-              <div>
-                <h3 className="mb-2 text-sm font-medium">AI & Governance</h3>
-                <dl className="space-y-2 text-sm">
-                  <div>
-                    <dt className="text-neutral-500 dark:text-neutral-400">Live AI in production</dt>
-                    <dd className="text-neutral-700 dark:text-neutral-300">{evidenceSnapshot.aiGovernance.hasLiveAiInProduction ? "Yes" : "No"}</dd>
-                  </div>
-                  {evidenceSnapshot.aiGovernance.governanceDocsSubmitted ? (
-                    <div>
-                      <dt className="text-neutral-500 dark:text-neutral-400">Governance documentation description</dt>
-                      <dd className="text-neutral-700 dark:text-neutral-300">
-                        {evidenceSnapshot.aiGovernance.governanceEvidence?.[0]?.fieldValue || "Not provided"}
-                      </dd>
-                    </div>
-                  ) : (
-                    governanceDimensions.map((dim) => {
-                      const score = evidenceSnapshot.aiGovernance.questionnaireScores?.[dim.key];
-                      return (
-                        <div key={dim.key}>
-                          <dt className="text-neutral-500 dark:text-neutral-400">{dim.label}</dt>
-                          <dd className={score !== undefined ? "text-neutral-700 dark:text-neutral-300" : "italic text-neutral-400"}>
-                            {score !== undefined ? `${score} / 3` : "Not provided"}
-                          </dd>
-                        </div>
-                      );
-                    })
-                  )}
-                </dl>
-              </div>
-            </div>
-          </details>
+          <EvidenceSubmittedDisclosure evidenceSnapshot={evidenceSnapshot} governanceDimensions={governanceDimensions} />
         </section>
       )}
     </div>

@@ -12,11 +12,21 @@ import { computeJourneyStatus } from "@/lib/reports/journey-status";
 import { SUBMISSION_STAGE_LABELS } from "@/lib/evidence/submission-status";
 import { Card } from "@/app/_components/ui/Card";
 import { Alert } from "@/app/_components/ui/Alert";
+import { EvidenceSubmittedDisclosure, type EvidenceSnapshotShape } from "@/app/_components/EvidenceSubmittedDisclosure";
 import { EvidenceIntakeForm } from "./EvidenceIntakeForm";
 
 // Real Evidence Intake, fill-in-template path (confirmed 2026-08-03,
 // Priority 1) — native CSV/PDF upload/parsing is explicitly deferred, see
 // CLAUDE.md and spec §5. Session-derived company/goal, not `?companyId=`.
+//
+// Moved into the (app) route group 2026-08-12 (real bug found and fixed
+// during live testing) — this page had lived as a top-level route
+// (src/app/evidence-intake/) since it was first built, with no documented
+// reason for that, unlike onboarding/client-login/etc., which are
+// deliberately outside (app) for real, stated reasons. The result: this
+// was the one authenticated, core-product client page missing the shared
+// site header/nav (app)/layout.tsx provides everywhere else. Route group
+// folders don't affect the URL, so /evidence-intake is unchanged.
 //
 // Rewritten 2026-08-10 for the delayed-execution architecture — evidence
 // submission no longer triggers runAudit() immediately (see
@@ -81,17 +91,44 @@ export default async function EvidenceIntakePage() {
               ? "The window for changes has closed. Your evidence is locked and waiting for the scheduled analysis run — check back shortly."
               : "Your evidence is being analyzed right now. This usually takes under a minute."}
           </p>
+          {/* Real submission/edit dates (confirmed 2026-08-12, real bug
+              list item #4) — this locked view previously showed a status
+              label and nothing else, no indication of when the evidence
+              was actually submitted or last touched. */}
+          <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-500">
+            Submitted {new Date(activeSubmission.submittedAt).toLocaleString()}
+            {Math.abs(new Date(activeSubmission.updatedAt).getTime() - new Date(activeSubmission.submittedAt).getTime()) > 60_000
+              ? ` · last edited ${new Date(activeSubmission.updatedAt).toLocaleString()}`
+              : ""}
+          </p>
         </Card>
         {/* Real bug found and fixed (confirmed 2026-08-10, live testing pass)
             — this locked-status branch previously omitted the Discovery
             Session offer entirely, so it visibly disappeared the moment a
             client's evidence left "editing" and hit this view, even though
             it was correctly always present in the editable view below.
-            Kept unconditional across every evidence-intake page state now.
-            Deliberately NOT adding a link back to the evidence itself from
-            here yet — flagged, founder's own call for later. */}
+            Kept unconditional across every evidence-intake page state now. */}
         <div className="mt-6">
           <SessionRequestButton companyId={companyId} sessionType="discovery" />
+        </div>
+        {/* Real gap fixed (confirmed 2026-08-12, real bug list item #4:
+            "the client has no visible history of their own evidence
+            intake... their actual submitted answers are not
+            retained/viewable anywhere on their side") — while the window
+            was open, a client could always see their own answers by just
+            looking at the form; the moment it locked (queued/analyzing),
+            there was previously no way to review what was actually
+            submitted until a report eventually existed. Same shared
+            component the delivered client Report page uses, so this is
+            provably the real submitted content, not a re-description of
+            it. */}
+        <div className="mt-6">
+          <EvidenceSubmittedDisclosure
+            evidenceSnapshot={activeSubmission.evidencePayload as unknown as EvidenceSnapshotShape}
+            governanceDimensions={governanceDimensions}
+            title="What you submitted"
+            defaultOpen
+          />
         </div>
       </div>
     );
@@ -142,6 +179,8 @@ export default async function EvidenceIntakePage() {
         isFreeAudit={isFreeAudit}
         isEditingExisting={activeSubmission !== null}
         editWindowClosesAt={activeSubmission?.editWindowClosesAt ?? null}
+        submittedAt={activeSubmission?.submittedAt ?? null}
+        updatedAt={activeSubmission?.updatedAt ?? null}
       />
     </div>
   );

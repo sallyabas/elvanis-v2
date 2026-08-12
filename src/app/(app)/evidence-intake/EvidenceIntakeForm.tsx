@@ -90,6 +90,8 @@ export function EvidenceIntakeForm({
   isFreeAudit,
   isEditingExisting,
   editWindowClosesAt,
+  submittedAt,
+  updatedAt,
 }: {
   companyId: string;
   goalId: string;
@@ -138,6 +140,15 @@ export function EvidenceIntakeForm({
    * an edit window actually exists to close early.
    */
   editWindowClosesAt: string | null;
+  /**
+   * Real submission/edit dates (confirmed 2026-08-12, real bug list item
+   * #4: "the client has no visible history of their own evidence intake —
+   * submission date, edit date... are not retained/viewable anywhere on
+   * their side"). Both null on a genuinely first-ever submission, same
+   * reasoning as editWindowClosesAt above.
+   */
+  submittedAt: string | null;
+  updatedAt: string | null;
 }) {
   const router = useRouter();
 
@@ -430,6 +441,23 @@ export function EvidenceIntakeForm({
             Come back any time before then — your changes save to this same submission, and review begins
             automatically once the window closes.
           </p>
+          {/*
+           * Real submission/edit dates (confirmed 2026-08-12, real bug
+           * list item #4) — previously nothing on this page showed WHEN
+           * evidence was first submitted or last changed, only a relative
+           * countdown to the deadline. updatedAt only shown when it
+           * genuinely differs from submittedAt (more than a minute apart,
+           * to absorb clock/round-trip noise) — otherwise showing both
+           * would just repeat the same moment twice.
+           */}
+          {submittedAt && (
+            <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">
+              Submitted {new Date(submittedAt).toLocaleString()}
+              {updatedAt && Math.abs(new Date(updatedAt).getTime() - new Date(submittedAt).getTime()) > 60_000
+                ? ` · last edited ${new Date(updatedAt).toLocaleString()}`
+                : ""}
+            </p>
+          )}
           {/*
            * "Submit now, I'm done editing" fast-track (confirmed
            * 2026-08-11, direct founder request) — a deliberate, separate

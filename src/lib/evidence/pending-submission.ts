@@ -20,6 +20,10 @@ export interface PendingEvidenceSubmissionRecord {
   evidencePayload: Record<string, unknown>;
   stage: SubmissionDisplayStage;
   editWindowClosesAt: string;
+  /** First submitted (confirmed 2026-08-12, real bug list item #4) — anchored once, never reset by later edits. */
+  submittedAt: string;
+  /** Last touched (new column, confirmed 2026-08-12) — same value as submittedAt until a real in-window edit happens. */
+  updatedAt: string;
 }
 
 /** The one active (non-'completed') pending submission for a company, if any — null if this company has none in flight right now. */
@@ -27,7 +31,7 @@ export async function loadActivePendingEvidenceSubmission(companyId: string): Pr
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("pending_evidence_submissions")
-    .select("id, company_id, goal_id, evidence_payload, status, edit_window_closes_at")
+    .select("id, company_id, goal_id, evidence_payload, status, edit_window_closes_at, submitted_at, updated_at")
     .eq("company_id", companyId)
     .neq("status", "completed")
     .maybeSingle();
@@ -47,6 +51,8 @@ export async function loadActivePendingEvidenceSubmission(companyId: string): Pr
     evidencePayload: data.evidence_payload as Record<string, unknown>,
     stage,
     editWindowClosesAt: data.edit_window_closes_at as string,
+    submittedAt: data.submitted_at as string,
+    updatedAt: data.updated_at as string,
   };
 }
 
@@ -93,6 +99,7 @@ export async function upsertPendingEvidenceSubmission(input: UpsertPendingEviden
       evidence_payload: input.evidencePayload,
       status: "editing",
       submitted_at: now.toISOString(),
+      updated_at: now.toISOString(),
       edit_window_closes_at: closesAt.toISOString(),
     });
     if (error) return { success: false, error: error.message };
@@ -114,10 +121,13 @@ export async function upsertPendingEvidenceSubmission(input: UpsertPendingEviden
     return { success: false, error: "Your evidence is currently being analyzed — please wait for it to finish before making changes." };
   }
 
-  // stage === "editing": update in place, deadline untouched.
+  // stage === "editing": update in place, deadline untouched, updated_at
+  // bumped to now (confirmed 2026-08-12, real bug list item #4) — the one
+  // real signal that distinguishes "first submitted" from "last edited"
+  // for the client-facing UI to show honestly.
   const { error } = await supabase
     .from("pending_evidence_submissions")
-    .update({ goal_id: input.goalId, evidence_payload: input.evidencePayload })
+    .update({ goal_id: input.goalId, evidence_payload: input.evidencePayload, updated_at: new Date().toISOString() })
     .eq("id", existing.id);
   if (error) return { success: false, error: error.message };
   return { success: true };
