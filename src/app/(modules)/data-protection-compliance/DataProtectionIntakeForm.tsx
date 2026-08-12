@@ -6,6 +6,7 @@ import { submitDataProtectionComplianceAudit } from "./actions";
 import { Textarea } from "@/app/_components/ui/Textarea";
 import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
+import { DocumentUploadField } from "@/app/_components/ui/DocumentUploadField";
 
 const CATEGORY_FIELDS: { key: "consentFlow" | "dataSubjectRights" | "retentionPolicy" | "breachResponse" | "crossBorderTransfer"; label: string; placeholder: string }[] = [
   {
@@ -49,11 +50,22 @@ export function DataProtectionIntakeForm({
     breachResponse: "",
     crossBorderTransfer: "",
   });
+  /**
+   * Real document upload (confirmed 2026-08-12) — deliberately ONE shared
+   * field, not five, per explicit founder direction: a real privacy
+   * policy naturally covers several of the five categories at once, so
+   * splitting one document into five separate uploads would be a worse
+   * client experience with no real benefit. The module's own buildPrompt()
+   * decides, per category, whether this document actually addresses it —
+   * see index.ts's reconcileBlankCategoryFindings() for how that's kept
+   * deterministic rather than trusted from a prompt instruction alone.
+   */
+  const [existingDocumentationText, setExistingDocumentationText] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "submitting" | "done" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
 
-  const anyFilled = Object.values(values).some((v) => v.trim().length > 0);
+  const anyFilled = Object.values(values).some((v) => v.trim().length > 0) || Boolean(existingDocumentationText?.trim());
 
   async function handleSubmit() {
     setStatus("submitting");
@@ -67,6 +79,7 @@ export function DataProtectionIntakeForm({
         breachResponse: values.breachResponse.trim() || null,
         crossBorderTransfer: values.crossBorderTransfer.trim() || null,
       },
+      existingDocumentationText: existingDocumentationText?.trim() || null,
     });
     if (result.success) {
       setRequestId(result.requestId ?? null);
@@ -90,6 +103,34 @@ export function DataProtectionIntakeForm({
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
         Leave any area blank if nothing is in place yet — that&apos;s meaningful evidence too, not an incomplete submission.
       </p>
+      {/* Real document upload (confirmed 2026-08-12) — one shared field
+          covering all five categories below, not five separate uploads.
+          Additive, not a replacement: the five category fields still work
+          exactly as before with nothing uploaded here. */}
+      <DocumentUploadField
+        label="Upload an existing privacy policy or documentation (optional)"
+        hint="PDF or DOCX — a real privacy policy often covers several of the areas below at once. We'll extract the text and use it alongside anything you type below; you don't need to also fill in every matching field by hand."
+        onExtracted={(text) => setExistingDocumentationText(text)}
+      />
+      {existingDocumentationText !== null && (
+        // Real gap found and fixed during live verification (confirmed
+        // 2026-08-12): DocumentUploadField's own success message promises
+        // "review it below and edit if needed before submitting" — true
+        // for AI & Governance and Tender Readiness, which both feed the
+        // extraction straight into an existing visible textarea, but this
+        // module's shared document doesn't map onto any single one of the
+        // five category fields below, so the extracted text was captured
+        // in state and silently never shown anywhere. Fixed by giving it
+        // its own visible, editable textarea, distinct from the five
+        // category fields, so the promise the upload widget itself makes
+        // is actually true here too.
+        <Textarea
+          label="Extracted document text (edit if needed)"
+          rows={6}
+          value={existingDocumentationText}
+          onChange={(e) => setExistingDocumentationText(e.target.value)}
+        />
+      )}
       {CATEGORY_FIELDS.map((field) => (
         <Textarea
           key={field.key}

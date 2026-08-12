@@ -6,6 +6,7 @@ import { submitTenderReadinessAudit } from "./actions";
 import { Textarea } from "@/app/_components/ui/Textarea";
 import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
+import { DocumentUploadField } from "@/app/_components/ui/DocumentUploadField";
 
 export function TenderReadinessIntakeForm({
   companyId,
@@ -53,6 +54,16 @@ export function TenderReadinessIntakeForm({
         placeholder="e.g. a customer-facing chatbot for support, an internal automation that auto-approves refunds under $50…"
         value={aiUseCaseInventory}
         onChange={(e) => setAiUseCaseInventory(e.target.value)}
+      />
+      {/* Real document upload (confirmed 2026-08-12) — this textarea was
+          the only way to describe existing documentation until now,
+          description-only, same gap found in AI & Governance's own
+          "document-review mode." Upload is additive, not a replacement —
+          typing directly still works with nothing to upload. */}
+      <DocumentUploadField
+        label="Upload existing compliance documentation (optional)"
+        hint="PDF or DOCX — e.g. a risk assessment, AI use inventory, or procurement-readiness material already prepared. We'll extract the text; you can review and edit it below before submitting."
+        onExtracted={(text) => setExistingDocumentation(text)}
       />
       <Textarea
         label="Existing compliance documentation, if any (optional)"

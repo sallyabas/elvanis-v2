@@ -52,6 +52,15 @@ export interface DataProtectionDraftInput {
   companyId: string;
   company: CompanyJurisdictionInput;
   evidence: DataProtectionCategoryEvidence;
+  /**
+   * Real document upload (confirmed 2026-08-12) — extracted text from a
+   * real uploaded privacy policy / documentation file (PDF/DOCX), shared
+   * across all 5 categories rather than tied to one, since a real policy
+   * document naturally covers several of them at once. Null when no
+   * document was uploaded — the module's existing per-category typed-text
+   * behavior is completely unchanged in that case.
+   */
+  existingDocumentationText: string | null;
 }
 
 export interface DataProtectionDraftResult {

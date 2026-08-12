@@ -16,6 +16,7 @@ import { Select } from "@/app/_components/ui/Select";
 import { Card } from "@/app/_components/ui/Card";
 import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
+import { DocumentUploadField } from "@/app/_components/ui/DocumentUploadField";
 import { EditWindowCountdown } from "@/app/_components/EditWindowCountdown";
 
 // EvidenceIntakeDraft moved to draft-shape.ts (confirmed 2026-08-10,
@@ -173,6 +174,19 @@ export function EvidenceIntakeForm({
   const [hasLiveAiInProduction, setHasLiveAiInProduction] = useState(initialDraft?.hasLiveAiInProduction ?? false);
   const [governanceDocsSubmitted, setGovernanceDocsSubmitted] = useState(initialDraft?.governanceDocsSubmitted ?? false);
   const [governanceEvidenceText, setGovernanceEvidenceText] = useState(initialDraft?.governanceEvidenceText ?? "");
+  /**
+   * Real document upload (confirmed 2026-08-12, direct founder request) —
+   * tracks whether the current governanceEvidenceText came from a real
+   * uploaded PDF/DOCX (EvidenceFieldInput's `source` field already
+   * supported "parsed" in the type system, unused until now) or was typed
+   * by the client. Flips back to "manual" the moment the client edits the
+   * textarea after an upload, since hand-edited text is no longer purely
+   * the extracted document. Resets to "manual" on a fresh draft reload —
+   * the draft mechanism doesn't persist this distinction, a deliberate,
+   * disclosed simplification since it only affects prompt-quality
+   * signaling, not any gating logic.
+   */
+  const [governanceEvidenceSource, setGovernanceEvidenceSource] = useState<"manual" | "parsed">("manual");
   const [dimensionScores, setDimensionScores] = useState<Partial<Record<GovernanceDimensionKey, number>>>(
     initialDraft?.dimensionScores ?? {},
   );
@@ -337,7 +351,7 @@ export function EvidenceIntakeForm({
         ...(governanceDocsSubmitted
           ? {
               governanceEvidence: governanceEvidenceText.trim()
-                ? [{ fieldName: "governance_documentation", fieldValue: governanceEvidenceText.trim(), source: "manual" as const, isBlank: false }]
+                ? [{ fieldName: "governance_documentation", fieldValue: governanceEvidenceText.trim(), source: governanceEvidenceSource, isBlank: false }]
                 : [],
             }
           : { questionnaireScores: dimensionScores }),
@@ -582,13 +596,32 @@ export function EvidenceIntakeForm({
           </label>
 
           {governanceDocsSubmitted ? (
-            <Textarea
-              label="Describe your governance documentation"
-              rows={4}
-              placeholder="e.g. our AI use policy, risk classification process, incident response plan…"
-              value={governanceEvidenceText}
-              onChange={(e) => setGovernanceEvidenceText(e.target.value)}
-            />
+            <div className="space-y-3">
+              {/* Real document upload (confirmed 2026-08-12) — closes the
+                  real gap found while investigating whether this
+                  "document-review mode" actually read real documents; it
+                  didn't, this textarea was description-only. Upload is
+                  additive, not a replacement — a client with nothing to
+                  upload can still type a description directly below. */}
+              <DocumentUploadField
+                label="Upload your governance documentation (optional)"
+                hint="PDF or DOCX — e.g. your AI use policy, risk classification process, or incident response plan. We'll extract the text; you can review and edit it below before submitting."
+                onExtracted={(text) => {
+                  setGovernanceEvidenceText(text);
+                  setGovernanceEvidenceSource("parsed");
+                }}
+              />
+              <Textarea
+                label="Describe your governance documentation"
+                rows={4}
+                placeholder="e.g. our AI use policy, risk classification process, incident response plan…"
+                value={governanceEvidenceText}
+                onChange={(e) => {
+                  setGovernanceEvidenceText(e.target.value);
+                  setGovernanceEvidenceSource("manual");
+                }}
+              />
+            </div>
           ) : (
             <div className="space-y-4">
               <p className="text-xs text-neutral-500 dark:text-neutral-400">No documents? Rate where each area actually stands today.</p>

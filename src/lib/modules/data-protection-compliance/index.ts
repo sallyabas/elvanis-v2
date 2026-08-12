@@ -100,17 +100,40 @@ function buildPrompt(
   categoriesWithoutEvidence: DataProtectionCategory[],
   input: DataProtectionDraftInput,
 ): string {
+  const hasSharedDocument = Boolean(input.existingDocumentationText?.trim());
+
+  // Real document upload (confirmed 2026-08-12) — when a shared document
+  // exists, categories with no directly typed evidence are no longer
+  // unconditionally off-limits: the LLM may draft a genuine finding for
+  // one of them, but ONLY if the shared document itself actually
+  // addresses it, never by inference or assumption. This does NOT weaken
+  // the deterministic guarantee — index.ts's own post-processing (not
+  // this prompt instruction) is what actually decides, after the fact,
+  // whether to keep the guaranteed placeholder or the LLM's real finding
+  // for each such category. Same "verify what the model actually did,
+  // don't just trust the instruction" discipline as everywhere else in
+  // this codebase — this rule shapes what the model is invited to try,
+  // the code below is what's actually trusted.
   const noEvidenceRule =
     categoriesWithoutEvidence.length === 0
       ? ""
-      : `\n5. The following categories had NO evidence submitted: ${categoriesWithoutEvidence.join(", ")}. That gap is ALREADY guaranteed as a separate finding for each of those categories elsewhere in the system — do NOT write your own finding about missing/absent evidence for those categories. Only draft findings for the categories listed below as having evidence.`;
+      : hasSharedDocument
+        ? `\n5. The following categories had no directly typed evidence: ${categoriesWithoutEvidence.join(", ")}. A shared document was uploaded (see below) — check it specifically for each of these categories. If it genuinely addresses a category with real, specific content, draft one genuine finding for that category (isMissingDataFinding: false, evidenceCited: ["existingDocumentationText"]). If it does NOT address a given category at all, do not draft anything for that category — do not guess or infer coverage that isn't there, and do not write a finding about the absence either (a separate mechanism already handles that).`
+        : `\n5. The following categories had NO evidence submitted: ${categoriesWithoutEvidence.join(", ")}. That gap is ALREADY guaranteed as a separate finding for each of those categories elsewhere in the system — do NOT write your own finding about missing/absent evidence for those categories. Only draft findings for the categories listed below as having evidence.`;
   const divergenceNote = buildDivergenceNote(applicableRegulations);
+  const sharedDocumentSection = hasSharedDocument
+    ? `\n\nSHARED DOCUMENT (uploaded by the client — extracted text, may cover any of the five categories, including ones with no directly typed evidence above):\n${input.existingDocumentationText}`
+    : "";
+  // Widened to every category when a shared document exists (see rule 5
+  // above) — otherwise unchanged, restricted to categories with typed
+  // evidence, exactly as before this feature.
+  const allowedCategoriesForSchema = hasSharedDocument ? categoriesWithEvidence.concat(categoriesWithoutEvidence) : categoriesWithEvidence;
 
   return `You are the Data Protection Compliance module of an AI execution audit. You assess data-protection compliance readiness — consent flows, data-subject-rights handling, retention policy, breach-response readiness, and cross-border transfer safeguards — ONLY within the regulations listed below as applicable (GDPR variants and/or Saudi PDPL). This is a general, AI-agnostic data-protection assessment, not an AI-specific governance review (that's a separate module's job) — do not discuss AI risk classification or AI governance maturity here. You do not write prose reports.
 
 HARD RULES — violating any of these makes your output unusable:
 1. The applicable regulations below were already determined by code from the company's registration/customer-market data — you do not decide applicability, and you must NEVER produce a finding tagged with a regulation not listed as applicable.
-2. Never fabricate a claim not grounded in the submitted evidence. Every finding must cite the specific evidence it came from in "evidenceCited" (e.g. "evidence.consentFlow").
+2. Never fabricate a claim not grounded in the submitted evidence. Every finding must cite the specific evidence it came from in "evidenceCited" (e.g. "evidence.consentFlow", or "existingDocumentationText" for the shared document).
 3. If evidence for a category is present but too sparse to assess confidently, do not guess — reflect that via confidenceLevel "insufficient" rather than manufacturing a finding.
 4. Output strict JSON matching the schema below. No prose outside the JSON.${noEvidenceRule}
 
@@ -123,7 +146,7 @@ FINDING STRUCTURE — four fields must stay distinct, never folded together:
 APPLICABLE REGULATIONS FOR THIS COMPANY (already determined by code — do not add or omit any): ${applicableRegulations.join(", ")}${divergenceNote}
 
 CATEGORIES WITH EVIDENCE SUBMITTED (draft findings only for these):
-${categoriesWithEvidence.map((c) => `- ${c}: ${CATEGORY_LABELS[c]}\n  Evidence: ${input.evidence[CATEGORY_EVIDENCE_KEYS[c]]}`).join("\n")}
+${categoriesWithEvidence.map((c) => `- ${c}: ${CATEGORY_LABELS[c]}\n  Evidence: ${input.evidence[CATEGORY_EVIDENCE_KEYS[c]]}`).join("\n")}${sharedDocumentSection}
 
 OUTPUT SCHEMA (JSON object):
 {
@@ -134,7 +157,7 @@ OUTPUT SCHEMA (JSON object):
       "rootCause": string,
       "recommendedAction": string,
       "severity": "critical" | "high" | "medium" | "low",
-      "category": ${categoriesWithEvidence.map((c) => `"${c}"`).join(" | ")},
+      "category": ${allowedCategoriesForSchema.map((c) => `"${c}"`).join(" | ")},
       "applicableRegulations": (${applicableRegulations.map((r) => `"${r}"`).join(" | ")})[],
       "evidenceCited": string[],
       "confidenceLevel": "high" | "medium" | "low" | "insufficient",
@@ -146,7 +169,7 @@ OUTPUT SCHEMA (JSON object):
 
 COMPANY ${companyId}
 
-Produce your findings now, following the output schema exactly — every finding's "category" must be one of the categories with evidence listed above.`;
+Produce your findings now, following the output schema exactly — every finding's "category" must be one of the categories with evidence listed above${hasSharedDocument ? ", or one of the no-typed-evidence categories ONLY if the shared document genuinely addresses it, per rule 5" : ""}.`;
 }
 
 /**
@@ -156,11 +179,41 @@ Produce your findings now, following the output schema exactly — every finding
  * observe it a fourth time. Any LLM-produced finding whose category has no
  * submitted evidence is redundant with buildMissingEvidenceFinding() for
  * that category and is dropped.
+ *
+ * Real document upload (confirmed 2026-08-12) — no longer a pure filter.
+ * A category that had no typed evidence can now legitimately get a real,
+ * evidence-grounded LLM finding if a shared document covers it — dropping
+ * that finding just because the category "had no evidence" would be
+ * wrong once a shared document exists. Returns which findings survive
+ * AND which now-covered categories should have their deterministic
+ * placeholder finding removed — the actual coverage decision is made
+ * here in code, from what the LLM's response genuinely says
+ * (isMissingDataFinding: false = real coverage), never trusted from the
+ * prompt instruction alone.
  */
-function dropDuplicateMissingEvidenceFindings(findings: DataProtectionFinding[], categoriesWithoutEvidence: DataProtectionCategory[]): DataProtectionFinding[] {
-  if (categoriesWithoutEvidence.length === 0) return findings;
+function reconcileBlankCategoryFindings(
+  llmFindings: DataProtectionFinding[],
+  categoriesWithoutEvidence: DataProtectionCategory[],
+  hasSharedDocument: boolean,
+): { survivingLlmFindings: DataProtectionFinding[]; coveredByDocument: Set<DataProtectionCategory> } {
   const blank = new Set(categoriesWithoutEvidence);
-  return findings.filter((f) => !blank.has(f.category));
+  const coveredByDocument = new Set<DataProtectionCategory>();
+
+  if (!hasSharedDocument) {
+    // Unchanged from the original behavior: no shared document means no
+    // blank category can have real coverage, so any LLM finding touching
+    // one is necessarily a spurious duplicate of the guaranteed finding.
+    return { survivingLlmFindings: llmFindings.filter((f) => !blank.has(f.category)), coveredByDocument };
+  }
+
+  const survivingLlmFindings = llmFindings.filter((f) => {
+    if (!blank.has(f.category)) return true; // categories with typed evidence: unaffected
+    if (f.isMissingDataFinding) return false; // the LLM tried to flag an absence itself — drop, the guaranteed finding already covers it
+    coveredByDocument.add(f.category); // a genuine, evidence-grounded finding — real coverage found in the shared document
+    return true;
+  });
+
+  return { survivingLlmFindings, coveredByDocument };
 }
 
 export async function runDataProtectionComplianceAudit(input: DataProtectionDraftInput): Promise<DataProtectionDraftResult> {
@@ -181,10 +234,18 @@ export async function runDataProtectionComplianceAudit(input: DataProtectionDraf
     return value !== null && value.trim().length > 0;
   });
   const categoriesWithoutEvidence = allCategories.filter((c) => !categoriesWithEvidence.includes(c));
+  const hasSharedDocument = Boolean(input.existingDocumentationText?.trim());
 
+  // Every blank category still gets its guaranteed placeholder finding up
+  // front, same as before this feature — reconcileBlankCategoryFindings()
+  // below (not this line) decides afterward, from the LLM's actual
+  // response, which of these get removed because real coverage was found
+  // in a shared document. Never removed pre-emptively just because a
+  // document was uploaded — uploading a document doesn't guarantee it
+  // addresses every category.
   const findings: DataProtectionFinding[] = categoriesWithoutEvidence.map((c) => buildMissingEvidenceFinding(c, applicableRegulations));
 
-  if (categoriesWithEvidence.length === 0) {
+  if (categoriesWithEvidence.length === 0 && !hasSharedDocument) {
     return { applicability, findings, notes: "No category evidence submitted — only the missing-evidence gaps could be assessed." };
   }
 
@@ -207,9 +268,15 @@ export async function runDataProtectionComplianceAudit(input: DataProtectionDraf
     isMissingDataFinding: f.isMissingDataFinding,
   }));
 
-  findings.push(...dropDuplicateMissingEvidenceFindings(llmFindings, categoriesWithoutEvidence));
+  const { survivingLlmFindings, coveredByDocument } = reconcileBlankCategoryFindings(llmFindings, categoriesWithoutEvidence, hasSharedDocument);
 
-  return { applicability, findings, notes: raw.notes };
+  // Real coverage found via the shared document (confirmed 2026-08-12) —
+  // remove that category's guaranteed placeholder now that a genuine,
+  // evidence-grounded finding exists for it instead.
+  const finalFindings = coveredByDocument.size > 0 ? findings.filter((f) => !coveredByDocument.has(f.category)) : findings;
+  finalFindings.push(...survivingLlmFindings);
+
+  return { applicability, findings: finalFindings, notes: raw.notes };
 }
 
 export { computeJurisdictionApplicability } from "./jurisdiction";
