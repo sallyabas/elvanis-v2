@@ -182,6 +182,19 @@ export default async function ReviewerQueuePage() {
     return { companyName: name, stage, submittedAt: r.submitted_at as string, editWindowClosesAt: r.edit_window_closes_at as string };
   });
 
+  // Split "Still with client" into two genuinely different states
+  // (confirmed 2026-08-12, direct founder request) — the original single
+  // section conflated two things that read very differently to a
+  // reviewer: a submission genuinely still being edited by the client
+  // (real "still with client," nothing to watch) vs. one whose edit
+  // window has already closed and is just waiting on the next scheduled
+  // cron run to actually generate the report — that one isn't with the
+  // client at all anymore, it's queued on OUR side. Same underlying data
+  // (pendingByCompany/computeSubmissionDisplayStage), just partitioned
+  // for display rather than lumped into one label.
+  const stillEditing = pendingByCompany.filter((p) => p.stage === "editing");
+  const queuedOrProcessing = pendingByCompany.filter((p) => p.stage === "queued_for_audit" || p.stage === "audit_in_progress");
+
   const regulatoryStatus = await listRegulatoryContentReviewStatus();
   const sessionRequests = await listPendingSessionRequests();
   const pricing = await listPricing();
@@ -471,30 +484,52 @@ export default async function ReviewerQueuePage() {
 
       {/* "Still with client" visibility, rewritten 2026-08-10 for the
           delayed-execution architecture — see the query docblock above.
-          Purely informational, no review action here: a submission still
-          'editing' or 'queued_for_audit' has nothing for a reviewer to do
-          yet; 'audit_in_progress' means the scheduled run just started, no
-          action needed there either — this section exists so a reviewer
-          can always see exactly where a submission stands, closing the
-          same original queue-invisibility gap this section was first
-          built for, just against the table that's actually current now. */}
-      {pendingByCompany.length > 0 && (
+          Purely informational, no review action here. Split into two
+          distinct sections 2026-08-12 (see the pendingByCompany docblock
+          above) — a real submission genuinely still being edited reads
+          very differently from one that's already closed and just
+          waiting on the next scheduled run, and lumping them under one
+          "still with client" label was misleading for the second case. */}
+      {stillEditing.length > 0 && (
         <div className="mt-8">
           <h2 className="mb-3 text-lg font-medium text-neutral-900 dark:text-neutral-50">Still with client</h2>
           <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
-            Evidence submitted, not ready for review yet — nothing to do here yet.
+            The client is still editing — their edit window hasn&apos;t closed yet. Nothing to do here yet.
           </p>
           <ul className="space-y-2">
-            {pendingByCompany.map((p) => (
+            {stillEditing.map((p) => (
               <li
                 key={p.companyName}
                 className="rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-3 text-sm dark:border-neutral-700 dark:bg-neutral-900/50"
               >
                 <span className="font-medium text-neutral-700 dark:text-neutral-300">{p.companyName}</span>{" "}
                 <span className="text-neutral-500 dark:text-neutral-400">
+                  · submitted {new Date(p.submittedAt).toLocaleString()} · edit window closes{" "}
+                  {new Date(p.editWindowClosesAt).toLocaleString()}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {queuedOrProcessing.length > 0 && (
+        <div className="mt-8">
+          <h2 className="mb-3 text-lg font-medium text-neutral-900 dark:text-neutral-50">Queued, not yet processed</h2>
+          <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
+            The client&apos;s edit window has closed — waiting on the next scheduled run to generate the report. Not with
+            the client anymore, but no action needed from you yet either.
+          </p>
+          <ul className="space-y-2">
+            {queuedOrProcessing.map((p) => (
+              <li
+                key={p.companyName}
+                className="rounded-md border border-dashed border-blue-300 bg-blue-50 p-3 text-sm dark:border-blue-800 dark:bg-blue-950/40"
+              >
+                <span className="font-medium text-neutral-700 dark:text-neutral-300">{p.companyName}</span>{" "}
+                <span className="text-neutral-500 dark:text-neutral-400">
                   · {p.stage ? SUBMISSION_STAGE_LABELS[p.stage] : "Unknown"} · submitted{" "}
                   {new Date(p.submittedAt).toLocaleString()}
-                  {p.stage === "editing" && <> · edit window closes {new Date(p.editWindowClosesAt).toLocaleString()}</>}
                 </span>
               </li>
             ))}

@@ -10,6 +10,7 @@ import { SprintInterestButton } from "@/app/_components/SprintInterestButton";
 import { EvidenceSubmittedDisclosure, type EvidenceSnapshotShape } from "@/app/_components/EvidenceSubmittedDisclosure";
 import { loadGovernanceDimensions } from "@/lib/lenses/benchmarks-repository";
 import { getTotalTurnaroundHours } from "@/lib/reports/sla";
+import { listPricing } from "@/lib/pricing";
 import { Card } from "@/app/_components/ui/Card";
 import { Alert } from "@/app/_components/ui/Alert";
 
@@ -167,6 +168,22 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
     .eq("company_id", company.id);
   const hasRequestedDelivery = (existingSessionRequests ?? []).some((r) => r.session_type === "delivery");
 
+  // Real gap found and closed (confirmed 2026-08-12, direct founder
+  // request to expand "Next steps") — a signed-in client had NO way
+  // whatsoever to reach any of the three standalone modules (Tender
+  // Readiness, AI Reliability Audit, Data Protection Compliance): no nav
+  // link anywhere in the (app) layout, and the module pages themselves are
+  // still `?companyId=`-addressed (the same interim pre-client-auth
+  // pattern documented in CLAUDE.md), not session-resolved — real
+  // revenue-bearing products (£2,000–£2,500 each) that were completely
+  // unreachable through the actual product. Fixed at the point this page
+  // already has `company.id` available: real links with the real
+  // DB-backed price, using the same interim `?companyId=` pattern the
+  // pages already expect (modernizing those pages to resolve the company
+  // from session directly is a separate, larger piece, not done here).
+  const pricing = await listPricing();
+  const modulePricing = (itemKey: string) => pricing.find((p) => p.itemKey === itemKey);
+
   // Client-facing Execution Sprint interest (confirmed 2026-08-06, honest
   // UX review pass) — see sprint_interest_requests migration docblock.
   // Session-scoped, not admin (RLS already restricts to the caller's own
@@ -252,7 +269,8 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
                       <span className="rounded bg-neutral-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
                         No evidence submitted
                       </span>
-                    ) : (
+                    ) : null}
+                    {!f.isMissingDataFinding && (
                       <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${SEVERITY_STYLES[f.severity]}`}>
                         {f.severity}
                       </span>
@@ -267,6 +285,20 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
                     <span className="font-medium">Recommended: </span>
                     {f.recommendedAction}
                   </p>
+                  {/* Real gap closed (confirmed 2026-08-12, direct founder
+                      request) — every "no evidence submitted" finding
+                      previously relied on the reader remembering the one
+                      generic note at the bottom of the page. Each finding
+                      now gets its own inline, clearly-labeled path, since
+                      the reader is looking at exactly the gap right here. */}
+                  {f.isMissingDataFinding && (
+                    <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                      <Link href="/evidence-intake" className="font-medium text-accent underline hover:text-accent-hover">
+                        Add this evidence
+                      </Link>{" "}
+                      — starts a new, paid re-audit cycle (your free audit has already been used).
+                    </p>
+                  )}
                   {f.financialImpact && (f.financialImpact.impactBandLow !== null || f.financialImpact.impactBandHigh !== null) && (
                     <p className="mt-1 text-xs text-neutral-500">
                       Estimated impact: {f.financialImpact.impactBandLow ?? "?"}–{f.financialImpact.impactBandHigh ?? "?"} {f.financialImpact.currency ?? ""}
@@ -326,6 +358,56 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
         <h2 className="text-lg font-medium">Next steps</h2>
         <SessionRequestButton companyId={company.id} sessionType="delivery" />
         {hasRequestedDelivery && <SessionRequestButton companyId={company.id} sessionType="f2f_workshop" />}
+
+        {/* Real gap found and closed (confirmed 2026-08-12, direct founder
+            request to expand "Next steps" beyond the original 2 options)
+            — see the modulePricing() docblock above. Each links using the
+            same interim `?companyId=` pattern those pages already expect. */}
+        <div className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h3 className="mb-1 text-sm font-medium text-neutral-800 dark:text-neutral-200">Other audits available</h3>
+          <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
+            Standalone, sold separately from this Core Audit — each has its own findings and reviewer pass.
+          </p>
+          <ul className="space-y-2 text-sm">
+            <li>
+              <Link href={`/tender-readiness?companyId=${company.id}`} className="font-medium text-accent underline hover:text-accent-hover">
+                Tender Readiness
+              </Link>
+              {modulePricing("tender_readiness") && (
+                <span className="text-neutral-500 dark:text-neutral-400">
+                  {" "}
+                  — {modulePricing("tender_readiness")!.currency} {modulePricing("tender_readiness")!.priceAmount}, AI-specific regulatory risk
+                  classification and procurement-readiness content
+                </span>
+              )}
+            </li>
+            <li>
+              <Link href={`/ai-reliability-audit?companyId=${company.id}`} className="font-medium text-accent underline hover:text-accent-hover">
+                AI Reliability Audit
+              </Link>
+              {modulePricing("ai_reliability_audit") && (
+                <span className="text-neutral-500 dark:text-neutral-400">
+                  {" "}
+                  — {modulePricing("ai_reliability_audit")!.currency} {modulePricing("ai_reliability_audit")!.priceAmount}, adversarial testing
+                  against documented real-world AI failure patterns
+                </span>
+              )}
+            </li>
+            <li>
+              <Link href={`/data-protection-compliance?companyId=${company.id}`} className="font-medium text-accent underline hover:text-accent-hover">
+                Data Protection Compliance
+              </Link>
+              {modulePricing("data_protection_compliance") && (
+                <span className="text-neutral-500 dark:text-neutral-400">
+                  {" "}
+                  — {modulePricing("data_protection_compliance")!.currency} {modulePricing("data_protection_compliance")!.priceAmount},
+                  GDPR/PDPL readiness across consent, retention, and breach response
+                </span>
+              )}
+            </li>
+          </ul>
+        </div>
+
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
           Have new evidence to add?{" "}
           <Link href="/evidence-intake" className="underline">

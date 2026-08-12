@@ -16,11 +16,25 @@ export interface RequestSprintInterestResult {
   error?: string;
 }
 
+/**
+ * Real, explicit response choice (confirmed 2026-08-12, direct founder
+ * request) — closes a real gap: the client-facing button used to be a
+ * single ambiguous action, always meaning "yes." Now a genuine three-way
+ * choice, stored separately from `status` (which stays reviewer-side
+ * triage — has this been looked at — not what the client actually said).
+ * "not_now" deliberately does NOT notify the reviewer — an explicit "no,
+ * not right now" is exactly the signal that shouldn't generate a
+ * follow-up ping, unlike genuine interest or a custom note, which both
+ * need a human to actually read them.
+ */
+export type SprintInterestResponse = "interested" | "not_now" | "other";
+
 /** Client-facing — session-scoped, RLS-respecting, verifies the caller owns the company and the finding belongs to the given report before writing. */
 export async function requestSprintInterest(
   companyId: string,
   reportId: string,
   findingId: string,
+  response: SprintInterestResponse,
   clientNotes: string | null,
 ): Promise<RequestSprintInterestResult> {
   const supabase = await createClient();
@@ -39,9 +53,12 @@ export async function requestSprintInterest(
     company_id: companyId,
     report_id: reportId,
     finding_id: findingId,
+    response,
     client_notes: clientNotes,
   });
   if (insertError) return { success: false, error: `Couldn't submit request: ${insertError.message}` };
+
+  if (response === "not_now") return { success: true };
 
   // Notify every reviewer, same pattern as session_requests/sprint_queue_items.
   const admin = createAdminClient();
@@ -65,6 +82,7 @@ export interface SprintInterestRequestRow {
   report_id: string;
   finding_id: string;
   status: "open" | "resolved";
+  response: SprintInterestResponse | null;
   client_notes: string | null;
   created_at: string;
 }
