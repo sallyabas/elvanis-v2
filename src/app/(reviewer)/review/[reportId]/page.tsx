@@ -36,7 +36,7 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
     findingIds.length > 0
       ? await supabase
           .from("finding_conflicts")
-          .select("id, finding_a_id, finding_b_id, conflict_description, resolution_status, reviewer_notes")
+          .select("id, finding_a_id, finding_b_id, conflict_description, ai_suggested_resolution, resolution_status, reviewer_notes")
           .or(`finding_a_id.in.(${findingIds.join(",")}),finding_b_id.in.(${findingIds.join(",")})`)
       : { data: [], error: null };
 

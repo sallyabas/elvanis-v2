@@ -53,6 +53,11 @@ export default async function EvidenceIntakePage() {
   const governanceDimensions = await loadGovernanceDimensions();
 
   const editWindowHours = await getSettingNumber("edit_window_hours", 24);
+  // review_period_hours (confirmed 2026-08-12, real 48h SLA enforcement) —
+  // fetched server-side, same reasoning as editWindowHours: the client
+  // component below can no longer import the constant directly now that
+  // it's DB-backed.
+  const reviewPeriodHours = await getSettingNumber("review_period_hours", 48);
   const { data: priorSentReports } = await supabase.from("reports").select("id").eq("company_id", companyId).eq("status", "sent").limit(1);
   const isFreeAudit = (priorSentReports ?? []).length === 0;
 
@@ -133,6 +138,7 @@ export default async function EvidenceIntakePage() {
         initialDraft={draft}
         governanceDimensions={governanceDimensions}
         editWindowHours={editWindowHours}
+        reviewPeriodHours={reviewPeriodHours}
         isFreeAudit={isFreeAudit}
         isEditingExisting={activeSubmission !== null}
         editWindowClosesAt={activeSubmission?.editWindowClosesAt ?? null}

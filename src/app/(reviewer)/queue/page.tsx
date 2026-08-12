@@ -52,6 +52,15 @@ interface QueueItem {
   readyAt: string | null;
   notified: boolean;
   href: string;
+  /**
+   * Real 48h review-SLA enforcement (confirmed 2026-08-12, direct founder
+   * request — this used to be narrative only, see sla.ts's own docblock).
+   * Only ever true for Core Audit reports right now — reports.review_due_at
+   * is the only place this deadline is actually stamped; modules and
+   * sprints don't have an equivalent yet, so they're always `false` here
+   * rather than silently guessed at.
+   */
+  overdue: boolean;
 }
 
 export default async function ReviewerQueuePage() {
@@ -59,7 +68,7 @@ export default async function ReviewerQueuePage() {
 
   const { data: reports, error: reportsError } = await supabase
     .from("reports")
-    .select("id, status, edit_window_closes_at, reviewer_notified_at, companies(name)")
+    .select("id, status, edit_window_closes_at, review_due_at, reviewer_notified_at, companies(name)")
     .eq("status", "pending_review")
     .lte("edit_window_closes_at", new Date().toISOString());
 
@@ -120,6 +129,7 @@ export default async function ReviewerQueuePage() {
       readyAt: r.edit_window_closes_at as string | null,
       notified: Boolean(r.reviewer_notified_at),
       href: `/review/${r.id}`,
+      overdue: r.review_due_at ? new Date(r.review_due_at as string) < new Date() : false,
     })),
     ...(scopedSprints ?? []).map((s) => ({
       id: s.id as string,
@@ -128,6 +138,7 @@ export default async function ReviewerQueuePage() {
       readyAt: s.created_at as string | null,
       notified: true,
       href: `/review-sprint/${s.id}`,
+      overdue: false,
     })),
     ...moduleRequests.map((r) => ({
       id: r.id as string,
@@ -136,6 +147,7 @@ export default async function ReviewerQueuePage() {
       readyAt: (r.created_at as string | null),
       notified: Boolean(r.reviewer_notified_at),
       href: `/review-module/${r.id}`,
+      overdue: false,
     })),
   ].sort((a, b) => new Date(a.readyAt ?? 0).getTime() - new Date(b.readyAt ?? 0).getTime());
 
@@ -433,7 +445,14 @@ export default async function ReviewerQueuePage() {
                 {companyItems.map((item) => (
                   <li key={item.id} className="flex items-center justify-between rounded-md border border-neutral-100 p-3 dark:border-neutral-800">
                     <div>
-                      <div className="text-sm font-medium text-neutral-800 dark:text-neutral-200">{item.label}</div>
+                      <div className="flex items-center gap-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">
+                        {item.label}
+                        {item.overdue && (
+                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-800 dark:bg-red-950 dark:text-red-300">
+                            Overdue
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-neutral-500 dark:text-neutral-400">
                         Ready {item.readyAt ? new Date(item.readyAt).toLocaleString() : "unknown"}
                         {item.notified ? " · reviewer notified" : " · not yet notified"}

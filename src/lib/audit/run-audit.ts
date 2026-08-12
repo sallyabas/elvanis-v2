@@ -196,6 +196,16 @@ export async function runAudit(input: RunAuditInput): Promise<RunAuditResult> {
   // drift from the value actually enforced here.
   const editWindowClosesAt =
     input.editWindowClosesAt ?? new Date(submittedAt.getTime() + (await getSettingNumber("edit_window_hours", 24)) * 60 * 60 * 1000);
+  // review_due_at (confirmed 2026-08-12, real 48h SLA enforcement, direct
+  // founder request) — stamped once here, at report-creation time, same
+  // "compute it now, don't recompute against a possibly-later
+  // app_settings value" principle already used for edit_window_closes_at
+  // itself. Always measured from THIS report's real edit_window_closes_at
+  // (not "now"), so a late-processed report (e.g. a "Submit now" claim
+  // hours after its natural window) still gets an honest 48h from when
+  // review genuinely became possible, not from whenever the audit
+  // happened to run.
+  const reviewDueAt = new Date(editWindowClosesAt.getTime() + (await getSettingNumber("review_period_hours", 48)) * 60 * 60 * 1000);
 
   const { data: reportRow, error: reportError } = await supabase
     .from("reports")
@@ -207,6 +217,7 @@ export async function runAudit(input: RunAuditInput): Promise<RunAuditResult> {
       status: "pending_review",
       submitted_at: submittedAt.toISOString(),
       edit_window_closes_at: editWindowClosesAt.toISOString(),
+      review_due_at: reviewDueAt.toISOString(),
       // Persisted here, not just returned in-memory, so AI Opportunity
       // Synthesis can run later (post-approval, in a separate cron tick)
       // without recomputing — see supabase/migrations/20260802120000.
@@ -257,6 +268,7 @@ export async function runAudit(input: RunAuditInput): Promise<RunAuditResult> {
         finding_a_id: c.findingAId,
         finding_b_id: c.findingBId,
         conflict_description: c.conflictDescription,
+        ai_suggested_resolution: c.suggestedResolution,
       })),
     );
     if (error) throw new Error(`Failed to persist conflicts: ${error.message}`);

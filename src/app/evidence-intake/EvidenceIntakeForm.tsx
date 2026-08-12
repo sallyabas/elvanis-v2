@@ -10,7 +10,6 @@ import { saveEvidenceIntakeDraft } from "@/lib/evidence/draft";
 import type { EvidenceIntakeDraft } from "@/lib/evidence/draft-shape";
 import { EXPORT_INSTRUCTIONS_BY_LENS, type EvidenceLensKey } from "@/lib/evidence/export-instructions";
 import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
-import { REVIEW_PERIOD_HOURS } from "@/lib/reports/sla";
 import { Input } from "@/app/_components/ui/Input";
 import { Textarea } from "@/app/_components/ui/Textarea";
 import { Select } from "@/app/_components/ui/Select";
@@ -81,17 +80,13 @@ function ExportHints({ lens }: { lens: EvidenceLensKey }) {
   );
 }
 
-// REVIEW_PERIOD_HOURS now lives in src/lib/reports/sla.ts (confirmed
-// 2026-08-06, honest UX review pass) — shared with the client report
-// page's "still being reviewed" holding copy, so the two surfaces can
-// never quote a different total-turnaround number for the same promise.
-
 export function EvidenceIntakeForm({
   companyId,
   goalId,
   initialDraft,
   governanceDimensions,
   editWindowHours,
+  reviewPeriodHours,
   isFreeAudit,
   isEditingExisting,
   editWindowClosesAt,
@@ -114,6 +109,14 @@ export function EvidenceIntakeForm({
    * — that divergence is the real gap this whole migration closes.
    */
   editWindowHours: number;
+  /**
+   * DB-backed (app_settings.review_period_hours, confirmed 2026-08-12) —
+   * same reasoning as editWindowHours: the "N hours total" promise in the
+   * confirmation modal used to add a hardcoded REVIEW_PERIOD_HOURS
+   * constant, which is no longer importable directly into a client
+   * component now that it's a real, enforced DB value (see sla.ts).
+   */
+  reviewPeriodHours: number;
   /** Computed server-side from whether this company has any already-`sent` report — real free-tier state, not assumed. */
   isFreeAudit: boolean;
   /**
@@ -650,7 +653,7 @@ export function EvidenceIntakeForm({
                   You&apos;ll have {editWindowHours}{" "}
                   hours to keep editing or adding evidence — come back to this page any time before then and your
                   changes save to this same submission. After that, review begins, and your report will be ready
-                  within {editWindowHours + REVIEW_PERIOD_HOURS}{" "}
+                  within {editWindowHours + reviewPeriodHours}{" "}
                   hours total.{" "}
                   {isFreeAudit ? "This will use your free audit." : "This is a paid re-audit."}
                 </>

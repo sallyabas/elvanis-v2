@@ -46,6 +46,8 @@ interface ConflictRow {
   finding_a_id: string;
   finding_b_id: string;
   conflict_description: string;
+  /** Nullable — older conflicts predate this field (confirmed 2026-08-12); always populated going forward. */
+  ai_suggested_resolution: string | null;
   resolution_status: "unresolved" | "reviewer_resolved";
   reviewer_notes: string | null;
 }
@@ -412,10 +414,30 @@ export function ReviewWorkspaceClient({
                     <strong>{b ? displayedContent(b).title : c.finding_b_id}</strong>
                   </p>
                   <p className="mb-2 text-neutral-600 dark:text-neutral-400">{c.conflict_description}</p>
+                  {/*
+                   * AI-suggested resolution (confirmed 2026-08-12, direct
+                   * founder request) — shown as its own distinct box, not
+                   * folded into conflict_description, so it's visually
+                   * clear this is a suggestion to evaluate, not a
+                   * statement of fact the way the conflict description
+                   * itself is. Reviewer still has final say — this only
+                   * prefills the resolution form below, it doesn't
+                   * resolve anything by itself.
+                   */}
+                  {c.ai_suggested_resolution && c.resolution_status === "unresolved" && (
+                    <p className="mb-2 rounded border border-orange-200 bg-white px-2 py-1.5 text-xs text-neutral-700 dark:border-orange-900 dark:bg-neutral-900 dark:text-neutral-300">
+                      <span className="font-semibold text-orange-700 dark:text-orange-400">Suggested resolution: </span>
+                      {c.ai_suggested_resolution}
+                    </p>
+                  )}
                   {c.resolution_status === "reviewer_resolved" ? (
                     <p className="text-xs text-green-700 dark:text-green-400">Resolved: {c.reviewer_notes}</p>
                   ) : resolvingConflictId === c.id ? (
-                    <ConflictResolutionForm onCancel={() => setResolvingConflictId(null)} onSave={(notes) => handleResolveConflict(c.id, notes)} />
+                    <ConflictResolutionForm
+                      initialNotes={c.ai_suggested_resolution ?? ""}
+                      onCancel={() => setResolvingConflictId(null)}
+                      onSave={(notes) => handleResolveConflict(c.id, notes)}
+                    />
                   ) : (
                     <Button variant="secondary" onClick={() => setResolvingConflictId(c.id)} className="px-2 py-1 text-xs">
                       Resolve Conflict
@@ -813,8 +835,23 @@ function DisputeResolutionForm({
   );
 }
 
-function ConflictResolutionForm({ onCancel, onSave }: { onCancel: () => void; onSave: (notes: string) => void }) {
-  const [notes, setNotes] = useState("");
+/**
+ * Prefilled with the AI-suggested resolution when one exists (confirmed
+ * 2026-08-12) — same "AI drafts, reviewer edits or accepts as-is" pattern
+ * as every EditForm in this app. An empty initialNotes (older conflicts,
+ * or none was ever generated) falls back to the original blank-field
+ * behavior, unchanged.
+ */
+function ConflictResolutionForm({
+  initialNotes = "",
+  onCancel,
+  onSave,
+}: {
+  initialNotes?: string;
+  onCancel: () => void;
+  onSave: (notes: string) => void;
+}) {
+  const [notes, setNotes] = useState(initialNotes);
   return (
     <div className="space-y-2">
       <Input placeholder="Which finding wins, or a merged explanation (required)" value={notes} onChange={(e) => setNotes(e.target.value)} className="text-xs" />
