@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { listPricing, type PricingItem } from "@/lib/pricing";
+import { listPricing, formatPrice } from "@/lib/pricing";
 import { InteractiveDemoSection } from "./_components/InteractiveDemoSection";
 
 /**
@@ -521,11 +521,4 @@ export default async function LandingPage() {
       </div>
     </div>
   );
-}
-
-function formatPrice(item: Pick<PricingItem, "priceAmount" | "currency">): string {
-  if (item.priceAmount === 0) return "Free";
-  const symbol = item.currency === "GBP" ? "£" : `${item.currency} `;
-  const amount = item.priceAmount.toLocaleString("en-GB");
-  return `${symbol}${amount}`;
 }

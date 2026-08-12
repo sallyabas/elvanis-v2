@@ -66,3 +66,17 @@ export async function updatePricingItem(itemKey: string, priceAmount: number, no
   const { error } = await supabase.from("pricing").update(update).eq("item_key", itemKey);
   if (error) throw new Error(`updatePricingItem: ${error.message}`);
 }
+
+/**
+ * Shared price-display formatter (extracted 2026-08-12, Dashboard/Services
+ * rebuild) — was previously defined locally in src/app/page.tsx only; the
+ * new client-facing /services page needs the exact same formatting
+ * ("Free" for £0, real currency symbol) and duplicating it would risk the
+ * two silently drifting.
+ */
+export function formatPrice(item: Pick<PricingItem, "priceAmount" | "currency">): string {
+  if (item.priceAmount === 0) return "Free";
+  const symbol = item.currency === "GBP" ? "£" : `${item.currency} `;
+  const amount = item.priceAmount.toLocaleString("en-GB");
+  return `${symbol}${amount}`;
+}

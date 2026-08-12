@@ -73,6 +73,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link href="/reports" className="hover:text-neutral-50 hover:underline">
               Reports &amp; History
             </Link>
+            {/* Real nav link added 2026-08-12, Dashboard rebuild — /services
+                is now a real standalone page, not just linked from
+                Dashboard; reachable from anywhere in the authenticated app. */}
+            <Link href="/services" className="hover:text-neutral-50 hover:underline">
+              Services
+            </Link>
             <Link href="/account-settings" className="hover:text-neutral-50 hover:underline">
               Account Settings
             </Link>

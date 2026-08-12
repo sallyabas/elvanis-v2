@@ -5,15 +5,36 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { LensFinding } from "@/lib/lenses/types";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
 import { computeJourneyStatus } from "@/lib/reports/journey-status";
+import { MODULE_META, MODULE_ORDER, MODULE_STATUS_LABELS, type ModuleType } from "@/lib/modules/module-meta";
 import { NextStepBanner } from "@/app/_components/NextStepBanner";
 import { ProgressStepper } from "@/app/_components/ProgressStepper";
 import { Card } from "@/app/_components/ui/Card";
+import { LinkButton } from "@/app/_components/ui/LinkButton";
 
-// Dashboard — current, live state (confirmed 2026-08-04, Priority 3):
-// latest top-3 priorities + roadmap status, drawn from the most recently
-// sent report. Active Execution Sprint progress tile added 2026-08-06 now
-// that the feature is real — shows the most recent in_progress sprint's
-// task-completion count, linking to the full sprint page for detail.
+/**
+ * Dashboard rebuild (confirmed 2026-08-12, direct founder request — "a
+ * genuine unified home page, not a status-only stub, treated with the
+ * same weight as a module build"). The previous version only ever showed
+ * top-3 + roadmap + one Execution Sprint tile — this rebuild adds the
+ * three things that were missing:
+ *
+ * 1. AI Opportunity & Readiness as its own headline section, equal visual
+ *    weight to top-3 — previously not rendered anywhere in the client-
+ *    facing app at all, confirmed by grepping for "do_now"/
+ *    "fix_groundwork_first" across src/ before starting: only the
+ *    synthesis module itself referenced these values, no UI ever had.
+ * 2. Live status tiles for module requests, session requests, and the
+ *    Execution Sprint — previously only the sprint had a tile.
+ * 3. A "Services and support" section linking to the new /services page
+ *    (see src/app/(app)/services/page.tsx) — closes the "clients have no
+ *    path to the paid modules" gap found in the previous batch's
+ *    "Next steps" work, this time as its own dedicated home rather than
+ *    tacked onto the bottom of one report page.
+ *
+ * Design principle (the founder's own framing, checked against Vanta/
+ * Drata): findings, status, and next actions live in ONE place, not
+ * scattered across pages the client has to remember to check separately.
+ */
 export default async function DashboardPage() {
   const supabase = await createClient();
   const {
@@ -38,14 +59,6 @@ export default async function DashboardPage() {
     .limit(1)
     .maybeSingle();
 
-  // Empty-state clarity fix, confirmed 2026-08-07 — the old copy collapsed
-  // "never submitted evidence" and "evidence submitted, still in review"
-  // into one generic "No delivered report yet" line, which read as
-  // unhelpfully thin to a first-time user. Same computeJourneyStatus() as
-  // Business Profile (admin client required — see that function's own
-  // docblock for why), so the two pages can't describe this differently.
-  // Always computed (not just when !latestReport) since ProgressStepper
-  // needs it in every state, including has_report.
   const journeyStatus = await computeJourneyStatus(createAdminClient(), company.id as string);
 
   let top3: LensFinding[] = [];
@@ -63,15 +76,67 @@ export default async function DashboardPage() {
   }
   const roadmap = deriveRoadmap(top3);
 
-  const { data: activeSprint } = await supabase
-    .from("execution_sprints")
-    .select("id, target_end_date, selected_finding_id")
-    .eq("company_id", company.id)
-    .eq("status", "in_progress")
-    .order("start_date", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // AI Opportunity & Readiness (confirmed 2026-08-12, headline section per
+  // explicit priority order) — reads the same ai_opportunity_synthesis /
+  // readiness_scores tables the synthesis module writes to; RLS scopes
+  // both to the owning company only (not status-gated the way `reports`
+  // is), which is safe here since we only ever query them against a
+  // report we've already confirmed is `sent`. Synthesis runs on a cron
+  // AFTER reviewer approval (see run-pending-synthesis.ts) — a report can
+  // genuinely be delivered before synthesis has run, so absence here is a
+  // real, honest "not generated yet" state, not a bug to hide.
+  let opportunities: { id: string; description: string; readinessStatus: "do_now" | "fix_groundwork_first" | null; readinessReasoning: string | null }[] = [];
+  let readiness: { data_quality: number | null; team_skill: number | null; process_maturity: number | null; governance_foundation: number | null } | null = null;
+  if (latestReport) {
+    const { data: oppRows } = await supabase
+      .from("ai_opportunity_synthesis")
+      .select("id, opportunity_description, readiness_status, readiness_reasoning")
+      .eq("report_id", latestReport.id);
+    opportunities = (oppRows ?? []).map((o) => ({
+      id: o.id as string,
+      description: o.opportunity_description as string,
+      readinessStatus: o.readiness_status as "do_now" | "fix_groundwork_first" | null,
+      readinessReasoning: o.readiness_reasoning as string | null,
+    }));
 
+    const { data: readinessRow } = await supabase
+      .from("readiness_scores")
+      .select("data_quality, team_skill, process_maturity, governance_foundation")
+      .eq("report_id", latestReport.id)
+      .maybeSingle();
+    readiness = readinessRow as typeof readiness;
+  }
+
+  // Live status tiles (confirmed 2026-08-12) — module requests, session
+  // requests, Execution Sprint(s). Module requests are read via the admin
+  // client for the same reason computeJourneyStatus() already uses it:
+  // module_requests' own RLS only allows a client to SELECT `sent` rows
+  // (tightened 2026-08-06 to mirror `reports`), but a client should still
+  // see "under review" as a real status, not silence — same "let the
+  // client see their own submission status without exposing content
+  // early" precedent already established for the core audit's holding
+  // page. Only status/module_type/created_at are read here, never
+  // intake_data or findings.
+  const admin = createAdminClient();
+  const { data: moduleRequestRows } = await admin
+    .from("module_requests")
+    .select("id, module_type, status, created_at")
+    .eq("company_id", company.id)
+    .order("created_at", { ascending: false });
+
+  const { data: sessionRequestRows } = await supabase
+    .from("session_requests")
+    .select("id, session_type, status, requested_at, scheduled_at")
+    .eq("company_id", company.id)
+    .order("requested_at", { ascending: false });
+
+  const { data: sprintRows } = await supabase
+    .from("execution_sprints")
+    .select("id, status, target_end_date, selected_finding_id, report_id")
+    .eq("company_id", company.id)
+    .order("start_date", { ascending: false, nullsFirst: false });
+
+  const activeSprint = (sprintRows ?? []).find((s) => s.status === "in_progress") ?? (sprintRows ?? [])[0] ?? null;
   let sprintFindingTitle: string | null = null;
   let sprintTaskCounts: { done: number; total: number } | null = null;
   if (activeSprint) {
@@ -93,45 +158,173 @@ export default async function DashboardPage() {
     sprintTaskCounts = { done, total };
   }
 
+  const hasAnyStatusTiles = (moduleRequestRows?.length ?? 0) > 0 || (sessionRequestRows?.length ?? 0) > 0 || activeSprint;
+
+  const SESSION_LABELS: Record<string, string> = { discovery: "Discovery Session", delivery: "Delivery Session", f2f_workshop: "F2F Workshop" };
+  const SESSION_STATUS_LABELS: Record<string, string> = { requested: "Requested — awaiting scheduling", scheduled: "Scheduled", completed: "Completed", declined: "Declined" };
+  const SPRINT_STATUS_LABELS: Record<string, string> = { scoped: "Being scoped by your reviewer", in_progress: "In progress", complete: "Complete" };
+
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
+    <div className="mx-auto max-w-4xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold">Dashboard</h1>
-      <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">{company.name}&apos;s current state.</p>
+      <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">{company.name}&apos;s current state — what&apos;s wrong, what AI could do about it, and what to do right now.</p>
 
       <ProgressStepper journeyStatus={journeyStatus} />
 
       {!latestReport && <NextStepBanner journeyStatus={journeyStatus} />}
 
       {latestReport && (
-        <div className="space-y-6">
-          <Card title="Latest top-3 priorities">
-            {top3.length === 0 ? (
-              <p className="text-sm text-neutral-500 dark:text-neutral-400">No priorities to show.</p>
-            ) : (
-              <ol className="list-inside list-decimal space-y-2 text-sm text-neutral-800 dark:text-neutral-200">
-                {top3.map((f) => (
-                  <li key={f.findingId}>{f.title}</li>
-                ))}
-              </ol>
-            )}
-            <Link href={`/reports/${latestReport.id}`} className="mt-3 inline-block text-sm underline">
-              View full report
-            </Link>
-          </Card>
-
-          {activeSprint && (
-            <Card title="Active Execution Sprint">
-              <p className="text-sm text-neutral-600 dark:text-neutral-400">{sprintFindingTitle ?? "In progress"}</p>
-              {sprintTaskCounts && (
-                <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-                  {sprintTaskCounts.done} of {sprintTaskCounts.total} tasks done
+        <div className="space-y-8">
+          {/* Section 1 + 2 — AI Opportunity & Readiness sits alongside Top
+              3, not beneath it, equal visual weight (confirmed priority
+              order: AI Opportunity is listed FIRST). Two-column on wide
+              screens, stacked on narrow — neither is visually subordinate
+              to the other. */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card title="AI Opportunity & Readiness" subtitle="Where AI could genuinely help — and whether the groundwork exists to try it safely today.">
+              {/* Real bug found and fixed during live verification, not
+                  anticipated upfront: `readiness` (readiness_scores) and
+                  `opportunities` (ai_opportunity_synthesis) are always
+                  written together by the same persist call — so
+                  `readiness !== null` is the real "synthesis has run"
+                  signal, genuinely distinct from "it ran and found zero
+                  opportunities worth surfacing" (a real, legitimate
+                  outcome — confirmed live against Nimbus Ledger Ltd's
+                  actual most recent report, which returned exactly this).
+                  The original `opportunities.length === 0` check
+                  conflated both into the same "not generated yet" copy,
+                  which would have been dishonest for the second case. */}
+              {readiness === null ? (
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                  Not generated yet — this runs automatically once your report is fully approved, and can take a little while
+                  after delivery. Check back soon.
                 </p>
+              ) : (
+                <div className="space-y-4">
+                  {readiness && (
+                    <div className="grid grid-cols-2 gap-3 rounded-md border border-neutral-200 p-3 text-xs dark:border-neutral-800 sm:grid-cols-4">
+                      {(
+                        [
+                          ["data_quality", "Data quality"],
+                          ["team_skill", "Team skill"],
+                          ["process_maturity", "Process maturity"],
+                          ["governance_foundation", "Governance foundation"],
+                        ] as const
+                      ).map(([key, label]) => (
+                        <div key={key}>
+                          <p className="mb-1 font-medium text-neutral-600 dark:text-neutral-400">{label}</p>
+                          <div className="flex gap-0.5">
+                            {[0, 1, 2, 3].map((n) => (
+                              <span
+                                key={n}
+                                className={`h-1.5 flex-1 rounded-full ${
+                                  readiness[key] !== null && n <= (readiness[key] as number) ? "bg-accent" : "bg-neutral-200 dark:bg-neutral-700"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {opportunities.length === 0 && (
+                    <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                      No AI opportunities were identified as safe to pursue right now, based on the readiness scores above —
+                      that&apos;s a genuine assessment, not a missing feature.
+                    </p>
+                  )}
+                  <ul className="space-y-3">
+                    {opportunities.map((o) => (
+                      <li key={o.id} className="rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <span className="font-medium text-neutral-900 dark:text-neutral-50">{o.description}</span>
+                          {o.readinessStatus && (
+                            <span
+                              className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                o.readinessStatus === "do_now"
+                                  ? "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
+                                  : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                              }`}
+                            >
+                              {o.readinessStatus === "do_now" ? "Ready now" : "Fix groundwork first"}
+                            </span>
+                          )}
+                        </div>
+                        {o.readinessReasoning && <p className="text-neutral-600 dark:text-neutral-400">{o.readinessReasoning}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
-              {activeSprint.target_end_date && <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Target end {activeSprint.target_end_date}</p>}
-              <Link href={`/execution-sprint/${activeSprint.id}`} className="mt-3 inline-block text-sm underline">
-                View sprint
+            </Card>
+
+            <Card title="Top 3 priorities">
+              {top3.length === 0 ? (
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">No priorities to show.</p>
+              ) : (
+                <ol className="list-inside list-decimal space-y-2 text-sm text-neutral-800 dark:text-neutral-200">
+                  {top3.map((f) => (
+                    <li key={f.findingId}>{f.title}</li>
+                  ))}
+                </ol>
+              )}
+              <Link href={`/reports/${latestReport.id}`} className="mt-3 inline-block text-sm underline">
+                View full report
               </Link>
             </Card>
+          </div>
+
+          {/* Section 3 — live status tiles (confirmed 2026-08-12). Only
+              renders tiles for things that actually exist — an empty
+              overview here isn't a bug, it just means nothing's active
+              yet; Services (section 4) is where a client goes to start
+              something new. */}
+          {hasAnyStatusTiles && (
+            <section>
+              <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Active status</h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {activeSprint && (
+                  <div className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                    <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">Execution Sprint</h3>
+                    <p className="mb-1 text-neutral-600 dark:text-neutral-400">{sprintFindingTitle ?? "In progress"}</p>
+                    <p className="mb-1 text-accent">{SPRINT_STATUS_LABELS[activeSprint.status] ?? activeSprint.status}</p>
+                    {sprintTaskCounts && (
+                      <p className="mb-1 text-neutral-500 dark:text-neutral-400">
+                        {sprintTaskCounts.done} of {sprintTaskCounts.total} tasks done
+                      </p>
+                    )}
+                    <Link href={`/execution-sprint/${activeSprint.id}`} className="mt-1 inline-block underline">
+                      View sprint
+                    </Link>
+                  </div>
+                )}
+
+                {(moduleRequestRows ?? []).map((r) => {
+                  const meta = MODULE_META[r.module_type as ModuleType];
+                  return (
+                    <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                      <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{meta?.label ?? r.module_type}</h3>
+                      <p className="mb-1 text-accent">{MODULE_STATUS_LABELS[r.status as string] ?? r.status}</p>
+                      <p className="text-neutral-500 dark:text-neutral-400">Submitted {new Date(r.created_at as string).toLocaleDateString()}</p>
+                      {r.status === "sent" && meta && (
+                        <Link href={`${meta.routePath}?companyId=${company.id}`} className="mt-1 inline-block underline">
+                          View
+                        </Link>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {(sessionRequestRows ?? []).map((r) => (
+                  <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                    <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{SESSION_LABELS[r.session_type as string] ?? r.session_type}</h3>
+                    <p className="mb-1 text-accent">{SESSION_STATUS_LABELS[r.status as string] ?? r.status}</p>
+                    <p className="text-neutral-500 dark:text-neutral-400">Requested {new Date(r.requested_at as string).toLocaleDateString()}</p>
+                    {r.scheduled_at && <p className="text-neutral-500 dark:text-neutral-400">Scheduled {new Date(r.scheduled_at as string).toLocaleString()}</p>}
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
 
           <section>
@@ -155,6 +348,20 @@ export default async function DashboardPage() {
           </section>
         </div>
       )}
+
+      {/* Section 4 — Services and support (confirmed 2026-08-12). Shown
+          regardless of whether a report exists yet — Discovery Session and
+          the general "what does Elvanis offer" question are relevant even
+          before any evidence has been submitted. */}
+      <section className="mt-8">
+        <Card title="Services and support" subtitle="Everything Elvanis offers — modules, the Execution Sprint, and reviewer sessions — in one place.">
+          <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">
+            Beyond your Core Audit: {MODULE_ORDER.map((mt) => MODULE_META[mt].label).join(", ")}, a paid implementation sprint for
+            your top priority, and calls with your reviewer.
+          </p>
+          <LinkButton href="/services">View all services</LinkButton>
+        </Card>
+      </section>
     </div>
   );
 }
