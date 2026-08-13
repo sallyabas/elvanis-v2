@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { runDigitalPresenceCheck, type DigitalPresenceResult } from "@/lib/digital-presence/check";
 
 /**
  * Real Business Profile full field set (confirmed 2026-08-04, Priority 3)
@@ -101,4 +102,32 @@ export async function updateCompanyProfile(
   }
 
   return { success: true };
+}
+
+export interface RunDigitalPresenceCheckResult {
+  success: boolean;
+  result?: DigitalPresenceResult;
+  error?: string;
+}
+
+/**
+ * Digital Presence check (confirmed 2026-08-14, item 7) — real-time,
+ * on-demand, never persisted (see check.ts's own docblock for why not).
+ * Session-scoped ownership check first, same discipline as every other
+ * Server Action in this codebase, even though the actual work (a fetch to
+ * the client's own already-public website) doesn't touch any DB row.
+ */
+export async function runDigitalPresenceCheckAction(companyId: string): Promise<RunDigitalPresenceCheckResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Not signed in." };
+
+  const { data: company, error } = await supabase.from("companies").select("id, website_url").eq("id", companyId).eq("user_id", user.id).maybeSingle();
+  if (error || !company) return { success: false, error: "Company not found, or you don't have access to it." };
+  if (!company.website_url) return { success: false, error: "Add a website URL to Business Profile first." };
+
+  const result = await runDigitalPresenceCheck(company.website_url as string);
+  return { success: true, result };
 }

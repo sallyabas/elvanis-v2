@@ -5,6 +5,7 @@ import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framewor
 import type { MetricInput } from "@/lib/lenses/metrics";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
+import { loadRecommendationLibrary } from "@/lib/recommendations/repository";
 import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
 import { loadGovernanceDimensions } from "@/lib/lenses/benchmarks-repository";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -105,12 +106,32 @@ export default async function DemoLivePage() {
   const visibleFindings = ((findings ?? []) as FindingRow[]).filter((f) => f.reviewer_status === "approved" || f.reviewer_status === "edited");
   const top3FindingIds = new Set((report.top_3_finding_ids as string[]) ?? []);
   const top3 = visibleFindings.filter((f) => top3FindingIds.has(f.id)).map(displayedContent);
-  const roadmap = deriveRoadmap(top3);
+  // Cascade reasoning (confirmed 2026-08-13, item 5) — same real logic as
+  // the authenticated report page, so this demo genuinely shows the real
+  // product's behavior, not a simplified stand-in.
+  const recommendationLibrary = await loadRecommendationLibrary();
+  const allReportFindings = visibleFindings.map((f) => ({ id: f.id, lens: f.lens, title: displayedContent(f).title, diagnosis: displayedContent(f).diagnosis }));
+  // Paired with the real DB id, not LensFinding.findingId — see
+  // deriveRoadmap's own docblock for why (findingId is stale post-load).
+  const top3WithIds = visibleFindings.filter((f) => top3FindingIds.has(f.id)).map((f) => ({ id: f.id, finding: displayedContent(f) }));
+  const roadmap = deriveRoadmap(top3WithIds, allReportFindings, recommendationLibrary);
 
   const byLens = new Map<LensType, FindingRow[]>();
   for (const f of visibleFindings) {
     byLens.set(f.lens, [...(byLens.get(f.lens) ?? []), f]);
   }
+
+  // Surface real strengths, per-lens (confirmed 2026-08-14, item 6) — same
+  // real logic as the authenticated report page, so this public demo
+  // genuinely shows the real product's behavior. See that page's own
+  // docblock for the full reasoning.
+  const strengthsByLens = new Map<LensType, { strengths: number; weaknesses: number }>();
+  for (const lens of LENS_ORDER) {
+    const rows = (byLens.get(lens) ?? []).filter((r) => !displayedContent(r).isMissingDataFinding);
+    const strengths = rows.filter((r) => displayedContent(r).goalRelevance === "directly_supports").length;
+    strengthsByLens.set(lens, { strengths, weaknesses: rows.length - strengths });
+  }
+  const strengthFindings = visibleFindings.filter((f) => !displayedContent(f).isMissingDataFinding && displayedContent(f).goalRelevance === "directly_supports");
 
   const { data: sprint } = await admin
     .from("execution_sprints")
@@ -222,14 +243,69 @@ export default async function DemoLivePage() {
                     <p className="text-neutral-400">Nothing at this horizon</p>
                   ) : (
                     <ul className="space-y-1">
-                      {roadmap[bucket].map((f) => (
-                        <li key={f.findingId}>{f.title}</li>
+                      {roadmap[bucket].map((item) => (
+                        <li key={item.finding.findingId}>
+                          {item.finding.title}
+                          {item.cascadeCount >= 2 && (
+                            <span className="ml-1.5 text-xs text-accent" title={item.cascadesToFindingTitles.join(", ")}>
+                              — fix this first, unlocks {item.cascadeCount} other finding{item.cascadeCount === 1 ? "" : "s"}
+                            </span>
+                          )}
+                        </li>
                       ))}
                     </ul>
                   )}
                 </div>
               ))}
             </div>
+          </section>
+        )}
+
+        {byLens.size > 0 && (
+          <section className="mb-10 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+            <h2 className="mb-1 text-lg font-medium">Strengths by lens</h2>
+            <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
+              This report also looks for what&apos;s genuinely working, not just what needs fixing — a lens with no bar segment here didn&apos;t identify a
+              finding directly and healthily supporting the goal this time, not that nothing about it works.
+            </p>
+            <div className="space-y-3">
+              {LENS_ORDER.filter((lens) => byLens.has(lens)).map((lens) => {
+                const counts = strengthsByLens.get(lens) ?? { strengths: 0, weaknesses: 0 };
+                const total = counts.strengths + counts.weaknesses;
+                const strengthPercent = total > 0 ? (counts.strengths / total) * 100 : 0;
+                return (
+                  <div key={lens}>
+                    <div className="mb-1 flex items-center justify-between text-xs text-neutral-600 dark:text-neutral-400">
+                      <span>{LENS_LABELS[lens]}</span>
+                      <span>
+                        {counts.strengths} strength{counts.strengths === 1 ? "" : "s"} · {counts.weaknesses} to address
+                      </span>
+                    </div>
+                    <div className="flex h-2 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+                      {total === 0 ? null : (
+                        <>
+                          <div className="bg-green-500" style={{ width: `${strengthPercent}%` }} />
+                          <div className="bg-neutral-300 dark:bg-neutral-600" style={{ width: `${100 - strengthPercent}%` }} />
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {strengthFindings.length > 0 && (
+              <div className="mt-5 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+                <h3 className="mb-2 text-sm font-medium text-neutral-900 dark:text-neutral-50">What&apos;s working</h3>
+                <ul className="space-y-1.5 text-sm">
+                  {strengthFindings.map((f) => (
+                    <li key={f.id} className="flex items-start gap-2 text-neutral-700 dark:text-neutral-300">
+                      <span className="mt-0.5 text-green-600 dark:text-green-400">✓</span>
+                      <span>{displayedContent(f).title}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </section>
         )}
 

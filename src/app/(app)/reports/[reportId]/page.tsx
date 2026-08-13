@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { LensFinding, LensType, Severity } from "@/lib/lenses/types";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
+import { loadRecommendationLibrary } from "@/lib/recommendations/repository";
 import { SessionRequestButton } from "@/app/_components/SessionRequestButton";
 import { SprintInterestButton } from "@/app/_components/SprintInterestButton";
 import { EvidenceSubmittedDisclosure, type EvidenceSnapshotShape } from "@/app/_components/EvidenceSubmittedDisclosure";
@@ -150,12 +151,44 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
   const visibleFindings = ((findings ?? []) as FindingRow[]).filter((f) => f.reviewer_status === "approved" || f.reviewer_status === "edited");
   const top3FindingIds = new Set((report.top_3_finding_ids as string[]) ?? []);
   const top3 = visibleFindings.filter((f) => top3FindingIds.has(f.id)).map(displayedContent);
-  const roadmap = deriveRoadmap(top3);
+  // Cascade reasoning (confirmed 2026-08-13, item 5) — allReportFindings is
+  // the FULL visible finding set for this report, not just the top 3, so
+  // cascade counting can see everything a top-3 finding might be upstream
+  // of, including findings that didn't themselves make top-3.
+  const recommendationLibrary = await loadRecommendationLibrary();
+  const allReportFindings = visibleFindings.map((f) => ({ id: f.id, lens: f.lens, title: displayedContent(f).title, diagnosis: displayedContent(f).diagnosis }));
+  // Paired with the real DB id, not LensFinding.findingId — see
+  // deriveRoadmap's own docblock for the real, pre-existing bug this works
+  // around (findingId is stale, never re-persisted post-audit).
+  const top3WithIds = visibleFindings.filter((f) => top3FindingIds.has(f.id)).map((f) => ({ id: f.id, finding: displayedContent(f) }));
+  const roadmap = deriveRoadmap(top3WithIds, allReportFindings, recommendationLibrary);
 
   const byLens = new Map<LensType, FindingRow[]>();
   for (const f of visibleFindings) {
     byLens.set(f.lens, [...(byLens.get(f.lens) ?? []), f]);
   }
+
+  // Surface real strengths, per-lens (confirmed 2026-08-14, item 6 of the
+  // old-Elvanis-inspired batch) — the report was previously entirely
+  // deficit-framed. `goalRelevance === "directly_supports"` is already the
+  // real, deterministic "this finding is genuinely healthy and directly
+  // relevant to the goal" signal every lens's prompt already produces (see
+  // GoalRelevance's own docblock in lenses/types.ts) — reused here as the
+  // strength signal rather than inventing a new judgment. Missing-evidence
+  // findings are excluded from both counts — an evidence gap is neither a
+  // strength nor a weakness, a third, separate category this report
+  // already visually distinguishes elsewhere (the dashed "NO EVIDENCE
+  // SUBMITTED" card). AI & Governance's own prompt rule 4 forbids ever
+  // producing a "things are healthy" finding by design, so it will
+  // structurally show 0 strengths here — correct, not a bug, per the
+  // founder's own explicit confirmation.
+  const strengthsByLens = new Map<LensType, { strengths: number; weaknesses: number }>();
+  for (const lens of LENS_ORDER) {
+    const rows = (byLens.get(lens) ?? []).filter((r) => !displayedContent(r).isMissingDataFinding);
+    const strengths = rows.filter((r) => displayedContent(r).goalRelevance === "directly_supports").length;
+    strengthsByLens.set(lens, { strengths, weaknesses: rows.length - strengths });
+  }
+  const strengthFindings = visibleFindings.filter((f) => !displayedContent(f).isMissingDataFinding && displayedContent(f).goalRelevance === "directly_supports");
 
   // Service Layer session requests (confirmed 2026-08-06) — Delivery
   // Session is offered here since it's explicitly post-report only; F2F
@@ -228,14 +261,69 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
                   <p className="text-neutral-400">Nothing at this horizon</p>
                 ) : (
                   <ul className="space-y-1">
-                    {roadmap[bucket].map((f) => (
-                      <li key={f.findingId}>{f.title}</li>
+                    {roadmap[bucket].map((item) => (
+                      <li key={item.finding.findingId}>
+                        {item.finding.title}
+                        {item.cascadeCount >= 2 && (
+                          <span className="ml-1.5 text-xs text-accent" title={item.cascadesToFindingTitles.join(", ")}>
+                            — fix this first, unlocks {item.cascadeCount} other finding{item.cascadeCount === 1 ? "" : "s"}
+                          </span>
+                        )}
+                      </li>
                     ))}
                   </ul>
                 )}
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {byLens.size > 0 && (
+        <section className="mb-10 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+          <h2 className="mb-1 text-lg font-medium">Strengths by lens</h2>
+          <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
+            This report also looks for what&apos;s genuinely working, not just what needs fixing — a lens with no bar segment here didn&apos;t identify a
+            finding directly and healthily supporting your stated goal this time, not that nothing about it works.
+          </p>
+          <div className="space-y-3">
+            {LENS_ORDER.filter((lens) => byLens.has(lens)).map((lens) => {
+              const counts = strengthsByLens.get(lens) ?? { strengths: 0, weaknesses: 0 };
+              const total = counts.strengths + counts.weaknesses;
+              const strengthPercent = total > 0 ? (counts.strengths / total) * 100 : 0;
+              return (
+                <div key={lens}>
+                  <div className="mb-1 flex items-center justify-between text-xs text-neutral-600 dark:text-neutral-400">
+                    <span>{LENS_LABELS[lens]}</span>
+                    <span>
+                      {counts.strengths} strength{counts.strengths === 1 ? "" : "s"} · {counts.weaknesses} to address
+                    </span>
+                  </div>
+                  <div className="flex h-2 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+                    {total === 0 ? null : (
+                      <>
+                        <div className="bg-green-500" style={{ width: `${strengthPercent}%` }} />
+                        <div className="bg-neutral-300 dark:bg-neutral-600" style={{ width: `${100 - strengthPercent}%` }} />
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {strengthFindings.length > 0 && (
+            <div className="mt-5 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+              <h3 className="mb-2 text-sm font-medium text-neutral-900 dark:text-neutral-50">What&apos;s working</h3>
+              <ul className="space-y-1.5 text-sm">
+                {strengthFindings.map((f) => (
+                  <li key={f.id} className="flex items-start gap-2 text-neutral-700 dark:text-neutral-300">
+                    <span className="mt-0.5 text-green-600 dark:text-green-400">✓</span>
+                    <span>{displayedContent(f).title}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
       )}
 

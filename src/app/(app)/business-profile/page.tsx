@@ -5,6 +5,7 @@ import { GOAL_LABELS } from "@/lib/lenses/goals";
 import type { PrimaryGoal } from "@/lib/lenses/types";
 import { DesiredFutureStateField } from "./DesiredFutureStateField";
 import { BusinessProfileForm } from "./BusinessProfileForm";
+import { DigitalPresenceCheck } from "./DigitalPresenceCheck";
 import type { CompanyProfileFields } from "./actions";
 import { Card } from "@/app/_components/ui/Card";
 import { NextStepBanner } from "@/app/_components/NextStepBanner";
@@ -84,6 +85,10 @@ export default async function BusinessProfilePage() {
       <div className="space-y-6">
         <Card title="Company details">
           <BusinessProfileForm companyId={company.id as string} initial={initialFields} />
+        </Card>
+
+        <Card title="Digital presence check">
+          <DigitalPresenceCheck companyId={company.id as string} hasWebsiteUrl={!!company.website_url} />
         </Card>
 
         {goal && (

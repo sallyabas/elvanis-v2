@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { LensFinding } from "@/lib/lenses/types";
+import { findNextPriorityFinding } from "@/lib/execution-sprint/next-priority";
 import { ExecutionSprintClient } from "./ExecutionSprintClient";
 
 /**
@@ -24,7 +25,7 @@ export default async function ExecutionSprintPage({ params }: { params: Promise<
 
   const { data: sprint, error: sprintError } = await supabase
     .from("execution_sprints")
-    .select("id, status, start_date, target_end_date, signed_off_at, reviewer_commentary, selected_finding_id, companies(name)")
+    .select("id, status, start_date, target_end_date, signed_off_at, reviewer_commentary, selected_finding_id, report_id, companies(name)")
     .eq("id", sprintId)
     .maybeSingle();
 
@@ -62,9 +63,16 @@ export default async function ExecutionSprintPage({ params }: { params: Promise<
 
   const company = sprint.companies as unknown as { name: string } | null;
 
+  // Sprint-completion bridge (confirmed 2026-08-13, direct founder
+  // request) — only worth computing once the sprint is actually complete;
+  // querying it unconditionally would waste a read on every in-progress
+  // page view for data nobody sees yet.
+  const nextPriority = sprint.status === "complete" ? await findNextPriorityFinding(supabase, sprint.report_id, sprint.selected_finding_id) : null;
+
   return (
     <ExecutionSprintClient
       sprintId={sprint.id}
+      reportId={sprint.report_id}
       companyName={company?.name ?? "Your company"}
       findingTitle={findingContent?.title ?? "Unknown finding"}
       sprintStatus={sprint.status}
@@ -74,6 +82,7 @@ export default async function ExecutionSprintPage({ params }: { params: Promise<
       reviewerCommentary={sprint.reviewer_commentary}
       tasks={tasks ?? []}
       queueItems={queueItems ?? []}
+      nextPriority={nextPriority}
     />
   );
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { GOAL_LABELS, GOAL_DESCRIPTIONS, GOAL_METRIC_EXAMPLES } from "@/lib/lenses/goals";
 import type { PrimaryGoal } from "@/lib/lenses/types";
+import { ALL_METRIC_DEFINITIONS, findMetricDefinition } from "@/lib/lenses/metric-direction";
 import { createCompanyAndGoal } from "./actions";
 import { Input } from "@/app/_components/ui/Input";
 import { Textarea } from "@/app/_components/ui/Textarea";
@@ -33,6 +34,15 @@ import { Alert } from "@/app/_components/ui/Alert";
 const GOAL_KEYS = Object.keys(GOAL_LABELS) as PrimaryGoal[];
 const STEP_LABELS = ["Company", "Goal", "Refine", "Details", "Review"] as const;
 
+// Structured goal-metric capture (confirmed 2026-08-13, item 2 of the
+// old-Elvanis-inspired batch) — grouped by lens for the dropdown, same
+// order EVIDENCE_FIELD_SETS/ALL_METRIC_DEFINITIONS already use.
+const METRIC_LENS_LABELS: Record<"financial" | "execution" | "product", string> = {
+  financial: "Financial",
+  execution: "Execution / Operating",
+  product: "Product / Customer",
+};
+
 export function OnboardingWizard() {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -42,6 +52,8 @@ export function OnboardingWizard() {
   const [secondaryGoal, setSecondaryGoal] = useState<PrimaryGoal | "">("");
   const [urgencyLevel, setUrgencyLevel] = useState("");
   const [targetMetric, setTargetMetric] = useState("");
+  const [targetMetricKey, setTargetMetricKey] = useState("");
+  const [targetMetricValue, setTargetMetricValue] = useState("");
   const [timeHorizon, setTimeHorizon] = useState("");
   const [successDefinition, setSuccessDefinition] = useState("");
 
@@ -62,6 +74,24 @@ export function OnboardingWizard() {
 
   async function handleSubmit() {
     if (!primaryGoal) return;
+
+    // Structured goal-metric capture (confirmed 2026-08-13) — a real
+    // client-side pre-check mirroring the server action's own validation,
+    // so a mismatched key/value pair is caught before the round trip.
+    if (targetMetricKey && !targetMetricValue.trim()) {
+      setError("Enter a target value for the metric you selected.");
+      return;
+    }
+    if (targetMetricValue.trim() && !targetMetricKey) {
+      setError("Select which metric that target value is for.");
+      return;
+    }
+    const parsedTargetMetricValue = targetMetricValue.trim() ? Number(targetMetricValue) : null;
+    if (targetMetricValue.trim() && (parsedTargetMetricValue === null || Number.isNaN(parsedTargetMetricValue))) {
+      setError("Target value must be a number.");
+      return;
+    }
+
     setStatus("submitting");
     setError(null);
 
@@ -71,6 +101,8 @@ export function OnboardingWizard() {
       secondaryGoal: secondaryGoal || null,
       urgencyLevel: urgencyLevel.trim() || null,
       targetMetric: targetMetric.trim() || null,
+      targetMetricKey: targetMetricKey || null,
+      targetMetricValue: parsedTargetMetricValue,
       timeHorizon: timeHorizon.trim() || null,
       successDefinition: successDefinition.trim() || null,
     });
@@ -178,6 +210,41 @@ export function OnboardingWizard() {
             onChange={(e) => setTargetMetric(e.target.value)}
             placeholder={GOAL_METRIC_EXAMPLES[primaryGoal]}
           />
+          {/* Structured goal-metric capture (confirmed 2026-08-13, item 2
+              of the old-Elvanis-inspired batch) — an optional, structured
+              (metric + target number) pairing alongside the free-text
+              answer above, not a replacement for it. Foundational capture
+              only: the achieved/missed comparison this could eventually
+              power stays deferred until real repeat-audit volume exists —
+              see CLAUDE.md. */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Select
+              label="Track a specific number for this? (optional)"
+              hint="If you pick one, we'll show its trend across future audits."
+              value={targetMetricKey}
+              onChange={(e) => setTargetMetricKey(e.target.value)}
+            >
+              <option value="">Don&apos;t track a specific number</option>
+              {(["financial", "execution", "product"] as const).map((lens) => (
+                <optgroup key={lens} label={METRIC_LENS_LABELS[lens]}>
+                  {ALL_METRIC_DEFINITIONS.filter((m) => m.lens === lens).map((m) => (
+                    <option key={m.metricKey} value={m.metricKey}>
+                      {m.label}
+                      {m.unit ? ` (${m.unit})` : ""}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </Select>
+            <Input
+              label="Target value"
+              type="number"
+              value={targetMetricValue}
+              onChange={(e) => setTargetMetricValue(e.target.value)}
+              disabled={!targetMetricKey}
+              placeholder={targetMetricKey ? `e.g. ${findMetricDefinition(targetMetricKey)?.unit === "%" ? "70" : "10"}` : "Pick a metric first"}
+            />
+          </div>
           <Input
             label="What's your time horizon?"
             type="text"
@@ -247,6 +314,15 @@ export function OnboardingWizard() {
               <div>
                 <dt className="text-xs font-medium uppercase text-neutral-400">Target metric</dt>
                 <dd>{targetMetric}</dd>
+              </div>
+            )}
+            {targetMetricKey && targetMetricValue && (
+              <div>
+                <dt className="text-xs font-medium uppercase text-neutral-400">Tracking</dt>
+                <dd>
+                  {findMetricDefinition(targetMetricKey)?.label} → target {targetMetricValue}
+                  {findMetricDefinition(targetMetricKey)?.unit}
+                </dd>
               </div>
             )}
             {timeHorizon && (

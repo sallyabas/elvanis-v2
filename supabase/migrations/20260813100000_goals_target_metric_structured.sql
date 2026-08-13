@@ -1,0 +1,23 @@
+-- Structured goal-metric capture (confirmed 2026-08-13, item 2 of the
+-- old-Elvanis-inspired batch) — goals.target_metric has always been free
+-- text ("what metric would you use to measure this?"). This adds a real
+-- structured pairing (a known metric key + a real target number),
+-- captured ALONGSIDE the existing free-text field, not replacing it — a
+-- client can still describe their goal in their own words either way.
+--
+-- Deliberately foundational, not yet read by anything: this is the
+-- "capture now, feature that reads it can wait for real volume" pattern
+-- already used for case_library/similar-patterns — the smaller
+-- trend-tracking display (item 2's other half) reads `metrics` already
+-- stored in reports.source_evidence_snapshot, not this column directly;
+-- this column exists so the client's own STATED target is on record for
+-- whenever real achieved/missed detection becomes worth building.
+--
+-- target_metric_key is intentionally plain text, not a foreign key or a
+-- Postgres enum — it must match one of the 13 known
+-- FinancialMetricKey/ExecutionMetricKey/ProductMetricKey values (see
+-- src/lib/lenses/metric-direction.ts), but that set lives in application
+-- code (same "structural identity lives in TS, not the DB" precedent as
+-- GovernanceDimensionKey), not the schema.
+alter table goals add column target_metric_key text;
+alter table goals add column target_metric_value numeric;

@@ -19,6 +19,7 @@ import {
 } from "./actions";
 import type { DisputeResolution } from "@/lib/reviewer/workspace";
 import { matchRecommendationLibraryEntries, type RecommendationLibraryEntry } from "@/lib/recommendations/recommendation-library";
+import { computeCascadeSignals } from "@/lib/recommendations/cascade";
 import { Card } from "@/app/_components/ui/Card";
 import { Input } from "@/app/_components/ui/Input";
 import { Textarea } from "@/app/_components/ui/Textarea";
@@ -271,11 +272,22 @@ export function ReviewWorkspaceClient({
   const draftFindings = findings.filter((f) => f.reviewer_status === "draft");
   const unresolvedConflicts = conflicts.filter((c) => c.resolution_status === "unresolved");
 
+  // Signal cascades (confirmed 2026-08-13, item 1 of the old-Elvanis-
+  // inspired batch) — computed against every non-rejected finding on this
+  // report, so a finding's cascade count reflects the real, currently-live
+  // finding set the reviewer is actually looking at (a rejected finding
+  // shouldn't count toward "upstream of N others," since it's been
+  // dropped from the client-facing picture).
+  const cascadeSignals = computeCascadeSignals(
+    findings.filter((f) => f.reviewer_status !== "rejected").map((f) => ({ id: f.id, lens: f.lens, ...displayedContent(f) })),
+    recommendationLibrary,
+  );
+
   const fixFirstCandidates = findings.filter(
     (f) =>
       f.reviewer_status !== "rejected" &&
       !top3FindingIds.includes(f.id) &&
-      isFixFirstCandidate(displayedContent(f)),
+      isFixFirstCandidate(displayedContent(f), cascadeSignals.get(f.id)?.cascadeCount ?? 0),
   );
 
   const fullCycle = formatDuration(timing.submittedAt, timing.approvedAt);
@@ -375,27 +387,35 @@ export function ReviewWorkspaceClient({
         <section className="mb-8 rounded-lg border border-neutral-300 bg-neutral-50 p-5 dark:border-neutral-700 dark:bg-neutral-900/50">
           <h2 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">Suggested fix-first (not yet in top 3)</h2>
           <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
-            Deterministically flagged: critical severity, or high severity directly blocking the client&apos;s stated goal. A suggestion only — promote
-            manually if it belongs in the top 3.
+            Deterministically flagged: critical severity, high severity directly tied to the client&apos;s stated goal, or upstream of 2+ other findings
+            on this report (see below). A suggestion only — promote manually if it belongs in the top 3.
           </p>
           <ul className="space-y-2">
-            {fixFirstCandidates.map((f) => (
-              <li key={f.id} className="flex items-center justify-between text-sm text-neutral-800 dark:text-neutral-200">
-                <span>
-                  <span className={`mr-2 rounded-full px-2 py-0.5 text-xs ${SEVERITY_BADGE[displayedContent(f).severity]}`}>
-                    {displayedContent(f).severity}
+            {fixFirstCandidates.map((f) => {
+              const cascade = cascadeSignals.get(f.id);
+              return (
+                <li key={f.id} className="flex items-center justify-between text-sm text-neutral-800 dark:text-neutral-200">
+                  <span>
+                    <span className={`mr-2 rounded-full px-2 py-0.5 text-xs ${SEVERITY_BADGE[displayedContent(f).severity]}`}>
+                      {displayedContent(f).severity}
+                    </span>
+                    {displayedContent(f).title}
+                    {cascade && cascade.cascadeCount >= 2 && (
+                      <span className="ml-2 text-xs text-accent" title={cascade.cascadesToFindingTitles.join(", ")}>
+                        upstream of {cascade.cascadeCount} other finding{cascade.cascadeCount === 1 ? "" : "s"}
+                      </span>
+                    )}
                   </span>
-                  {displayedContent(f).title}
-                </span>
-                {f.reviewer_status === "draft" ? (
-                  <span className="text-xs text-neutral-400 dark:text-neutral-500">decide this finding first</span>
-                ) : (
-                  <Button variant="secondary" disabled={pending} onClick={() => handlePromoteToTop3(f.id)} className="px-2 py-0.5 text-xs">
-                    Add to top 3
-                  </Button>
-                )}
-              </li>
-            ))}
+                  {f.reviewer_status === "draft" ? (
+                    <span className="text-xs text-neutral-400 dark:text-neutral-500">decide this finding first</span>
+                  ) : (
+                    <Button variant="secondary" disabled={pending} onClick={() => handlePromoteToTop3(f.id)} className="px-2 py-0.5 text-xs">
+                      Add to top 3
+                    </Button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

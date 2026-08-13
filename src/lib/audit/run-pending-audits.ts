@@ -7,6 +7,7 @@ import type { EvidenceFieldInput } from "@/lib/lenses/types";
 import type { CommercialSelfReport } from "@/lib/lenses/commercial";
 import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
 import type { MetricInput } from "@/lib/lenses/metrics";
+import { runCompetitorResearchSafely } from "@/lib/lenses/commercial-research";
 
 /**
  * The PRIMARY audit trigger (confirmed 2026-08-10, direct founder
@@ -83,6 +84,19 @@ export async function runAuditForClaimedSubmission(supabase: SupabaseClient, row
     const goal = await loadGoalContext(supabase, row.goal_id);
     const payload = row.evidence_payload;
 
+    // Commercial auto-trigger (confirmed 2026-08-13, direct founder
+    // request) — real gap closed: runCompetitorResearch() was fully built
+    // and tested since 2026-07-31 but never had a caller in application
+    // code; this hardcoded `independentResearch: []` on every real audit.
+    // See runCompetitorResearchSafely()'s own docblock for why this is
+    // defensive (a research failure must never fail the whole audit).
+    const independentResearch = await runCompetitorResearchSafely({
+      namedCompetitors: payload.commercial.namedCompetitors,
+      industry: company.industry,
+      businessModel: company.businessModel,
+      customerType: company.customerType,
+    });
+
     const result = await runAudit({
       companyId: row.company_id,
       company,
@@ -91,7 +105,7 @@ export async function runAuditForClaimedSubmission(supabase: SupabaseClient, row
       financial: payload.financial,
       execution: payload.execution,
       product: payload.product,
-      commercial: { selfReport: payload.commercial, independentResearch: [] },
+      commercial: { selfReport: payload.commercial, independentResearch },
       aiGovernance: payload.aiGovernance,
       sourceEvidenceSnapshot: payload as unknown as Record<string, unknown>,
       // Real bug found and fixed live (confirmed 2026-08-10) — without

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { PrimaryGoal } from "@/lib/lenses/types";
 import { validateDesiredFutureState } from "@/lib/goals/validation";
+import { findMetricDefinition } from "@/lib/lenses/metric-direction";
 
 export interface CreateCompanyResult {
   success: boolean;
@@ -38,6 +39,9 @@ export async function createCompanyAndGoal(input: {
   secondaryGoal: PrimaryGoal | null;
   urgencyLevel: string | null;
   targetMetric: string | null;
+  /** Structured goal-metric capture (confirmed 2026-08-13, item 2) — an optional, real (metric key + target value) pairing alongside the free-text targetMetric above, not a replacement for it. */
+  targetMetricKey: string | null;
+  targetMetricValue: number | null;
   timeHorizon: string | null;
   successDefinition: string | null;
 }): Promise<CreateCompanyResult> {
@@ -56,6 +60,19 @@ export async function createCompanyAndGoal(input: {
   if (!targetMetricCheck.valid) return { success: false, error: `Target metric: ${targetMetricCheck.error}` };
   const successDefinitionCheck = validateDesiredFutureState(input.successDefinition ?? "");
   if (!successDefinitionCheck.valid) return { success: false, error: `Success definition: ${successDefinitionCheck.error}` };
+
+  // Structured goal-metric capture (confirmed 2026-08-13) — a real
+  // (metric key + target value) pair only makes sense together; a lone
+  // key with no number, or a lone number with no key, is meaningless.
+  if (input.targetMetricKey && input.targetMetricValue === null) {
+    return { success: false, error: "Enter a target value for the metric you selected." };
+  }
+  if (input.targetMetricValue !== null && !input.targetMetricKey) {
+    return { success: false, error: "Select which metric that target value is for." };
+  }
+  if (input.targetMetricKey && !findMetricDefinition(input.targetMetricKey)) {
+    return { success: false, error: "Unrecognized target metric." };
+  }
 
   const supabase = await createClient();
   const {
@@ -76,6 +93,8 @@ export async function createCompanyAndGoal(input: {
     secondary_goal: input.secondaryGoal,
     urgency_level: input.urgencyLevel,
     target_metric: input.targetMetric,
+    target_metric_key: input.targetMetricKey,
+    target_metric_value: input.targetMetricValue,
     time_horizon: input.timeHorizon,
     success_definition: input.successDefinition,
   });

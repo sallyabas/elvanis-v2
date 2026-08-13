@@ -40,6 +40,7 @@ interface RecommendationLibraryRow {
   keywords: string[];
   recommended_action_template: string;
   rationale: string;
+  cascades_to: string[] | null;
 }
 
 export async function loadRecommendationLibrary(): Promise<RecommendationLibraryEntry[]> {
@@ -60,6 +61,12 @@ export async function loadRecommendationLibrary(): Promise<RecommendationLibrary
       keywords: r.keywords,
       recommendedActionTemplate: r.recommended_action_template,
       rationale: r.rationale,
+      // Signal cascades (confirmed 2026-08-13) — filtered to known keys
+      // rather than trusting the DB column wholesale, same defensive
+      // pattern as isKnownIssueTypeKey above; a stale/typo'd cascade target
+      // is silently dropped rather than corrupting cascade counting with an
+      // unrecognized key.
+      cascadesTo: (r.cascades_to ?? []).filter(isKnownIssueTypeKey),
     }));
 
   // Defensive: if the DB is missing rows, fall back to the full default set rather than running with a partial library.

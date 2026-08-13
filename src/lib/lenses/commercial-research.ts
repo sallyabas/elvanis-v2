@@ -107,3 +107,26 @@ export async function runCompetitorResearch(input: CompetitorResearchInput): Pro
 
   return findings;
 }
+
+/**
+ * Auto-trigger wrapper (confirmed 2026-08-13, direct founder request) —
+ * runCompetitorResearch() itself was fully built and tested since
+ * 2026-07-31 but never actually had a caller in application code; both
+ * real audit-execution paths (run-pending-audits.ts, rerun-audit.ts)
+ * hardcoded `independentResearch: []` instead. This wrapper is what those
+ * two callers now use. Deliberately defensive — research is enrichment on
+ * top of the client's own self-report, not a hard requirement for the
+ * Commercial lens to run at all (it already handles an empty
+ * independentResearch array correctly, per its own prompt rules), so a
+ * transient Tavily failure here must never fail the whole 5-lens audit
+ * the way an uncaught throw would (runAuditForClaimedSubmission's own
+ * catch block would otherwise mark the entire submission for stale-retry
+ * over what's really just a research-enrichment hiccup).
+ */
+export async function runCompetitorResearchSafely(input: CompetitorResearchInput): Promise<IndependentResearchFinding[]> {
+  try {
+    return await runCompetitorResearch(input);
+  } catch {
+    return [];
+  }
+}

@@ -1,13 +1,24 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { updateTaskStatusAction, updateKpiActualAction, submitChangeRequestNoteAction, signOffSprintAction } from "./actions";
+import type { NextPriorityFinding } from "@/lib/execution-sprint/next-priority";
 import { Card } from "@/app/_components/ui/Card";
 import { Select } from "@/app/_components/ui/Select";
 import { Input } from "@/app/_components/ui/Input";
 import { Textarea } from "@/app/_components/ui/Textarea";
 import { Button } from "@/app/_components/ui/Button";
+import { LinkButton } from "@/app/_components/ui/LinkButton";
 import { Alert } from "@/app/_components/ui/Alert";
+
+const LENS_LABELS: Record<NextPriorityFinding["lens"], string> = {
+  financial: "Financial",
+  execution: "Execution / Operating",
+  product: "Product / Customer",
+  commercial: "Commercial / Market",
+  ai_governance: "AI & Governance",
+};
 
 interface SprintTaskRow {
   id: string;
@@ -47,6 +58,7 @@ const STATUS_LABELS: Record<SprintTaskRow["status"], string> = {
  */
 export function ExecutionSprintClient({
   sprintId,
+  reportId,
   companyName,
   findingTitle,
   sprintStatus,
@@ -56,8 +68,10 @@ export function ExecutionSprintClient({
   reviewerCommentary,
   tasks,
   queueItems,
+  nextPriority,
 }: {
   sprintId: string;
+  reportId: string;
   companyName: string;
   findingTitle: string;
   sprintStatus: string;
@@ -67,6 +81,8 @@ export function ExecutionSprintClient({
   reviewerCommentary: string | null;
   tasks: SprintTaskRow[];
   queueItems: SprintQueueItemRow[];
+  /** Sprint-completion bridge (confirmed 2026-08-13) — null means either the sprint isn't complete yet, or genuinely no other real, actionable priority exists on this report; both are honest, not an error state. */
+  nextPriority: NextPriorityFinding | null;
 }) {
   const [taskState, setTaskState] = useState(tasks);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
@@ -162,6 +178,25 @@ export function ExecutionSprintClient({
             <p className="mt-2 text-sm text-green-700 dark:text-green-400">Your reviewer will add a final wrap-up commentary shortly.</p>
           )}
         </div>
+      )}
+
+      {sprintStatus === "complete" && (
+        <Card className="mt-4">
+          <p className="text-sm font-medium text-neutral-900 dark:text-neutral-50">What&apos;s next?</p>
+          {nextPriority ? (
+            <>
+              <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+                {nextPriority.isFixFirstCandidate ? "Your reviewer's next suggested fix-first priority: " : "Your next highest-priority open item: "}
+                <span className="font-medium text-neutral-900 dark:text-neutral-50">{nextPriority.title}</span> ({LENS_LABELS[nextPriority.lens]}, {nextPriority.severity} severity).
+              </p>
+              <LinkButton href={`/reports/${reportId}`} variant="secondary" className="mt-3">
+                View full report and roadmap →
+              </LinkButton>
+            </>
+          ) : (
+            <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">No other high-priority open items remain on this report right now — nice work. Check your full report for the complete picture.</p>
+          )}
+        </Card>
       )}
 
       <div className="mt-8 space-y-4">

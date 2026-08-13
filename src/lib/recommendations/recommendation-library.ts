@@ -63,6 +63,25 @@ export interface RecommendationLibraryEntry {
   /** A proven starting template — the reviewer adapts it to the specific finding, never pastes it verbatim. */
   recommendedActionTemplate: string;
   rationale: string;
+  /**
+   * Signal cascades (confirmed 2026-08-13, item 1 of the old-Elvanis-
+   * inspired batch, ported from the old Elvanis app's SIGNAL_CASCADES
+   * concept — see CLAUDE.md) — a curated, hand-authored map of which OTHER
+   * issue types this one predictably drives downstream, when both are
+   * genuinely present on the same report. Cross-lens by design (e.g.
+   * no_financial_visibility → thin_margin), same as the old app's own
+   * cascades. Deliberately NOT symmetric in most cases — a cascade
+   * relationship is directional (the upstream cause → the downstream
+   * effect), though a couple of genuine mutual-reinforcement pairs are
+   * intentionally allowed (decision_latency ↔ meeting_overload) rather than
+   * forced into a strict acyclic shape, matching the old app's own
+   * precedent. Honest limitation, accepted: cascade reasoning only applies
+   * to findings that match one of these 16 curated issue types via the
+   * same keyword-matching function already used for recommendation
+   * suggestions — a finding outside this vocabulary shows no cascade
+   * signal, same as it already shows no recommendation suggestion.
+   */
+  cascadesTo: IssueTypeKey[];
 }
 
 /** Fallback used if the DB read fails or returns incomplete data — also the seed data's own source of truth. */
@@ -75,6 +94,7 @@ export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
     recommendedActionTemplate:
       "Stand up monthly (ideally weekly) cash flow and gross-margin reporting from the existing accounting system, owned by a named person, reviewed on a fixed cadence — start with the 3-5 numbers that actually drive decisions rather than a full BI build.",
     rationale: "The single most common root blocker behind every other financial finding this lens sees — you can't manage what you can't see.",
+    cascadesTo: ["thin_margin", "short_runway", "customer_concentration", "no_operating_reporting"],
   },
   {
     key: "customer_concentration",
@@ -84,6 +104,7 @@ export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
     recommendedActionTemplate:
       "Map renewal dates and contract terms for the top 3-5 accounts by revenue; build a named-account retention plan for each, and set an explicit new-logo target sized to reduce concentration below a stated threshold within a defined timeframe.",
     rationale: "Concentration risk is a real, common driver of churn/retention goal exposure, not just a financial-lens curiosity.",
+    cascadesTo: ["short_runway"],
   },
   {
     key: "thin_margin",
@@ -93,6 +114,7 @@ export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
     recommendedActionTemplate:
       "Break down cost of goods/delivery by line item against the specific benchmark gap identified; target the single largest contributor first rather than an across-the-board cost-cutting exercise.",
     rationale: "A generic \"cut costs\" recommendation is rarely actionable — anchoring to the specific gap keeps this concrete.",
+    cascadesTo: ["short_runway"],
   },
   {
     key: "short_runway",
@@ -102,6 +124,7 @@ export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
     recommendedActionTemplate:
       "Build a 13-week rolling cash forecast (not just a monthly view) and identify the top 2-3 levers (spend cuts, collections timing, financing options) with a decision deadline tied to the actual runway number, not a vague \"soon.\"",
     rationale: "Runway findings need a forecast cadence tighter than monthly reporting can provide — weekly precision matters when the number is small.",
+    cascadesTo: [],
   },
   {
     key: "decision_latency",
@@ -111,6 +134,7 @@ export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
     recommendedActionTemplate:
       "Delegate a defined class of decisions below a stated dollar/impact threshold to the person closest to the work, with an explicit escalation path only for exceptions above that threshold — set a target turnaround SLA and track it.",
     rationale: "Blanket \"speed up decisions\" advice rarely sticks; a concrete delegation threshold does.",
+    cascadesTo: ["meeting_overload", "weak_onboarding_activation", "low_feature_adoption"],
   },
   {
     key: "meeting_overload",
@@ -120,6 +144,7 @@ export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
     recommendedActionTemplate:
       "Run a two-week meeting audit (who, why, could this be async) across the leadership team specifically, then cut or convert to async anything without a decision or genuine cross-functional need — protect at least one full no-meeting block per day.",
     rationale: "Leadership meeting load compounds fastest and has the clearest labor-hours cost to quantify.",
+    cascadesTo: ["decision_latency"],
   },
   {
     key: "no_operating_reporting",
@@ -129,6 +154,7 @@ export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
     recommendedActionTemplate:
       "Pick the single highest-value operating metric currently invisible (often financial, sometimes delivery or pipeline) and stand up the minimum reporting needed to see it weekly — resist building a full system before proving the habit sticks.",
     rationale: "This is Execution's own territory even when the missing visibility is financial/commercial in nature — the process gap, not the numbers themselves.",
+    cascadesTo: ["decision_latency", "no_financial_visibility"],
   },
   {
     key: "low_feature_adoption",
@@ -138,6 +164,7 @@ export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
     recommendedActionTemplate:
       "Instrument the specific drop-off point in the activation flow (not just top-line adoption %), then redesign onboarding around getting a new user to first real value within one session — don't add features before fixing the funnel.",
     rationale: "Low adoption is almost always a funnel problem, not a feature-richness problem — the recommendation should point at the funnel.",
+    cascadesTo: ["high_churn"],
   },
   {
     key: "high_churn",
@@ -147,6 +174,7 @@ export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
     recommendedActionTemplate:
       "Stand up a lightweight exit-interview process (even 3 questions) for every cancellation for the next quarter, tagged by reason — most churn-reduction efforts fail because the actual reason was never captured systematically.",
     rationale: "You can't fix churn you can't categorize — the data-capture step comes before any retention tactic.",
+    cascadesTo: ["short_runway", "customer_concentration"],
   },
   {
     key: "weak_onboarding_activation",
@@ -156,6 +184,7 @@ export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
     recommendedActionTemplate:
       "Map the current path from signup to first meaningful value, identify the single biggest drop-off step, and redesign only that step first — a full onboarding rebuild is rarely the fastest path to improvement.",
     rationale: "Scoping to the single worst step keeps this genuinely actionable rather than a multi-quarter project.",
+    cascadesTo: ["low_feature_adoption", "high_churn"],
   },
   {
     key: "pricing_pressure",
@@ -165,6 +194,7 @@ export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
     recommendedActionTemplate:
       "Audit the last 5-10 discounted deals for the actual objection raised (price vs. perceived value vs. missing feature) before changing list price — a pricing change aimed at the wrong root cause won't move the needle.",
     rationale: "Pricing pressure is often a value-communication problem wearing a price-tag disguise; diagnose before repricing.",
+    cascadesTo: ["thin_margin"],
   },
   {
     key: "weak_differentiation",
@@ -174,6 +204,7 @@ export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
     recommendedActionTemplate:
       "Run a short positioning exercise against the specific competitor(s) actually being lost to — one clear, evidence-backed reason a prospect should choose you, tested in the next 5 sales conversations before rolling out broadly.",
     rationale: "Generic \"improve positioning\" advice doesn't survive contact with a real sales call; anchoring to a named competitor does.",
+    cascadesTo: ["pricing_pressure", "recurring_lost_deal_pattern"],
   },
   {
     key: "recurring_lost_deal_pattern",
@@ -183,6 +214,7 @@ export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
     recommendedActionTemplate:
       "Formalize a lightweight win/loss log (reason, competitor, deal size) for the next quarter of deals — most companies at this stage have anecdotal loss reasons, not a real pattern to act on yet.",
     rationale: "One or two lost-deal notes aren't a pattern; the recommendation should build the muscle to find real patterns, not react to anecdotes.",
+    cascadesTo: [],
   },
   {
     key: "no_ai_governance_docs",
@@ -192,6 +224,7 @@ export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
     recommendedActionTemplate:
       "Produce a one-page AI use inventory (what AI is used where, on what data, with what human oversight) before adding any further AI-powered functionality — this is the prerequisite most other governance dimensions build on.",
     rationale: "Matches the deterministic guaranteed finding this lens already produces for exactly this combination — the recommendation should be the same every time, not reinvented per audit.",
+    cascadesTo: ["unclear_ai_risk_classification", "no_human_oversight"],
   },
   {
     key: "no_human_oversight",
@@ -201,6 +234,7 @@ export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
     recommendedActionTemplate:
       "Add a mandatory human checkpoint before any AI-generated output reaches a customer or feeds a consequential business decision, scoped to start with the highest-risk use case identified — not necessarily every use case at once.",
     rationale: "A phased rollout of oversight (highest-risk first) gets adopted; \"review everything immediately\" usually doesn't.",
+    cascadesTo: [],
   },
   {
     key: "unclear_ai_risk_classification",
@@ -210,6 +244,7 @@ export const DEFAULT_RECOMMENDATION_LIBRARY: RecommendationLibraryEntry[] = [
     recommendedActionTemplate:
       "Classify each current AI use case against a simple risk tier (informational/assistive vs. decision-affecting vs. high-stakes) as a first pass — this doesn't need to be a formal EU AI Act conformity exercise yet (that's Tender Readiness's job) to be genuinely useful internally.",
     rationale: "Distinguishes this lens's job (governance maturity) from Tender Readiness's deeper regulatory classification work — the recommendation should stay at the right depth.",
+    cascadesTo: ["no_human_oversight"],
   },
 ];
 

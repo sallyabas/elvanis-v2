@@ -4,7 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { LensFinding } from "@/lib/lenses/types";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
+import { loadRecommendationLibrary } from "@/lib/recommendations/repository";
+import type { FindingForCascade } from "@/lib/recommendations/cascade";
 import { computeJourneyStatus } from "@/lib/reports/journey-status";
+import { loadGoalMetricTrend, type MetricTrend } from "@/lib/goals/metric-trend";
 import { MODULE_META, MODULE_ORDER, MODULE_STATUS_LABELS, type ModuleType } from "@/lib/modules/module-meta";
 import { NextStepBanner } from "@/app/_components/NextStepBanner";
 import { ProgressStepper } from "@/app/_components/ProgressStepper";
@@ -62,19 +65,50 @@ export default async function DashboardPage() {
   const journeyStatus = await computeJourneyStatus(createAdminClient(), company.id as string);
 
   let top3: LensFinding[] = [];
+  // Cascade reasoning (confirmed 2026-08-13, item 5) — needs the report's
+  // FULL finding set, not just the top-3 rows previously fetched here, so
+  // a top-3 finding's cascade count can see findings that didn't
+  // themselves make top-3. top3WithIds pairs each finding with its real DB
+  // id, not LensFinding.findingId — see deriveRoadmap's own docblock for
+  // why (findingId is stale post-load, never re-persisted after the
+  // original audit run).
+  let allReportFindings: FindingForCascade[] = [];
+  let top3WithIds: { id: string; finding: LensFinding }[] = [];
   if (latestReport) {
-    const top3Ids = (latestReport.top_3_finding_ids as string[]) ?? [];
-    if (top3Ids.length > 0) {
-      const { data: findings } = await supabase
-        .from("lens_findings")
-        .select("id, lens, ai_draft, reviewer_edited_content, reviewer_status")
-        .in("id", top3Ids);
-      top3 = (findings ?? [])
-        .filter((f) => f.reviewer_status === "approved" || f.reviewer_status === "edited")
-        .map((f) => (f.reviewer_edited_content ?? f.ai_draft) as LensFinding);
-    }
+    const top3Ids = new Set((latestReport.top_3_finding_ids as string[]) ?? []);
+    const { data: reportFindings } = await supabase
+      .from("lens_findings")
+      .select("id, lens, ai_draft, reviewer_edited_content, reviewer_status")
+      .eq("report_id", latestReport.id);
+    const visible = (reportFindings ?? []).filter((f) => f.reviewer_status === "approved" || f.reviewer_status === "edited");
+    top3WithIds = visible.filter((f) => top3Ids.has(f.id)).map((f) => ({ id: f.id as string, finding: (f.reviewer_edited_content ?? f.ai_draft) as LensFinding }));
+    top3 = top3WithIds.map((t) => t.finding);
+    allReportFindings = visible.map((f) => {
+      const content = (f.reviewer_edited_content ?? f.ai_draft) as LensFinding;
+      return { id: f.id as string, lens: f.lens, title: content.title, diagnosis: content.diagnosis };
+    });
   }
-  const roadmap = deriveRoadmap(top3);
+  const recommendationLibrary = await loadRecommendationLibrary();
+  const roadmap = deriveRoadmap(top3WithIds, allReportFindings, recommendationLibrary);
+
+  // Goal metric trend-tracking (confirmed 2026-08-13, item 2) — the
+  // smaller, honest scope: real numeric progression across real delivered
+  // audits, never a fabricated achieved/missed verdict. Only meaningful
+  // once the client has picked a metric to track at onboarding — most
+  // companies (and every pre-2026-08-13 company) simply won't have one set.
+  const { data: currentGoal } = await supabase
+    .from("goals")
+    .select("target_metric_key, target_metric_value")
+    .eq("company_id", company.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const metricTrend: MetricTrend | null = currentGoal
+    ? await loadGoalMetricTrend(supabase, company.id as string, {
+        targetMetricKey: currentGoal.target_metric_key as string | null,
+        targetMetricValue: currentGoal.target_metric_value as number | null,
+      })
+    : null;
 
   // AI Opportunity & Readiness (confirmed 2026-08-12, headline section per
   // explicit priority order) — reads the same ai_opportunity_synthesis /
@@ -337,8 +371,15 @@ export default async function DashboardPage() {
                     <p className="text-neutral-400 dark:text-neutral-500">Nothing at this horizon</p>
                   ) : (
                     <ul className="space-y-1 text-neutral-800 dark:text-neutral-200">
-                      {roadmap[bucket].map((f) => (
-                        <li key={f.findingId}>{f.title}</li>
+                      {roadmap[bucket].map((item) => (
+                        <li key={item.finding.findingId}>
+                          {item.finding.title}
+                          {item.cascadeCount >= 2 && (
+                            <span className="ml-1.5 text-xs text-accent" title={item.cascadesToFindingTitles.join(", ")}>
+                              — fix this first, unlocks {item.cascadeCount} other finding{item.cascadeCount === 1 ? "" : "s"}
+                            </span>
+                          )}
+                        </li>
                       ))}
                     </ul>
                   )}
@@ -346,6 +387,45 @@ export default async function DashboardPage() {
               ))}
             </div>
           </section>
+
+          {/* Goal metric trend (confirmed 2026-08-13, item 2) — only shown
+              once the client has both picked a metric to track at
+              onboarding AND has at least one real report containing it;
+              both are honest, common "nothing to show yet" states, not
+              errors, so this section simply doesn't render otherwise. */}
+          {metricTrend && (
+            <section>
+              <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Goal metric trend</h2>
+              <div className="rounded-md border border-neutral-300 bg-white p-4 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+                <p className="font-medium text-neutral-900 dark:text-neutral-50">
+                  {metricTrend.label}
+                  {metricTrend.direction === "higher_is_better" ? " (higher is better)" : " (lower is better)"}
+                </p>
+                <p className="mt-1 text-neutral-700 dark:text-neutral-300">
+                  {metricTrend.points.length >= 2 ? (
+                    <>
+                      {metricTrend.points
+                        .map((p) => `${p.value}${metricTrend.unit}`)
+                        .join(" → ")}
+                      {" "}
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                        across {metricTrend.points.length} audits
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      Currently {metricTrend.points[0].value}
+                      {metricTrend.unit}
+                      <span className="ml-1.5 text-xs text-neutral-500 dark:text-neutral-400">— trend will show once you have a second audit with this metric.</span>
+                    </>
+                  )}
+                </p>
+                {metricTrend.targetValue !== null && (
+                  <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">Your stated target: {metricTrend.targetValue}{metricTrend.unit}</p>
+                )}
+              </div>
+            </section>
+          )}
         </div>
       )}
 
