@@ -1140,7 +1140,7 @@ A new "Strengths by lens" section, per-lens horizontal bar (pure CSS, no chart l
 
 `tsc --noEmit`, `eslint src/ --quiet`, and `npm run build` all clean.
 
-**Not yet committed/pushed** — held for explicit go-ahead, same standing pattern as every other change this session. **All 7 items of the old-Elvanis-inspired batch are now built and live-verified, in the confirmed order (3 → 4 → 1 → 5 → 2 → 6 → 7).**
+**All 7 items of the old-Elvanis-inspired batch are now built, live-verified, and committed/pushed to `main`** (commit `742ab2d`), in the confirmed order (3 → 4 → 1 → 5 → 2 → 6 → 7), per explicit go-ahead 2026-08-14.
 
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
