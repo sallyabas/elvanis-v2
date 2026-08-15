@@ -2,6 +2,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { computeJurisdictionApplicability } from "@/lib/modules/data-protection-compliance/jurisdiction";
 import { DataProtectionIntakeForm } from "./DataProtectionIntakeForm";
 
+/**
+ * Real root cause found in production 2026-08-15 (see tender-readiness's
+ * page.tsx for the full writeup) — same fix applied here: a real,
+ * synchronous Groq call with no `maxDuration` configured risks being
+ * killed by the platform's default serverless timeout mid-flight.
+ */
+export const maxDuration = 60;
+
 const REGIME_LABELS: Record<string, string> = {
   ukGdpr: "UK GDPR",
   euGdpr: "EU GDPR",

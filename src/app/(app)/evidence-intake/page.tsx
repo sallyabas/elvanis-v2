@@ -15,6 +15,16 @@ import { Alert } from "@/app/_components/ui/Alert";
 import { EvidenceSubmittedDisclosure, type EvidenceSnapshotShape } from "@/app/_components/EvidenceSubmittedDisclosure";
 import { EvidenceIntakeForm } from "./EvidenceIntakeForm";
 
+/**
+ * Real root cause found in production 2026-08-15 (see tender-readiness's
+ * page.tsx for the full writeup) — same fix applied here, and the single
+ * highest-risk route for it in this app: "Submit now" runs a genuinely
+ * synchronous five-lens Groq call in this same request, the longest real
+ * synchronous AI call left anywhere in this codebase, with no
+ * `maxDuration` configured before this fix.
+ */
+export const maxDuration = 60;
+
 // Real Evidence Intake, fill-in-template path (confirmed 2026-08-03,
 // Priority 1) — native CSV/PDF upload/parsing is explicitly deferred, see
 // CLAUDE.md and spec §5. Session-derived company/goal, not `?companyId=`.

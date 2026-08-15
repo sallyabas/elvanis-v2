@@ -28,6 +28,7 @@ export function AiReliabilityIntakeForm({ companyId }: { companyId: string }) {
   async function handleSubmit() {
     if (!systemType) return;
     setStatus("submitting");
+    setError(null);
 
     const input: AiReliabilityDraftInput =
       systemType === "conversational"
@@ -53,12 +54,22 @@ export function AiReliabilityIntakeForm({ companyId }: { companyId: string }) {
             },
           };
 
-    const result = await submitAiReliabilityAudit(input);
-    if (result.success) {
-      setRequestId(result.requestId ?? null);
-      setStatus("done");
-    } else {
-      setError(result.error ?? "Something went wrong.");
+    // Real production bug found and fixed 2026-08-15 — see
+    // TenderReadinessIntakeForm.tsx's doSubmit() for the full root-cause
+    // writeup (a genuine RPC-level failure, most likely a serverless
+    // function timeout during a slow/rate-limited Groq call, was never
+    // caught here, leaving the loading overlay spinning forever).
+    try {
+      const result = await submitAiReliabilityAudit(input);
+      if (result.success) {
+        setRequestId(result.requestId ?? null);
+        setStatus("done");
+      } else {
+        setError(result.error ?? "Something went wrong.");
+        setStatus("error");
+      }
+    } catch {
+      setError("Something went wrong reaching the server — please try again.");
       setStatus("error");
     }
   }

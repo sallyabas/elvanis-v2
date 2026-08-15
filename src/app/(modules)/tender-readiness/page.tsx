@@ -2,6 +2,23 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { computeJurisdictionApplicability } from "@/lib/modules/tender-readiness/jurisdiction";
 import { TenderReadinessIntakeForm } from "./TenderReadinessIntakeForm";
 
+/**
+ * Real root cause found in production 2026-08-15, not just the client-side
+ * symptom: `submitTenderReadinessAudit()` runs a real, synchronous Groq
+ * call inside its Server Action, and this route had no `maxDuration`
+ * configured — Vercel's default serverless function timeout can kill that
+ * request mid-flight during a slow or rate-limited Groq run (this codebase
+ * has extensively documented real Groq rate-limit/slowness events
+ * elsewhere), returning a raw 500 the client never receives as a resolved
+ * promise. Raising this to the practical ceiling doesn't fix a slow Groq
+ * call by itself, but it gives one a real chance to finish instead of
+ * being killed after a few seconds — paired with the client-side
+ * try/catch fix in TenderReadinessIntakeForm.tsx, which guarantees the
+ * client sees a real error instead of an infinite spinner even if this
+ * still isn't enough headroom on a given request.
+ */
+export const maxDuration = 60;
+
 const SECTION_LABELS: Record<string, string> = {
   euAiAct: "EU AI Act (4-tier risk classification)",
   uaeDifcReg10: "UAE DIFC Regulation 10",

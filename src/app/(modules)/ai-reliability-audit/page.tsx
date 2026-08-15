@@ -1,5 +1,13 @@
 import { AiReliabilityIntakeForm } from "./AiReliabilityIntakeForm";
 
+/**
+ * Real root cause found in production 2026-08-15 (see tender-readiness's
+ * page.tsx for the full writeup) — same fix applied here: a real,
+ * synchronous Groq call with no `maxDuration` configured risks being
+ * killed by the platform's default serverless timeout mid-flight.
+ */
+export const maxDuration = 60;
+
 // AI Reliability Audit — standalone entry page, sellable independent of the
 // core audit. See spec §1.7a for the confirmed design (evidence-based, no
 // live execution, system-type-branching intake).

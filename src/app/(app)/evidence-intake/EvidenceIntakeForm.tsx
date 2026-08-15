@@ -364,20 +364,35 @@ export function EvidenceIntakeForm({
     setStatus("submitting");
     setError(null);
 
-    const result = await submitEvidence(buildSubmitInput());
+    // Real bug found and fixed 2026-08-15, same class already found live
+    // in the three standalone modules (see TenderReadinessIntakeForm.tsx's
+    // doSubmit() for the full root-cause writeup): a genuine RPC-level
+    // failure — not this function's own {success:false} branch, a real
+    // rejected fetch — was never caught, leaving "submitting" stuck
+    // forever with no way for the client to ever see an error. This
+    // specific call is the fast, store-only path (no synchronous Groq
+    // call), so a timeout is less likely here than in "Submit now" below,
+    // but the same defensive guarantee belongs on every submit handler,
+    // not only the one already proven to hit it in production.
+    try {
+      const result = await submitEvidence(buildSubmitInput());
 
-    if (result.success) {
-      // Redirects to /dashboard, not /reports/[reportId] (confirmed
-      // 2026-08-10, delayed-execution architecture) — submitting evidence
-      // no longer creates a report at all; it only stores the evidence
-      // record (see submitEvidence()'s own docblock). There's no reportId
-      // to navigate to yet. Dashboard already computes journeyStatus and
-      // shows the right "Editing / Queued for audit / Audit in progress"
-      // state via ProgressStepper/NextStepBanner.
-      router.push("/dashboard");
-    } else {
+      if (result.success) {
+        // Redirects to /dashboard, not /reports/[reportId] (confirmed
+        // 2026-08-10, delayed-execution architecture) — submitting evidence
+        // no longer creates a report at all; it only stores the evidence
+        // record (see submitEvidence()'s own docblock). There's no reportId
+        // to navigate to yet. Dashboard already computes journeyStatus and
+        // shows the right "Editing / Queued for audit / Audit in progress"
+        // state via ProgressStepper/NextStepBanner.
+        router.push("/dashboard");
+      } else {
+        setStatus("error");
+        setError(result.error ?? "Something went wrong.");
+      }
+    } catch {
       setStatus("error");
-      setError(result.error ?? "Something went wrong.");
+      setError("Something went wrong reaching the server — please try again.");
     }
   }
 
@@ -409,17 +424,33 @@ export function EvidenceIntakeForm({
     setStatus("submitting-now");
     setError(null);
 
-    const result = await submitEvidenceNow(buildSubmitInput());
+    // Real bug found and fixed 2026-08-15, same class already found live
+    // in production for the three standalone modules (see
+    // TenderReadinessIntakeForm.tsx's doSubmit() for the full root-cause
+    // writeup) — and the single highest-risk place for it in this entire
+    // app: this is the one genuinely synchronous five-lens Groq call left
+    // in the codebase, the exact real duration the pre-delayed-execution
+    // architecture used to show a loading state for. Without this catch,
+    // a real RPC-level failure (most plausibly a serverless function
+    // timeout under a slow or rate-limited Groq run) would leave the
+    // "Analyzing your evidence…" overlay spinning forever with no way for
+    // the client to ever see an error.
+    try {
+      const result = await submitEvidenceNow(buildSubmitInput());
 
-    if (result.success && result.reportId) {
-      // Straight to the report's own holding page, not /dashboard — a
-      // real report now exists (unlike the normal submit above), and this
-      // is the one page that already correctly renders both "still being
-      // reviewed" and, once approved, the real delivered content.
-      router.push(`/reports/${result.reportId}`);
-    } else {
+      if (result.success && result.reportId) {
+        // Straight to the report's own holding page, not /dashboard — a
+        // real report now exists (unlike the normal submit above), and this
+        // is the one page that already correctly renders both "still being
+        // reviewed" and, once approved, the real delivered content.
+        router.push(`/reports/${result.reportId}`);
+      } else {
+        setStatus("error");
+        setError(result.error ?? "Something went wrong.");
+      }
+    } catch {
       setStatus("error");
-      setError(result.error ?? "Something went wrong.");
+      setError("Something went wrong reaching the server — please try again.");
     }
   }
 

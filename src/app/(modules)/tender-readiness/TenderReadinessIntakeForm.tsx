@@ -46,17 +46,36 @@ export function TenderReadinessIntakeForm({
 
   async function doSubmit() {
     setStatus("submitting");
-    const result = await submitTenderReadinessAudit({
-      companyId,
-      company: jurisdictionInput,
-      aiUseCaseInventory: aiUseCaseInventory.trim(),
-      existingDocumentation: existingDocumentation.trim() || null,
-    });
-    if (result.success) {
-      setRequestId(result.requestId ?? null);
-      setStatus("done");
-    } else {
-      setError(result.error ?? "Something went wrong.");
+    setError(null);
+    try {
+      const result = await submitTenderReadinessAudit({
+        companyId,
+        company: jurisdictionInput,
+        aiUseCaseInventory: aiUseCaseInventory.trim(),
+        existingDocumentation: existingDocumentation.trim() || null,
+      });
+      if (result.success) {
+        setRequestId(result.requestId ?? null);
+        setStatus("done");
+      } else {
+        setError(result.error ?? "Something went wrong.");
+        setStatus("error");
+      }
+    } catch {
+      // Real bug found live in production (confirmed 2026-08-15): a
+      // genuine RPC-level failure — most likely the platform's serverless
+      // function timeout killing this request mid-flight during a slow or
+      // rate-limited Groq call, since submitTenderReadinessAudit()'s own
+      // try/catch only covers errors it can construct a real {success:
+      // false} response for — rejects the underlying fetch entirely rather
+      // than resolving to our own function's return value. Without this
+      // catch, that rejection was never caught, status stayed stuck on
+      // "submitting" forever, and the loading overlay just fixed for the
+      // OTHER "stuck" bug spun indefinitely with no way out. This is a
+      // defensive client-side guarantee independent of why the network
+      // call failed — see the module page's own maxDuration export for
+      // the actual root-cause mitigation.
+      setError("Something went wrong reaching the server — please try again.");
       setStatus("error");
     }
   }
