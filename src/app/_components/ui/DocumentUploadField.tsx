@@ -61,16 +61,32 @@ export function DocumentUploadField({
 
     const formData = new FormData();
     formData.append("file", file);
-    const result = await extractDocumentTextAction(formData);
 
-    if (result.success) {
-      setStatus("success");
-      setFileName(file.name);
-      onExtracted(result.text);
-    } else {
+    // Real gap found 2026-08-15, same class as every other uncaught-RPC-
+    // failure bug fixed this same day (see the submit handlers in
+    // TenderReadinessIntakeForm.tsx etc.) — this specific call site was
+    // missed in that pass, since it's a separate action (upload) from the
+    // ones fixed then (final submit). An uncaught rejection here (a real
+    // network failure, or a genuine platform-level failure inside the
+    // action itself) left the widget stuck on "Reading document…" forever
+    // with no visible error, exactly the "stuck loading" bug already fixed
+    // elsewhere — closed the same way, with a real try/catch around the
+    // await.
+    try {
+      const result = await extractDocumentTextAction(formData);
+      if (result.success) {
+        setStatus("success");
+        setFileName(file.name);
+        onExtracted(result.text);
+      } else {
+        setStatus("error");
+        setFileName(null);
+        setError(result.error);
+      }
+    } catch {
       setStatus("error");
       setFileName(null);
-      setError(result.error);
+      setError("Something went wrong reaching the server — please try again.");
     }
     // Allow re-selecting the exact same file (e.g. after fixing it and
     // re-uploading) — the browser otherwise skips the change event for an

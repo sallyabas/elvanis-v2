@@ -1,7 +1,7 @@
 /**
  * Shared, import-safe-from-the-client constants for document upload
  * (confirmed 2026-08-12) — deliberately split out of extract-text.ts,
- * which imports pdf-parse/mammoth at module scope (real Node-only
+ * which imports unpdf/mammoth at module scope (real Node-only
  * dependencies that must never end up in a client bundle). Both the
  * server-side extractor and the client-side upload widget import these
  * same values, so the two can't drift.
