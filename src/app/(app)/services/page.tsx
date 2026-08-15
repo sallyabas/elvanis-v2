@@ -89,7 +89,7 @@ export default async function ServicesPage() {
                     {price && <span className="shrink-0 text-sm font-medium text-accent">{formatPrice(price)}</span>}
                   </div>
                   <Link
-                    href={`${meta.routePath}?companyId=${company.id}`}
+                    href={meta.routePath}
                     className="mt-3 inline-block rounded bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
                   >
                     Request this

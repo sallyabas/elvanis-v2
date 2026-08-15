@@ -7,6 +7,7 @@ import { Textarea } from "@/app/_components/ui/Textarea";
 import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
 import { DocumentUploadField } from "@/app/_components/ui/DocumentUploadField";
+import { ModuleSubmittedNotice } from "@/app/_components/ModuleSubmittedNotice";
 
 const CATEGORY_FIELDS: { key: "consentFlow" | "dataSubjectRights" | "retentionPolicy" | "breachResponse" | "crossBorderTransfer"; label: string; placeholder: string }[] = [
   {
@@ -62,9 +63,11 @@ const CATEGORY_FIELDS: { key: "consentFlow" | "dataSubjectRights" | "retentionPo
 export function DataProtectionIntakeForm({
   companyId,
   jurisdictionInput,
+  reviewPeriodHours,
 }: {
   companyId: string;
   jurisdictionInput: CompanyJurisdictionInput;
+  reviewPeriodHours: number;
 }) {
   const [values, setValues] = useState<Record<string, string>>({
     consentFlow: "",
@@ -133,11 +136,7 @@ export function DataProtectionIntakeForm({
   }
 
   if (status === "done") {
-    return (
-      <p className="rounded-md border border-green-300 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-        Submitted for review. Request ID: {requestId}
-      </p>
-    );
+    return <ModuleSubmittedNotice requestId={requestId} reviewPeriodHours={reviewPeriodHours} />;
   }
 
   return (

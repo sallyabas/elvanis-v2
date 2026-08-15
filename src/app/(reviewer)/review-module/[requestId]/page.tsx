@@ -13,7 +13,7 @@ export default async function ModuleReviewWorkspacePage({ params }: { params: Pr
 
   const { data: request, error: requestError } = await supabase
     .from("module_requests")
-    .select("id, module_type, status, created_at, approved_at, companies(name)")
+    .select("id, module_type, status, created_at, approved_at, intake_data, companies(name)")
     .eq("id", requestId)
     .single();
 
@@ -46,6 +46,27 @@ export default async function ModuleReviewWorkspacePage({ params }: { params: Pr
 
   const company = request.companies as unknown as { name: string } | null;
 
+  /**
+   * Real gap found and fixed 2026-08-15 (module intake/service flow
+   * review, item 6) — confirmed against real data first, not assumed:
+   * a Tender Readiness request for a company with no registration_country
+   * / customer_market_countries set correctly computed zero applicable
+   * jurisdictions and zero findings (the deterministic logic itself was
+   * never wrong), but the reviewer workspace showed a bare "No findings."
+   * with no context, and the procurement-answers section still offered a
+   * "Generate" button that would only ever throw the same dead-end error.
+   * Both Tender Readiness and Data Protection Compliance store
+   * `intake_data.applicability` — checking whether every flag is false is
+   * enough to distinguish "genuinely nothing applies" from any other
+   * empty-findings case, without needing to import either module's
+   * specific applicability type into this generic workspace.
+   */
+  const applicability = (request.intake_data as { applicability?: Record<string, boolean> } | null)?.applicability;
+  const hasNoApplicableJurisdiction =
+    (request.module_type === "tender_readiness" || request.module_type === "data_protection") &&
+    !!applicability &&
+    Object.values(applicability).every((v) => v === false);
+
   return (
     <ModuleReviewWorkspaceClient
       requestId={request.id}
@@ -56,6 +77,7 @@ export default async function ModuleReviewWorkspacePage({ params }: { params: Pr
       findings={findings}
       procurementAnswers={procurementAnswers ?? []}
       timing={{ createdAt: request.created_at, approvedAt: request.approved_at }}
+      hasNoApplicableJurisdiction={hasNoApplicableJurisdiction}
     />
   );
 }

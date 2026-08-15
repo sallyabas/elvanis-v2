@@ -458,7 +458,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
           </p>
           <ul className="space-y-2 text-sm">
             <li>
-              <Link href={`/tender-readiness?companyId=${company.id}`} className="font-medium text-accent underline hover:text-accent-hover">
+              <Link href="/tender-readiness" className="font-medium text-accent underline hover:text-accent-hover">
                 Tender Readiness
               </Link>
               {modulePricing("tender_readiness") && (
@@ -470,7 +470,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
               )}
             </li>
             <li>
-              <Link href={`/ai-reliability-audit?companyId=${company.id}`} className="font-medium text-accent underline hover:text-accent-hover">
+              <Link href="/ai-reliability-audit" className="font-medium text-accent underline hover:text-accent-hover">
                 AI Reliability Audit
               </Link>
               {modulePricing("ai_reliability_audit") && (
@@ -482,7 +482,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
               )}
             </li>
             <li>
-              <Link href={`/data-protection-compliance?companyId=${company.id}`} className="font-medium text-accent underline hover:text-accent-hover">
+              <Link href="/data-protection-compliance" className="font-medium text-accent underline hover:text-accent-hover">
                 Data Protection Compliance
               </Link>
               {modulePricing("data_protection_compliance") && (

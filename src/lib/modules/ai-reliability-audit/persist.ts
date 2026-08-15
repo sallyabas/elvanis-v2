@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyReviewersOfNewModuleRequest } from "@/lib/reviewer/notifications";
 import { runAiReliabilityAudit } from "./index";
 import type { AiReliabilityDraftInput } from "./types";
 
@@ -40,6 +41,11 @@ export async function runAndPersistAiReliabilityAudit(input: AiReliabilityDraftI
     );
     if (findingsError) throw new Error(`runAndPersistAiReliabilityAudit: failed to persist findings: ${findingsError.message}`);
   }
+
+  // Real gap found and fixed 2026-08-15 (module intake/service flow
+  // review) — a module request previously logged zero notification at
+  // submission, unlike a core-audit report's new_submission.
+  await notifyReviewersOfNewModuleRequest(supabase);
 
   return { requestId, findingCount: result.findings.length };
 }

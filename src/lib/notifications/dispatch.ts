@@ -186,6 +186,32 @@ async function templateFor(
         subject: "Reply to your Execution Sprint question",
         html: `${greeting}<p>Your reviewer replied to your Execution Sprint note. Check your sprint page for details.</p>${loginReminder}`,
       };
+    case "module_new_submission":
+      // Reviewer-facing (confirmed 2026-08-15, module intake/service flow
+      // review) — closes a real gap: a standalone module request
+      // (Tender Readiness / AI Reliability Audit / Data Protection
+      // Compliance) previously logged no notification of any kind at
+      // submission, unlike a core-audit report (new_submission). Kept
+      // generic (no direct link to the specific request — there's no
+      // related_module_request_id column, same disclosed scope limit
+      // already accepted for session_declined) — the reviewer queue
+      // already lists every pending module request.
+      return {
+        subject: "New module request ready for review",
+        html: `<p>A new standalone module request is ready for reviewer review.</p><p><a href="${SITE_URL}/queue">Open the reviewer queue</a></p>`,
+      };
+    case "module_ready":
+      // Client-facing (confirmed 2026-08-15) — mirrors report_ready exactly:
+      // logged the moment deliverModuleRequest() flips a request to `sent`,
+      // sent on the next dispatch pass. No client-facing module detail view
+      // exists yet (Reports & History shows "Detail view coming soon" for
+      // modules, a real, separately-flagged gap) — links to /reports, the
+      // one place a client can currently see the request listed at all,
+      // rather than a link to a page that doesn't exist.
+      return {
+        subject: companyName ? `${companyName}'s module results are ready` : "Your module results are ready",
+        html: `${greeting}<p>Your requested module results are ready for review.</p><p><a href="${SITE_URL}/reports">View in Reports &amp; History</a></p>${loginReminder}`,
+      };
     default:
       return {
         subject: "Elvanis notification",

@@ -1,4 +1,6 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { getSettingNumber } from "@/lib/app-settings";
 import { computeJurisdictionApplicability } from "@/lib/modules/data-protection-compliance/jurisdiction";
 import { DataProtectionIntakeForm } from "./DataProtectionIntakeForm";
 
@@ -25,38 +27,33 @@ const REGIME_LABELS: Record<string, string> = {
 // registration/customer-market data — never re-asked of the client and
 // never decided by the AI.
 //
-// KNOWN GAP, FLAGGED NOT SILENTLY SHIPPED: no client-auth system exists
-// yet — same interim `?companyId=` addressing scheme as Business Profile,
-// AI Reliability Audit, and Tender Readiness, for the same reason.
-export default async function DataProtectionCompliancePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ companyId?: string }>;
-}) {
-  const { companyId } = await searchParams;
+// Moved into the (app) route group 2026-08-15 (real bug found and fixed,
+// module intake/service flow review) — same fix, same reasoning as Tender
+// Readiness's own page.tsx: this page had no site nav and trusted an
+// unauthenticated `?companyId=` query param with no session check, even
+// though real client auth has existed app-wide since 2026-08-03. Now
+// fully session-derived, never trusted from a query param.
+export default async function DataProtectionCompliancePage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!companyId) {
-    return (
-      <div className="mx-auto max-w-2xl px-6 py-10">
-        <h1 className="mb-2 text-2xl font-semibold">Data Protection Compliance</h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          No company specified. Visit this page with <code>?companyId=&lt;id&gt;</code> — session-based lookup
-          isn&apos;t built yet (no client-auth system exists).
-        </p>
-      </div>
-    );
+  if (!user) {
+    redirect("/client-login");
   }
 
-  const supabase = createAdminClient();
-  const { data: company, error } = await supabase
+  const { data: company } = await supabase
     .from("companies")
     .select("id, name, registration_country, customer_market_countries")
-    .eq("id", companyId)
-    .single();
+    .eq("user_id", user.id)
+    .maybeSingle();
 
-  if (error || !company) {
-    return <div className="p-6 text-sm text-red-600">Failed to load company: {error?.message ?? "not found"}</div>;
+  if (!company) {
+    redirect("/onboarding");
   }
+
+  const reviewPeriodHours = await getSettingNumber("review_period_hours", 48);
 
   const jurisdictionInput = {
     registrationCountry: company.registration_country as string | null,
@@ -66,6 +63,7 @@ export default async function DataProtectionCompliancePage({
   const applicableLabels = (Object.keys(applicability) as (keyof typeof applicability)[])
     .filter((k) => applicability[k])
     .map((k) => REGIME_LABELS[k]);
+  const hasNoApplicableJurisdiction = applicableLabels.length === 0;
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
@@ -77,11 +75,26 @@ export default async function DataProtectionCompliancePage({
 
       <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900">
         <h2 className="mb-2 font-medium">Applicable regulations (determined automatically, not something you select)</h2>
-        {applicableLabels.length === 0 ? (
-          <p className="text-neutral-500">
-            None of UK GDPR, EU GDPR, or Saudi PDPL currently apply, based on registration ({company.registration_country ?? "not set"}) and
-            customer markets ({jurisdictionInput.customerMarketCountries.join(", ") || "none set"}).
-          </p>
+        {hasNoApplicableJurisdiction ? (
+          <div className="text-neutral-500">
+            <p>
+              None of UK GDPR, EU GDPR, or Saudi PDPL currently apply, based on registration ({company.registration_country ?? "not set"}) and
+              customer markets ({jurisdictionInput.customerMarketCountries.join(", ") || "none set"}).
+            </p>
+            {/* Real gap found and closed 2026-08-15 (module intake/service
+                flow review) — if these fields were genuinely never filled
+                in (not a considered "we operate nowhere regulated"
+                answer), the client had no way to know that, or where to
+                fix it. Business Profile now has real fields for both. */}
+            <p className="mt-2">
+              If this doesn&apos;t look right, add your registration country and customer markets on{" "}
+              <a href="/business-profile" className="font-medium text-accent underline hover:text-accent-hover">
+                Business Profile
+              </a>{" "}
+              — you can still submit below without them, but this request likely won&apos;t surface any jurisdiction-specific
+              findings until they&apos;re set.
+            </p>
+          </div>
         ) : (
           <ul className="list-inside list-disc space-y-1">
             {applicableLabels.map((label) => (
@@ -94,7 +107,7 @@ export default async function DataProtectionCompliancePage({
         </p>
       </section>
 
-      <DataProtectionIntakeForm companyId={companyId} jurisdictionInput={jurisdictionInput} />
+      <DataProtectionIntakeForm companyId={company.id as string} jurisdictionInput={jurisdictionInput} reviewPeriodHours={reviewPeriodHours} />
     </div>
   );
 }

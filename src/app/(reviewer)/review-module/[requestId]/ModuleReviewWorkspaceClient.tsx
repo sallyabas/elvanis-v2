@@ -70,6 +70,16 @@ interface Props {
   findings: FindingRow[];
   procurementAnswers: ProcurementAnswerRow[];
   timing: { createdAt: string | null; approvedAt: string | null };
+  /**
+   * Real fix, confirmed 2026-08-15 (module intake/service flow review,
+   * item 6) — computed server-side from the request's own already-
+   * persisted `intake_data.applicability` (see page.tsx). True only for
+   * Tender Readiness/Data Protection Compliance requests where every
+   * applicability flag is false — a genuine, deterministic, expected
+   * outcome (the company's registration/customer-market data doesn't
+   * currently trigger any covered jurisdiction), not a broken pipeline.
+   */
+  hasNoApplicableJurisdiction: boolean;
 }
 
 /**
@@ -126,7 +136,17 @@ const SEVERITY_BADGE: Record<string, string> = {
   low: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
 };
 
-export function ModuleReviewWorkspaceClient({ requestId, companyName, moduleLabel, requestStatus, moduleType, findings, procurementAnswers, timing }: Props) {
+export function ModuleReviewWorkspaceClient({
+  requestId,
+  companyName,
+  moduleLabel,
+  requestStatus,
+  moduleType,
+  findings,
+  procurementAnswers,
+  timing,
+  hasNoApplicableJurisdiction,
+}: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingAnswerId, setEditingAnswerId] = useState<string | null>(null);
   const [blockedReason, setBlockedReason] = useState<string | null>(null);
@@ -212,7 +232,16 @@ export function ModuleReviewWorkspaceClient({ requestId, companyName, moduleLabe
 
       <Card title="Findings" className="mb-8">
         {findings.length === 0 ? (
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">No findings.</p>
+          hasNoApplicableJurisdiction ? (
+            <Alert variant="info">
+              No findings — this is expected, not a broken pipeline. {companyName}&apos;s registration country and
+              customer markets, as currently set, don&apos;t trigger any AI-specific jurisdiction this module covers.
+              If that seems wrong, check the company&apos;s Business Profile (registration country / customer market
+              countries) — this is computed automatically from that data, never AI-judged.
+            </Alert>
+          ) : (
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">No findings.</p>
+          )
         ) : (
           <ul className="space-y-4">
             {findings.map((f) => (
@@ -263,17 +292,33 @@ export function ModuleReviewWorkspaceClient({ requestId, companyName, moduleLabe
           </div>
           {procurementAnswers.length === 0 ? (
             <div>
-              {procurementError && (
-                <Alert variant="error" className="mb-3">
-                  {procurementError}
+              {hasNoApplicableJurisdiction ? (
+                // Real fix (confirmed 2026-08-15, item 6) — clicking
+                // "Generate" here could only ever throw
+                // generateAndPersistProcurementAnswers()'s own "No
+                // applicable regulations" error, every time, for a company
+                // that genuinely has none — a dead-end loop, not a
+                // transient failure worth retrying. Replaced with an
+                // honest explanation instead of a button that always fails.
+                <Alert variant="info">
+                  No applicable regulations, so there&apos;s nothing to draft procurement answers against — same
+                  reason there are no findings above.
                 </Alert>
+              ) : (
+                <>
+                  {procurementError && (
+                    <Alert variant="error" className="mb-3">
+                      {procurementError}
+                    </Alert>
+                  )}
+                  <Button disabled={pending} onClick={handleGenerateProcurementAnswers}>
+                    Generate procurement answers
+                  </Button>
+                  <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                    Drafts answers to 11 standard AI-procurement questions from this request&apos;s reviewer-approved findings and applicable regulations.
+                  </p>
+                </>
               )}
-              <Button disabled={pending} onClick={handleGenerateProcurementAnswers}>
-                Generate procurement answers
-              </Button>
-              <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-                Drafts answers to 11 standard AI-procurement questions from this request&apos;s reviewer-approved findings and applicable regulations.
-              </p>
             </div>
           ) : (
             <ul className="space-y-4">

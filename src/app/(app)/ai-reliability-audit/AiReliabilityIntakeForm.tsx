@@ -9,8 +9,9 @@ import { Select } from "@/app/_components/ui/Select";
 import { Card } from "@/app/_components/ui/Card";
 import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
+import { ModuleSubmittedNotice } from "@/app/_components/ModuleSubmittedNotice";
 
-export function AiReliabilityIntakeForm({ companyId }: { companyId: string }) {
+export function AiReliabilityIntakeForm({ companyId, reviewPeriodHours }: { companyId: string; reviewPeriodHours: number }) {
   const [systemType, setSystemType] = useState<AiReliabilitySystemType | null>(null);
   const [responses, setResponses] = useState<Record<number, string>>({});
   const [evidence, setEvidence] = useState<AgentAutomationEvidence>({
@@ -78,9 +79,7 @@ export function AiReliabilityIntakeForm({ companyId }: { companyId: string }) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-10">
         <h1 className="mb-2 text-2xl font-semibold">AI Reliability Audit</h1>
-        <p className="rounded-md border border-green-300 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-          Submitted for review. Request ID: {requestId}
-        </p>
+        <ModuleSubmittedNotice requestId={requestId} reviewPeriodHours={reviewPeriodHours} />
       </div>
     );
   }

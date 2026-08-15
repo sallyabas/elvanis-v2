@@ -48,6 +48,29 @@ const REVENUE_BANDS = [
   "£20m+ ARR",
 ];
 
+/**
+ * Real gap found and closed 2026-08-15 (module intake/service flow
+ * review) — canonical country names, matching exactly what
+ * src/lib/modules/shared/regions.ts's normalize()-based matching
+ * recognizes (UK_NAMES/EU_MEMBER_STATES/SAUDI_ARABIA_NAMES/UAE_NAMES),
+ * the deterministic logic Tender Readiness and Data Protection Compliance
+ * both depend on. A dropdown, not free text, for the same reason
+ * Revenue range band is a dropdown — "UK" vs "United Kingdom" vs "Great
+ * Britain" would all look like valid answers but only some normalize to a
+ * name the jurisdiction logic actually matches. "Other" stays real free
+ * text, since a company can genuinely be registered somewhere none of
+ * these jurisdiction modules currently have logic for — the dropdown
+ * exists to prevent AMBIGUITY among the recognized set, not to claim this
+ * app understands every country's regulatory regime.
+ */
+const EU_COUNTRIES = [
+  "Austria", "Belgium", "Bulgaria", "Croatia", "Cyprus", "Czechia", "Denmark",
+  "Estonia", "Finland", "France", "Germany", "Greece", "Hungary", "Ireland",
+  "Italy", "Latvia", "Lithuania", "Luxembourg", "Malta", "Netherlands",
+  "Poland", "Portugal", "Romania", "Slovakia", "Slovenia", "Spain", "Sweden",
+];
+const OTHER_COUNTRY_SENTINEL = "__other__";
+
 export function BusinessProfileForm({ companyId, initial }: { companyId: string; initial: CompanyProfileFields }) {
   const [fields, setFields] = useState<CompanyProfileFields>(initial);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -77,6 +100,10 @@ export function BusinessProfileForm({ companyId, initial }: { companyId: string;
     fields.revenueRangeBand && !REVENUE_BANDS.includes(fields.revenueRangeBand)
       ? [fields.revenueRangeBand, ...REVENUE_BANDS]
       : REVENUE_BANDS;
+
+  const KNOWN_COUNTRIES = ["United Kingdom", ...EU_COUNTRIES, "Saudi Arabia", "United Arab Emirates"];
+  const isKnownCountry = !fields.registrationCountry || KNOWN_COUNTRIES.includes(fields.registrationCountry);
+  const isUae = fields.registrationCountry === "United Arab Emirates";
 
   return (
     <div className="space-y-5">
@@ -149,6 +176,71 @@ export function BusinessProfileForm({ companyId, initial }: { companyId: string;
           onChange={(e) => update("customerType", e.target.value || null)}
         />
       </div>
+
+      {/* Real gap found and closed 2026-08-15 (module intake/service flow
+          review) — these three fields drive Tender Readiness's and Data
+          Protection Compliance's deterministic jurisdiction-applicability
+          logic, but had never been settable anywhere in the client-facing
+          app until now; a company with these genuinely blank correctly
+          computed "no jurisdiction applies," which is honest but was
+          previously the ONLY possible outcome for every real client. */}
+      <div className="grid gap-5 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Select
+            label="Registration country"
+            hint="Where the company is legally registered — used to determine which AI/data-protection regulations apply."
+            value={isKnownCountry ? (fields.registrationCountry ?? "") : OTHER_COUNTRY_SENTINEL}
+            onChange={(e) =>
+              update("registrationCountry", e.target.value === OTHER_COUNTRY_SENTINEL ? "" : e.target.value || null)
+            }
+          >
+            <option value="">Not set</option>
+            <option value="United Kingdom">United Kingdom</option>
+            <optgroup label="European Union">
+              {EU_COUNTRIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Gulf">
+              <option value="Saudi Arabia">Saudi Arabia</option>
+              <option value="United Arab Emirates">United Arab Emirates</option>
+            </optgroup>
+            <option value={OTHER_COUNTRY_SENTINEL}>Other / not listed</option>
+          </Select>
+          {!isKnownCountry && (
+            <Input
+              placeholder="Type the registration country"
+              value={fields.registrationCountry ?? ""}
+              onChange={(e) => update("registrationCountry", e.target.value || null)}
+            />
+          )}
+        </div>
+        {isUae ? (
+          <Select
+            label="UAE free zone (if applicable)"
+            hint="DIFC has its own AI-specific regulation (Reg. 10); ADGM and mainland don't."
+            value={fields.uaeFreeZone ?? ""}
+            onChange={(e) => update("uaeFreeZone", (e.target.value || null) as "mainland" | "difc" | "adgm" | null)}
+          >
+            <option value="">Not set</option>
+            <option value="mainland">Mainland</option>
+            <option value="difc">DIFC</option>
+            <option value="adgm">ADGM</option>
+          </Select>
+        ) : (
+          <div />
+        )}
+      </div>
+
+      <TagInput
+        label="Customer market countries"
+        hint="Press Enter after each one — where your customers are, not where you're registered. Also drives jurisdiction applicability (e.g. GDPR applies based on EU customers, regardless of registration)."
+        value={fields.customerMarketCountries}
+        onChange={(tags) => update("customerMarketCountries", tags)}
+        placeholder="e.g. United Kingdom, Germany, Saudi Arabia…"
+      />
 
       <TagInput
         label="Main tools/stack"

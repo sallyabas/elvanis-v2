@@ -34,6 +34,34 @@ export async function notifyReviewersOfNewSubmission(supabase: SupabaseClient, r
 }
 
 /**
+ * Same fan-out as notifyReviewersOfNewSubmission(), for standalone module
+ * requests instead of reports (confirmed 2026-08-15, module intake/service
+ * flow review) — closes a real, confirmed gap: submitting a Tender
+ * Readiness / AI Reliability Audit / Data Protection Compliance request
+ * previously logged zero notification of any kind, reviewer or client.
+ * Kept as its own small function rather than generalizing the one above:
+ * module_requests has no `reviewer_notified_at` column (modules are
+ * created directly in `pending_review`, no edit-window concept to notify
+ * "the instant it closes"), so there's no equivalent stamp-and-guard step
+ * to share.
+ */
+export async function notifyReviewersOfNewModuleRequest(supabase: SupabaseClient): Promise<void> {
+  const { data: reviewers, error: reviewersError } = await supabase.from("users").select("id").eq("role", "reviewer");
+  if (reviewersError) throw new Error(`notifyReviewersOfNewModuleRequest: failed to load reviewers: ${reviewersError.message}`);
+
+  for (const reviewer of reviewers ?? []) {
+    const { error: notifError } = await supabase.from("notifications").insert({
+      recipient_type: "reviewer",
+      recipient_id: reviewer.id,
+      event_type: "module_new_submission",
+      channel: "email",
+      sent_at: null, // logged, not actually delivered — a separate, explicit, confirmed step (see dispatch.ts)
+    });
+    if (notifError) throw new Error(`notifyReviewersOfNewModuleRequest: failed to log notification: ${notifError.message}`);
+  }
+}
+
+/**
  * Originally: "the reviewer notification must fire the instant the 24h
  * edit window closes" (spec §2.3a, confirmed 2026-07-31).
  *

@@ -28,6 +28,22 @@ export interface CompanyProfileFields {
   customerType: string | null;
   mainToolsStack: string[];
   teamStructureSummary: string | null;
+  /**
+   * Real gap found and closed 2026-08-15 (module intake/service flow
+   * review) — registration_country/uae_free_zone/customer_market_countries
+   * have existed on `companies` since the original schema (the exact
+   * fields Tender Readiness's and Data Protection Compliance's
+   * jurisdiction-applicability logic depend on) but were NEVER
+   * client-settable anywhere in the app — no form ever wrote to them.
+   * Confirmed live against a real request: a company with all three
+   * genuinely null/empty correctly computed zero applicable jurisdictions
+   * (the deterministic logic itself was never the bug), but there was no
+   * way for that client to ever provide the data in the first place. This
+   * closes that, not just the display of its absence.
+   */
+  registrationCountry: string | null;
+  uaeFreeZone: "mainland" | "difc" | "adgm" | null;
+  customerMarketCountries: string[];
 }
 
 export interface UpdateCompanyProfileResult {
@@ -66,6 +82,9 @@ export async function updateCompanyProfile(
       customer_type: next.customerType?.trim() || null,
       main_tools_stack: { tools: next.mainToolsStack },
       team_structure_summary: next.teamStructureSummary?.trim() || null,
+      registration_country: next.registrationCountry?.trim() || null,
+      uae_free_zone: next.registrationCountry === "United Arab Emirates" ? next.uaeFreeZone : null,
+      customer_market_countries: next.customerMarketCountries,
       updated_at: new Date().toISOString(),
     })
     .eq("id", companyId);
@@ -85,6 +104,9 @@ export async function updateCompanyProfile(
     ["customer_type", "customerType"],
     ["main_tools_stack", "mainToolsStack"],
     ["team_structure_summary", "teamStructureSummary"],
+    ["registration_country", "registrationCountry"],
+    ["uae_free_zone", "uaeFreeZone"],
+    ["customer_market_countries", "customerMarketCountries"],
   ];
   for (const [dbField, key] of compare) {
     const oldStr = fieldToString(previous[key]);

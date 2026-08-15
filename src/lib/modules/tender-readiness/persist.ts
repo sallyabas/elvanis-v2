@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyReviewersOfNewModuleRequest } from "@/lib/reviewer/notifications";
 import { runTenderReadinessAudit } from "./index";
 import type { TenderReadinessDraftInput } from "./types";
 
@@ -8,6 +9,10 @@ import type { TenderReadinessDraftInput } from "./types";
  * §1.8b/§Generic module review architecture). Created directly in
  * `pending_review`, same precedent as the core audit and AI Reliability —
  * no client-facing "submit for review" edit-window flow exists yet.
+ *
+ * Notifies every reviewer on real submission (confirmed 2026-08-15, module
+ * intake/service flow review) — closes a real gap: this previously fired
+ * nothing at all, unlike a core-audit report's new_submission notification.
  */
 export async function runAndPersistTenderReadinessAudit(input: TenderReadinessDraftInput): Promise<{ requestId: string; findingCount: number }> {
   const result = await runTenderReadinessAudit(input);
@@ -39,6 +44,8 @@ export async function runAndPersistTenderReadinessAudit(input: TenderReadinessDr
     );
     if (findingsError) throw new Error(`runAndPersistTenderReadinessAudit: failed to persist findings: ${findingsError.message}`);
   }
+
+  await notifyReviewersOfNewModuleRequest(supabase);
 
   return { requestId, findingCount: result.findings.length };
 }

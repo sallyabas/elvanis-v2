@@ -138,17 +138,37 @@ export async function rejectProcurementAnswer(answerId: string, reviewerNotes?: 
   if (error) throw new Error(`rejectProcurementAnswer failed: ${error.message}`);
 }
 
-/** Moves an approved request to sent + records delivery. Does NOT send a real client notification itself — same explicit-step rule as deliverReport(). */
+/**
+ * Moves an approved request to sent + records delivery. Logs a real
+ * `module_ready` notification row for the client (recipient = the
+ * company's owning user) — closes a real gap found 2026-08-15 (module
+ * intake/service flow review): this previously fired nothing at all,
+ * unlike deliverReport()'s report_ready. Same "log now, send on the next
+ * dispatch pass" pattern as every other notification-creating function in
+ * this codebase — does NOT send the actual email itself here.
+ */
 export async function deliverModuleRequest(requestId: string): Promise<void> {
   const supabase = createAdminClient();
   const { data: request, error: fetchError } = await supabase
     .from("module_requests")
-    .select("status")
+    .select("status, company_id, companies(user_id)")
     .eq("id", requestId)
     .single();
   if (fetchError) throw new Error(`deliverModuleRequest: failed to load request: ${fetchError.message}`);
   if (request.status !== "approved") {
     throw new Error(`deliverModuleRequest: request must be approved first (current status: ${request.status})`);
+  }
+
+  const owner = request.companies as unknown as { user_id: string } | null;
+  if (owner?.user_id) {
+    const { error: notifError } = await supabase.from("notifications").insert({
+      recipient_type: "client",
+      recipient_id: owner.user_id,
+      event_type: "module_ready",
+      channel: "email",
+      sent_at: null,
+    });
+    if (notifError) throw new Error(`deliverModuleRequest: failed to log notification: ${notifError.message}`);
   }
 
   const { error } = await supabase
