@@ -8,6 +8,29 @@ import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
 import { DocumentUploadField } from "@/app/_components/ui/DocumentUploadField";
 
+/**
+ * Three real bugs found in live testing, fixed 2026-08-15:
+ *
+ * 1. "Stuck on loading" — root-caused by reproducing live, not guessed:
+ *    `submitTenderReadinessAudit()` runs a real, synchronous Groq call in
+ *    this same request (confirmed via server logs: 2.5-3.3s under healthy
+ *    conditions, but this codebase has extensively documented real Groq
+ *    rate-limit/slowness events elsewhere that can stretch this to tens of
+ *    seconds). The completion state itself was always correct — the actual
+ *    gap was zero loading feedback beyond a button-text change to
+ *    "Submitting…", the exact same class of bug already found and fixed
+ *    for Evidence Intake ("no prior feedback beyond a disabled button —
+ *    easy to miss entirely, reading as a frozen page"). Fixed the same
+ *    way: a real full-screen overlay with expectation-setting copy.
+ * 2 & 3. The document field's labels said "optional" in a way that reads
+ *    as "uploading is optional" rather than the real meaning ("you may
+ *    not have this, and that's fine") and didn't clearly connect the
+ *    textarea to the upload above it. Both labels reworded, "optional"
+ *    removed, and a real confirm-before-submit step added when nothing
+ *    was provided — same "missing evidence is itself a finding" principle
+ *    already used in Financial — so a blank field never silently passes
+ *    through unconfirmed.
+ */
 export function TenderReadinessIntakeForm({
   companyId,
   jurisdictionInput,
@@ -17,11 +40,11 @@ export function TenderReadinessIntakeForm({
 }) {
   const [aiUseCaseInventory, setAiUseCaseInventory] = useState("");
   const [existingDocumentation, setExistingDocumentation] = useState("");
-  const [status, setStatus] = useState<"idle" | "submitting" | "done" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "confirming" | "submitting" | "done" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
 
-  async function handleSubmit() {
+  async function doSubmit() {
     setStatus("submitting");
     const result = await submitTenderReadinessAudit({
       companyId,
@@ -36,6 +59,14 @@ export function TenderReadinessIntakeForm({
       setError(result.error ?? "Something went wrong.");
       setStatus("error");
     }
+  }
+
+  function handleSubmitClick() {
+    if (existingDocumentation.trim().length === 0) {
+      setStatus("confirming");
+      return;
+    }
+    doSubmit();
   }
 
   if (status === "done") {
@@ -61,21 +92,58 @@ export function TenderReadinessIntakeForm({
           "document-review mode." Upload is additive, not a replacement —
           typing directly still works with nothing to upload. */}
       <DocumentUploadField
-        label="Upload existing compliance documentation (optional)"
-        hint="PDF or DOCX — e.g. a risk assessment, AI use inventory, or procurement-readiness material already prepared. We'll extract the text; you can review and edit it below before submitting."
+        label="Upload existing compliance documentation"
+        hint="PDF or DOCX — e.g. a risk assessment, AI use inventory, or procurement-readiness material already prepared. We'll extract the text into the field below, which you can review and edit before submitting. Don't have anything prepared yet? That's fine — leave this and the field below blank, and we'll check with you before submitting."
         onExtracted={(text) => setExistingDocumentation(text)}
       />
       <Textarea
-        label="Existing compliance documentation, if any (optional)"
+        label="Documentation text — from your upload above, or typed directly"
         rows={3}
         placeholder="Any risk assessments, AI use inventories, or procurement-readiness material already prepared…"
         value={existingDocumentation}
         onChange={(e) => setExistingDocumentation(e.target.value)}
       />
       {status === "error" && error && <Alert variant="error">{error}</Alert>}
-      <Button disabled={status === "submitting" || aiUseCaseInventory.trim().length === 0} onClick={handleSubmit}>
-        {status === "submitting" ? "Submitting…" : "Submit for review"}
-      </Button>
+
+      {status === "confirming" && (
+        <Alert variant="info">
+          <p className="mb-2 font-medium">Confirming: you don&apos;t have existing documentation for this?</p>
+          <p className="mb-3 text-sm">
+            That&apos;s a real, useful finding on its own — we&apos;ll flag it as a gap to close before your next procurement conversation, not treat it
+            as an error.
+          </p>
+          <div className="flex gap-2">
+            <Button type="button" onClick={doSubmit}>
+              Yes, continue without documentation
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setStatus("idle")}>
+              Go back and add it
+            </Button>
+          </div>
+        </Alert>
+      )}
+
+      {status !== "confirming" && (
+        <Button disabled={status === "submitting" || aiUseCaseInventory.trim().length === 0} onClick={handleSubmitClick}>
+          {status === "submitting" ? "Submitting…" : "Submit for review"}
+        </Button>
+      )}
+
+      {status === "submitting" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-lg dark:bg-neutral-900">
+            <div
+              className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-neutral-200 border-t-accent dark:border-neutral-700"
+              aria-hidden="true"
+            />
+            <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Analyzing your submission…</h3>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              We&apos;re classifying your AI use against the applicable jurisdictions. This usually takes under a minute — please don&apos;t close this
+              tab.
+            </p>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -36,6 +36,29 @@ const CATEGORY_FIELDS: { key: "consentFlow" | "dataSubjectRights" | "retentionPo
   },
 ];
 
+/**
+ * Three real bugs found in live testing of Tender Readiness (confirmed
+ * 2026-08-15), checked and fixed here too where they apply — see that
+ * module's own docblock for the full root-cause writeup.
+ *
+ * 1. "Stuck on loading" — same architecture (a real, synchronous Groq
+ *    call with zero loading feedback beyond a button-text change), same
+ *    fix (a real full-screen overlay).
+ * 2 & 3. This module's document field is genuinely different from Tender
+ *    Readiness's: ONE shared upload (deliberately, per explicit founder
+ *    direction — a real privacy policy naturally covers several of the
+ *    five categories at once), with no equivalent free-text-only path —
+ *    a client can only get text into `existingDocumentationText` by
+ *    uploading something first. So the upload label already clearly says
+ *    "Upload" (item 2 was already satisfied here); what still applied was
+ *    "optional" reading as "uploading is optional" rather than "you may
+ *    not have this," and the missing confirm-if-blank gate. Fixed by
+ *    removing "optional" and adding the same confirm step, scoped to this
+ *    one shared document field specifically — the five category fields
+ *    already carry their own "blank is meaningful too" framing above
+ *    them, so a second confirm gate per category would be redundant, not
+ *    requested, and worse UX for a 5-field form.
+ */
 export function DataProtectionIntakeForm({
   companyId,
   jurisdictionInput,
@@ -61,13 +84,13 @@ export function DataProtectionIntakeForm({
    * deterministic rather than trusted from a prompt instruction alone.
    */
   const [existingDocumentationText, setExistingDocumentationText] = useState<string | null>(null);
-  const [status, setStatus] = useState<"idle" | "submitting" | "done" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "confirming" | "submitting" | "done" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
 
   const anyFilled = Object.values(values).some((v) => v.trim().length > 0) || Boolean(existingDocumentationText?.trim());
 
-  async function handleSubmit() {
+  async function doSubmit() {
     setStatus("submitting");
     const result = await submitDataProtectionComplianceAudit({
       companyId,
@@ -90,6 +113,14 @@ export function DataProtectionIntakeForm({
     }
   }
 
+  function handleSubmitClick() {
+    if (!existingDocumentationText || existingDocumentationText.trim().length === 0) {
+      setStatus("confirming");
+      return;
+    }
+    doSubmit();
+  }
+
   if (status === "done") {
     return (
       <p className="rounded-md border border-green-300 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
@@ -108,8 +139,8 @@ export function DataProtectionIntakeForm({
           Additive, not a replacement: the five category fields still work
           exactly as before with nothing uploaded here. */}
       <DocumentUploadField
-        label="Upload an existing privacy policy or documentation (optional)"
-        hint="PDF or DOCX — a real privacy policy often covers several of the areas below at once. We'll extract the text and use it alongside anything you type below; you don't need to also fill in every matching field by hand."
+        label="Upload an existing privacy policy or documentation"
+        hint="PDF or DOCX — a real privacy policy often covers several of the areas below at once. We'll extract the text and use it alongside anything you type below; you don't need to also fill in every matching field by hand. Don't have anything to upload? That's fine — we'll check with you before submitting."
         onExtracted={(text) => setExistingDocumentationText(text)}
       />
       {existingDocumentationText !== null && (
@@ -142,9 +173,45 @@ export function DataProtectionIntakeForm({
         />
       ))}
       {status === "error" && error && <Alert variant="error">{error}</Alert>}
-      <Button disabled={status === "submitting" || !anyFilled} onClick={handleSubmit}>
-        {status === "submitting" ? "Submitting…" : "Submit for review"}
-      </Button>
+
+      {status === "confirming" && (
+        <Alert variant="info">
+          <p className="mb-2 font-medium">Confirming: you don&apos;t have an existing privacy policy or documentation to share?</p>
+          <p className="mb-3 text-sm">
+            That&apos;s a real, useful finding on its own — we&apos;ll flag it as a gap to close, not treat it as an error.
+          </p>
+          <div className="flex gap-2">
+            <Button type="button" onClick={doSubmit}>
+              Yes, continue without a document
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setStatus("idle")}>
+              Go back and add it
+            </Button>
+          </div>
+        </Alert>
+      )}
+
+      {status !== "confirming" && (
+        <Button disabled={status === "submitting" || !anyFilled} onClick={handleSubmitClick}>
+          {status === "submitting" ? "Submitting…" : "Submit for review"}
+        </Button>
+      )}
+
+      {status === "submitting" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-lg dark:bg-neutral-900">
+            <div
+              className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-neutral-200 border-t-accent dark:border-neutral-700"
+              aria-hidden="true"
+            />
+            <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Analyzing your submission…</h3>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              We&apos;re assessing your data-protection posture against the applicable regulations. This usually takes under a minute — please don&apos;t
+              close this tab.
+            </p>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

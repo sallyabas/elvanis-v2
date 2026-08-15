@@ -74,8 +74,32 @@ export function AiReliabilityIntakeForm({ companyId }: { companyId: string }) {
     );
   }
 
+  /**
+   * Real "stuck on loading" bug found in live testing of Tender Readiness
+   * (confirmed 2026-08-15) and confirmed to apply here too — the same
+   * architecture: submitAiReliabilityAudit() runs a real, synchronous Groq
+   * call in this same request, with zero loading feedback beyond a
+   * button-text change to "Submitting…", the same class of gap already
+   * found and fixed for Evidence Intake. Fixed the same way: a real
+   * full-screen overlay with expectation-setting copy. No document-upload
+   * field exists in this module — the other two reported issues (ambiguous
+   * "optional" upload label, missing confirm-if-blank gate) don't apply.
+   */
+  const loadingOverlay = status === "submitting" && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-lg dark:bg-neutral-900">
+        <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-neutral-200 border-t-accent dark:border-neutral-700" aria-hidden="true" />
+        <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Analyzing your submission…</h3>
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          We&apos;re running the adversarial-testing analysis against your evidence. This usually takes under a minute — please don&apos;t close this tab.
+        </p>
+      </div>
+    </div>
+  );
+
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
+      {loadingOverlay}
       <h1 className="mb-1 text-2xl font-semibold">AI Reliability Audit</h1>
       <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">
         Evidence-based adversarial testing against documented real-world AI failure patterns — no live access to your
