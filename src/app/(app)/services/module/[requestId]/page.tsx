@@ -158,19 +158,18 @@ export default async function ClientModuleDetailPage({ params }: { params: Promi
         )}
       </Card>
 
-      {/* Real gap closed (confirmed 2026-08-15, real bug list item #4) —
-          no client-facing explanation of what "procurement answers" even
-          means existed anywhere before this page. The reviewer-facing
-          explanation ("Drafts answers to 11 standard AI-procurement
-          questions...") already reads clearly for someone who already
-          knows this app's own vocabulary; a client doesn't, so this is a
-          real rewrite, not a copy-paste. */}
+      {/* Real gap closed (confirmed 2026-08-15, real bug list item #4),
+          copy rewritten again the same day (Dashboard/module fixes review)
+          — the first version ("Draft answers... ready to adapt and share")
+          explained what to DO with these, not what they actually ARE to a
+          client who's never seen a procurement questionnaire. Rewritten to
+          lead with what the questions mean for the client first. */}
       {moduleType === "tender_readiness" && procurementAnswers.length > 0 && (
         <Card title="Procurement answers">
           <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
-            Draft answers to common AI-related procurement and tender questions, grounded in your reviewed findings above
-            — ready to adapt and share with whoever&apos;s asking you to prove compliance (a customer&apos;s
-            procurement team, a tender panel, and similar).
+            These are the questions a customer or tender panel commonly asks to verify AI compliance before signing a
+            contract or awarding a bid. Here&apos;s how we&apos;ve answered them on your behalf, based on your reviewed
+            findings above — review and adapt before sharing.
           </p>
           <div className="space-y-4">
             {procurementAnswers.map((a) => (
@@ -183,12 +182,16 @@ export default async function ClientModuleDetailPage({ params }: { params: Promi
               </div>
             ))}
           </div>
-          <a
-            href={`/api/tender-readiness/${requestId}/evidence-pack`}
-            className="mt-4 inline-block text-sm font-medium text-accent underline hover:text-accent-hover"
-          >
-            Download full evidence pack (.md)
-          </a>
+          {/* Evidence-pack download deliberately removed from the client
+              view (confirmed 2026-08-15, direct founder rule) — a raw
+              .md file isn't an appropriate client-facing deliverable; the
+              findings and answers above already ARE the client-facing
+              presentation of the same content. The download stays
+              reviewer-only (ModuleReviewWorkspaceClient.tsx). The route
+              itself keeps its owning-client authorization path from the
+              prior round rather than being reverted, in case a real
+              client-facing export format is built later — it's just no
+              longer linked from anywhere a client can reach. */}
         </Card>
       )}
 

@@ -10,7 +10,6 @@ import { computeJourneyStatus } from "@/lib/reports/journey-status";
 import { loadGoalMetricTrend, type MetricTrend } from "@/lib/goals/metric-trend";
 import { MODULE_META, MODULE_ORDER, MODULE_STATUS_LABELS, type ModuleType } from "@/lib/modules/module-meta";
 import { NextStepBanner } from "@/app/_components/NextStepBanner";
-import { ProgressStepper } from "@/app/_components/ProgressStepper";
 import { Card } from "@/app/_components/ui/Card";
 import { LinkButton } from "@/app/_components/ui/LinkButton";
 
@@ -141,35 +140,63 @@ export default async function DashboardPage() {
     readiness = readinessRow as typeof readiness;
   }
 
-  // Live status tiles (confirmed 2026-08-12) — module requests, session
-  // requests, Execution Sprint(s). Module requests are read via the admin
-  // client for the same reason computeJourneyStatus() already uses it:
-  // module_requests' own RLS only allows a client to SELECT `sent` rows
-  // (tightened 2026-08-06 to mirror `reports`), but a client should still
-  // see "under review" as a real status, not silence — same "let the
-  // client see their own submission status without exposing content
-  // early" precedent already established for the core audit's holding
-  // page. Only status/module_type/created_at are read here, never
-  // intake_data or findings.
+  // Live status tiles (confirmed 2026-08-12, rules tightened 2026-08-15 —
+  // Dashboard/module fixes review). "Active status" now means genuinely
+  // active/in-progress only, not a general log of everything that's ever
+  // happened — a real, confirmed rule: once something reaches a terminal
+  // state (module: sent; session: completed/declined; sprint: complete),
+  // it moves out of this section entirely and lives only in Reports &
+  // History (src/app/(app)/reports/page.tsx, extended in the same pass to
+  // actually show those terminal items — they'd otherwise vanish from the
+  // client's view completely once removed from here).
+  //
+  // Module requests are read via the admin client for the same reason
+  // computeJourneyStatus() already uses it: module_requests' own RLS only
+  // allows a client to SELECT `sent` rows (tightened 2026-08-06 to mirror
+  // `reports`), but a client should still see "under review" as a real
+  // status, not silence — same "let the client see their own submission
+  // status without exposing content early" precedent already established
+  // for the core audit's holding page. Only status/module_type/created_at
+  // are read here, never intake_data or findings.
   const admin = createAdminClient();
-  const { data: moduleRequestRows } = await admin
+  const { data: activeModuleRequestRows } = await admin
     .from("module_requests")
     .select("id, module_type, status, created_at")
     .eq("company_id", company.id)
+    .in("status", ["pending_review", "approved"])
     .order("created_at", { ascending: false });
 
-  const { data: sessionRequestRows } = await supabase
+  // Discovery Session, real carve-out (confirmed 2026-08-15, direct
+  // founder rule): unlike module requests/sprints, a Discovery Session
+  // never appears here at all, in ANY state — it's a pre-evidence,
+  // exploratory call with no Dashboard-worthy deliverable of its own
+  // (nothing in this app currently attaches a distinct "output" to one
+  // beyond the reviewer's own free-text notes). It always lives in
+  // Reports & History instead, in whatever state it's actually in. Other
+  // session types (Delivery Session, F2F Workshop) follow the general
+  // active/terminal rule above like everything else.
+  const { data: activeSessionRequestRows } = await supabase
     .from("session_requests")
     .select("id, session_type, status, requested_at, scheduled_at")
     .eq("company_id", company.id)
+    .neq("session_type", "discovery")
+    .in("status", ["requested", "scheduled"])
     .order("requested_at", { ascending: false });
 
   const { data: sprintRows } = await supabase
     .from("execution_sprints")
     .select("id, status, target_end_date, selected_finding_id, report_id")
     .eq("company_id", company.id)
+    .in("status", ["scoped", "in_progress"])
     .order("start_date", { ascending: false, nullsFirst: false });
 
+  // Real bug fixed in the same pass: this used to fall back to the most
+  // RECENT sprint regardless of status when none was `in_progress` — a
+  // `complete` (terminal) sprint could surface here via that fallback,
+  // directly contradicting "Active status shows only active items." The
+  // query above already excludes `complete` entirely, so a straightforward
+  // "prefer in_progress, else whatever non-terminal one exists" is now
+  // correct without a fallback that could reach into terminal rows.
   const activeSprint = (sprintRows ?? []).find((s) => s.status === "in_progress") ?? (sprintRows ?? [])[0] ?? null;
   let sprintFindingTitle: string | null = null;
   let sprintTaskCounts: { done: number; total: number } | null = null;
@@ -192,7 +219,7 @@ export default async function DashboardPage() {
     sprintTaskCounts = { done, total };
   }
 
-  const hasAnyStatusTiles = (moduleRequestRows?.length ?? 0) > 0 || (sessionRequestRows?.length ?? 0) > 0 || activeSprint;
+  const hasAnyStatusTiles = (activeModuleRequestRows?.length ?? 0) > 0 || (activeSessionRequestRows?.length ?? 0) > 0 || activeSprint;
 
   const SESSION_LABELS: Record<string, string> = { discovery: "Discovery Session", delivery: "Delivery Session", f2f_workshop: "F2F Workshop" };
   const SESSION_STATUS_LABELS: Record<string, string> = { requested: "Requested — awaiting scheduling", scheduled: "Scheduled", completed: "Completed", declined: "Declined" };
@@ -203,12 +230,22 @@ export default async function DashboardPage() {
       <h1 className="mb-1 text-2xl font-semibold">Dashboard</h1>
       <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">{company.name}&apos;s current state — what&apos;s wrong, what AI could do about it, and what to do right now.</p>
 
-      <ProgressStepper journeyStatus={journeyStatus} />
+      {/* ProgressStepper deliberately removed from Dashboard (confirmed
+          2026-08-15, direct founder request to reconsider whether the
+          step-progress metaphor belongs here at all) — kept on Evidence
+          Intake/Business Profile/Reports & History, where a genuinely
+          linear "you're not done setting up yet" framing still fits a
+          first-time visitor. Dashboard's own job is different: it's a
+          returning-visitor status view, not an onboarding checklist.
+          NextStepBanner already covers "no report yet" with one clear
+          action; once a report exists, the real content below (Top 3, AI
+          Opportunity, roadmap) already IS the "here's your current state"
+          answer a 4-step tracker would just be restating redundantly. */}
 
       {!latestReport && <NextStepBanner journeyStatus={journeyStatus} />}
 
       {/* Real bug found and fixed 2026-08-15 (module intake/service flow
-          review, item 7) — this whole section was previously nested INSIDE
+          review) — this whole section was previously nested INSIDE
           `{latestReport && (...)}` below, meaning a company with real
           active module requests, session requests, or an Execution Sprint
           but no delivered CORE report yet would never see any of them here
@@ -236,28 +273,25 @@ export default async function DashboardPage() {
               </div>
             )}
 
-            {(moduleRequestRows ?? []).map((r) => {
+            {/* Real, structural fix (confirmed 2026-08-15): module tiles
+                here are now always genuinely active (pending_review or
+                approved, queried above) — a `sent` (terminal) request can
+                never reach this list anymore, so the "View results" link
+                that used to gate on r.status === "sent" here is now dead
+                code by construction; removed rather than left as
+                unreachable. Delivered results live in Reports & History. */}
+            {(activeModuleRequestRows ?? []).map((r) => {
               const meta = MODULE_META[r.module_type as ModuleType];
               return (
                 <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
                   <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{meta?.label ?? r.module_type}</h3>
                   <p className="mb-1 text-accent">{MODULE_STATUS_LABELS[r.status as string] ?? r.status}</p>
                   <p className="text-neutral-500 dark:text-neutral-400">Submitted {new Date(r.created_at as string).toLocaleDateString()}</p>
-                  {/* Real bug found and fixed 2026-08-15 — this used to link
-                      back to the module's own INTAKE page (with a now-
-                      unused ?companyId=), not any result view, since no
-                      client-facing detail view existed yet. Now links to
-                      the real one built for item 6. */}
-                  {r.status === "sent" && meta && (
-                    <Link href={`/services/module/${r.id}`} className="mt-1 inline-block underline">
-                      View results
-                    </Link>
-                  )}
                 </div>
               );
             })}
 
-            {(sessionRequestRows ?? []).map((r) => (
+            {(activeSessionRequestRows ?? []).map((r) => (
               <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
                 <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{SESSION_LABELS[r.session_type as string] ?? r.session_type}</h3>
                 <p className="mb-1 text-accent">{SESSION_STATUS_LABELS[r.status as string] ?? r.status}</p>

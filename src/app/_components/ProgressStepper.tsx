@@ -41,12 +41,20 @@ function currentStepIndex(stage: JourneyStatus["stage"]): number {
 
 export function ProgressStepper({ journeyStatus }: { journeyStatus: JourneyStatus }) {
   const current = currentStepIndex(journeyStatus.stage);
+  // Real bug found and fixed (confirmed 2026-08-15, Dashboard/module fixes
+  // review): `done = i < current` can never be true for the LAST step when
+  // `current` equals that step's own index — a genuine off-by-one, not
+  // specific to any one stage. For "has_report" specifically, the journey
+  // is actually complete (there is no stage after it), so the final step
+  // itself should read as done/checkmarked, not as "current, still in
+  // progress." isJourneyComplete captures exactly that one case.
+  const isJourneyComplete = journeyStatus.stage === "has_report";
 
   return (
     <ol className="mb-6 flex flex-wrap items-center gap-y-2 text-xs" aria-label="Audit progress">
       {STEPS.map((label, i) => {
-        const done = i < current;
-        const isCurrent = i === current;
+        const done = i < current || (isJourneyComplete && i === current);
+        const isCurrent = i === current && !isJourneyComplete;
         return (
           <li key={label} className="flex items-center">
             <span className="flex items-center gap-1.5">
