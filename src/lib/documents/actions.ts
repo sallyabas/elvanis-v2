@@ -30,5 +30,25 @@ export async function extractDocumentTextAction(formData: FormData): Promise<Ext
     return { success: false, error: "No file was received." };
   }
 
-  return extractTextFromDocument(file);
+  // Real bug found in production 2026-08-15: extractTextFromDocument()'s
+  // own docblock claims "never throws," and that's true for every failure
+  // mode it was tested against (corrupted file, wrong format, scanned
+  // image-only PDF) — but a genuinely unexpected failure at the
+  // module-load or native-parsing level (see next.config.ts's own
+  // docblock for the real, disclosed hypothesis: a Vercel-specific file-
+  // tracing gap for pdf-parse's dynamically-loaded worker) sits entirely
+  // outside what that function's own try/catch can cover, since it would
+  // throw before or beyond that function's own code ever runs. Without
+  // this guard, that exception propagated as a raw, uncaught Server
+  // Action failure — the exact "500 Internal Server Error" / digest-only
+  // production error reported live — with no way for the client to see
+  // an honest message. This is the same defensive guarantee already
+  // applied to every submit handler this same day, applied here at the
+  // one remaining site that lacked it.
+  try {
+    return await extractTextFromDocument(file);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    return { success: false, error: `Couldn't process this document (${message}). Please try a different file, or type the relevant details directly instead.` };
+  }
 }

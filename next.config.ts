@@ -19,6 +19,35 @@ const nextConfig: NextConfig = {
   // untouched — the same environment it was directly verified to work
   // correctly in during standalone testing.
   serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
+  /**
+   * Real bug found in production 2026-08-15, a different failure mode from
+   * the Turbopack dev-mode bug documented above — that one was fixed and
+   * confirmed via local `next dev`/`npm run build`, but neither of those
+   * exercises Vercel's own deployment-time file tracing, which determines
+   * which files actually ship inside the deployed serverless function.
+   * pdf-parse loads its worker via a fully-dynamic `import(this.workerSrc)`
+   * call from WITHIN its own code (not a static import this repo's code
+   * controls) — exactly the kind of import Vercel's static tracer can miss,
+   * since the path isn't known until runtime. If that worker file isn't
+   * included in the deployed function's filesystem, the extraction throws
+   * at runtime in production even though it works locally, surfacing as a
+   * raw 500 to the client. `outputFileTracingIncludes` is the real,
+   * documented mechanism for forcing files a tracer missed into a specific
+   * route's deployed bundle — applied to the three real routes that use
+   * document upload (Tender Readiness, Data Protection Compliance, and
+   * Evidence Intake, which carries AI & Governance's document-review mode).
+   * Disclosed honestly: this is the strongest available hypothesis for the
+   * root cause, not a confirmed fix — it can't be verified from local dev,
+   * only from an actual Vercel deployment. Paired with a real defensive
+   * try/catch in extractDocumentTextAction() (see that file) so that even
+   * if this doesn't fully resolve it, the client gets an honest error
+   * instead of a raw crash either way.
+   */
+  outputFileTracingIncludes: {
+    "/tender-readiness": ["./node_modules/pdf-parse/**/*.mjs", "./node_modules/pdfjs-dist/**/*.mjs"],
+    "/data-protection-compliance": ["./node_modules/pdf-parse/**/*.mjs", "./node_modules/pdfjs-dist/**/*.mjs"],
+    "/evidence-intake": ["./node_modules/pdf-parse/**/*.mjs", "./node_modules/pdfjs-dist/**/*.mjs"],
+  },
   experimental: {
     serverActions: {
       // Raised from the 1MB default (confirmed 2026-08-12) — real document
