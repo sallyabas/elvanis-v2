@@ -225,37 +225,258 @@ export default async function DashboardPage() {
   const SESSION_STATUS_LABELS: Record<string, string> = { requested: "Requested — awaiting scheduling", scheduled: "Scheduled", completed: "Completed", declined: "Declined" };
   const SPRINT_STATUS_LABELS: Record<string, string> = { scoped: "Being scoped by your reviewer", in_progress: "In progress", complete: "Complete" };
 
+  // Real headline status line (confirmed 2026-08-15, IA redesign) — the
+  // "hero element" every real example checked (see the redesign's own
+  // docblock below for sources) leads with: one honest sentence computed
+  // from real counts already loaded above, never a fabricated score.
+  // Deliberately null (renders nothing, NextStepBanner alone covers it)
+  // when there's genuinely nothing to summarize yet — a brand-new client
+  // with no report and no active requests doesn't need a hollow "0
+  // priorities identified" sentence, they need the one clear next action
+  // NextStepBanner already gives them.
+  const activeRequestsCount = (activeModuleRequestRows?.length ?? 0) + (activeSessionRequestRows?.length ?? 0) + (activeSprint ? 1 : 0);
+  let headline: string | null = null;
+  if (latestReport || activeRequestsCount > 0) {
+    const parts: string[] = [];
+    if (latestReport) {
+      parts.push(`${top3.length} priorit${top3.length === 1 ? "y" : "ies"} identified`);
+      if (readiness !== null) {
+        parts.push(`${opportunities.length} AI opportunit${opportunities.length === 1 ? "y" : "ies"} flagged`);
+      }
+    }
+    if (activeRequestsCount > 0) {
+      parts.push(`${activeRequestsCount} request${activeRequestsCount === 1 ? "" : "s"} in review`);
+    }
+    headline = `${parts.join(", ")}.`;
+  }
+
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold">Dashboard</h1>
-      <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">{company.name}&apos;s current state — what&apos;s wrong, what AI could do about it, and what to do right now.</p>
+      <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">{company.name}&apos;s current state — what&apos;s wrong, what AI could do about it, and what to do right now.</p>
 
-      {/* ProgressStepper deliberately removed from Dashboard (confirmed
-          2026-08-15, direct founder request to reconsider whether the
-          step-progress metaphor belongs here at all) — kept on Evidence
-          Intake/Business Profile/Reports & History, where a genuinely
-          linear "you're not done setting up yet" framing still fits a
-          first-time visitor. Dashboard's own job is different: it's a
-          returning-visitor status view, not an onboarding checklist.
-          NextStepBanner already covers "no report yet" with one clear
-          action; once a report exists, the real content below (Top 3, AI
-          Opportunity, roadmap) already IS the "here's your current state"
-          answer a 4-step tracker would just be restating redundantly. */}
+      {/* Real IA redesign (confirmed 2026-08-15, direct founder request,
+          grounded in checked current practice — not opinion): visual
+          hierarchy must mirror actual hierarchy, the single most
+          important thing first and largest, everything else progressively
+          revealed below. This matches every serious current source
+          checked before rewriting: dashboard IA is described as "80% of
+          dashboard quality," with a hierarchical top-to-bottom layout
+          (executive-summary hero first, secondary detail below) and
+          operational status treated as progressive-disclosure content,
+          not primary content — see
+          https://www.sanjaydey.com/saas-dashboard-design-information-architecture-cognitive-overload/,
+          https://www.uxpin.com/studio/blog/dashboard-design-principles/,
+          https://www.wandr.studio/blog/fintech-dashboard-design.
+          Full narrative order now: (1) headline status line — the "hero
+          element" every checked example leads with; (2) Top 3 Priorities —
+          the actual diagnosis, full weight, first substantive content; (3)
+          AI Opportunity & Readiness, explicitly framed as following FROM
+          the priorities above; (4) Roadmap; (5) Your active requests —
+          operational status, deliberately demoted below the diagnosis
+          content, not competing with it for attention; (6) Services and
+          support — last, progressive disclosure.
+          ProgressStepper stays removed from this page (confirmed
+          2026-08-15, separate decision) — kept on Evidence Intake/
+          Business Profile/Reports & History instead. */}
+
+      {/* (1) Headline status line — the hero element. Real counts only,
+          computed above; renders nothing when there's genuinely nothing
+          to summarize yet (a brand-new client with no report and no
+          active requests), where NextStepBanner alone is the right hero. */}
+      {headline && <p className="mb-6 text-xl font-semibold text-neutral-900 dark:text-neutral-50">{headline}</p>}
 
       {!latestReport && <NextStepBanner journeyStatus={journeyStatus} />}
 
-      {/* Real bug found and fixed 2026-08-15 (module intake/service flow
-          review) — this whole section was previously nested INSIDE
-          `{latestReport && (...)}` below, meaning a company with real
-          active module requests, session requests, or an Execution Sprint
-          but no delivered CORE report yet would never see any of them here
-          — a structural gate on the wrong condition, not something
-          specific to any one request. Moved out to its own unconditional
-          (gated only on hasAnyStatusTiles) block so it shows regardless of
-          whether a core report exists. */}
+      {latestReport && (
+        <div className="mt-2 space-y-8">
+          {/* (2) Top 3 Priorities — leads the substantive content, full
+              width, full weight. Previously shared a 2-column row with AI
+              Opportunity as if the two were equally primary; the actual
+              diagnosis comes first now, AI Opportunity explicitly follows
+              from it below. */}
+          <Card title="Top 3 priorities">
+            {top3.length === 0 ? (
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">No priorities to show.</p>
+            ) : (
+              <ol className="list-inside list-decimal space-y-2 text-sm text-neutral-800 dark:text-neutral-200">
+                {top3.map((f) => (
+                  <li key={f.findingId}>{f.title}</li>
+                ))}
+              </ol>
+            )}
+            <Link href={`/reports/${latestReport.id}`} className="mt-3 inline-block text-sm underline">
+              View full report
+            </Link>
+          </Card>
+
+          {/* (3) AI Opportunity & Readiness — immediately after, explicitly
+              framed as following from the priorities above rather than a
+              disconnected section (subtitle rewritten to say so). */}
+          <Card
+            title="AI Opportunity & Readiness"
+            subtitle="Given what we found above, here's where AI could genuinely help — and whether the groundwork exists to try it safely today."
+          >
+            {/* Real bug found and fixed during live verification, not
+                anticipated upfront: `readiness` (readiness_scores) and
+                `opportunities` (ai_opportunity_synthesis) are always
+                written together by the same persist call — so
+                `readiness !== null` is the real "synthesis has run"
+                signal, genuinely distinct from "it ran and found zero
+                opportunities worth surfacing" (a real, legitimate
+                outcome — confirmed live against Nimbus Ledger Ltd's
+                actual most recent report, which returned exactly this).
+                The original `opportunities.length === 0` check
+                conflated both into the same "not generated yet" copy,
+                which would have been dishonest for the second case. */}
+            {readiness === null ? (
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                Not generated yet — this runs automatically once your report is fully approved, and can take a little while
+                after delivery. Check back soon.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {readiness && (
+                  <div className="grid grid-cols-2 gap-3 rounded-md border border-neutral-200 p-3 text-xs dark:border-neutral-800 sm:grid-cols-4">
+                    {(
+                      [
+                        ["data_quality", "Data quality"],
+                        ["team_skill", "Team skill"],
+                        ["process_maturity", "Process maturity"],
+                        ["governance_foundation", "Governance foundation"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <div key={key}>
+                        <p className="mb-1 font-medium text-neutral-600 dark:text-neutral-400">{label}</p>
+                        <div className="flex gap-0.5">
+                          {[0, 1, 2, 3].map((n) => (
+                            <span
+                              key={n}
+                              className={`h-1.5 flex-1 rounded-full ${
+                                readiness[key] !== null && n <= (readiness[key] as number) ? "bg-accent" : "bg-neutral-200 dark:bg-neutral-700"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {opportunities.length === 0 && (
+                  <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                    No AI opportunities were identified as safe to pursue right now, based on the readiness scores above —
+                    that&apos;s a genuine assessment, not a missing feature.
+                  </p>
+                )}
+                <ul className="space-y-3">
+                  {opportunities.map((o) => (
+                    <li key={o.id} className="rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <span className="font-medium text-neutral-900 dark:text-neutral-50">{o.description}</span>
+                        {o.readinessStatus && (
+                          <span
+                            className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                              o.readinessStatus === "do_now"
+                                ? "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                            }`}
+                          >
+                            {o.readinessStatus === "do_now" ? "Ready now" : "Fix groundwork first"}
+                          </span>
+                        )}
+                      </div>
+                      {o.readinessReasoning && <p className="text-neutral-600 dark:text-neutral-400">{o.readinessReasoning}</p>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </Card>
+
+          {/* (4) Roadmap — "what to do about it, over time." */}
+          <section>
+            <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Roadmap status</h2>
+            <div className="grid gap-4 sm:grid-cols-3">
+              {(["day30", "day60", "day90"] as const).map((bucket, i) => (
+                <div key={bucket} className="rounded-md border border-neutral-300 bg-white p-3 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+                  <h3 className="mb-2 font-medium text-neutral-900 dark:text-neutral-50">{[30, 60, 90][i]} days</h3>
+                  {roadmap[bucket].length === 0 ? (
+                    <p className="text-neutral-400 dark:text-neutral-500">Nothing at this horizon</p>
+                  ) : (
+                    <ul className="space-y-1 text-neutral-800 dark:text-neutral-200">
+                      {roadmap[bucket].map((item) => (
+                        <li key={item.finding.findingId}>
+                          {item.finding.title}
+                          {item.cascadeCount >= 2 && (
+                            <span className="ml-1.5 text-xs text-accent" title={item.cascadesToFindingTitles.join(", ")}>
+                              — fix this first, unlocks {item.cascadeCount} other finding{item.cascadeCount === 1 ? "" : "s"}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Goal metric trend (confirmed 2026-08-13, item 2) — kept as
+              part of the diagnosis-narrative group (still "what we found,"
+              not operational status), immediately after the roadmap. Only
+              shown once the client has both picked a metric to track at
+              onboarding AND has at least one real report containing it;
+              both are honest, common "nothing to show yet" states, not
+              errors, so this section simply doesn't render otherwise. */}
+          {metricTrend && (
+            <section>
+              <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Goal metric trend</h2>
+              <div className="rounded-md border border-neutral-300 bg-white p-4 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+                <p className="font-medium text-neutral-900 dark:text-neutral-50">
+                  {metricTrend.label}
+                  {metricTrend.direction === "higher_is_better" ? " (higher is better)" : " (lower is better)"}
+                </p>
+                <p className="mt-1 text-neutral-700 dark:text-neutral-300">
+                  {metricTrend.points.length >= 2 ? (
+                    <>
+                      {metricTrend.points
+                        .map((p) => `${p.value}${metricTrend.unit}`)
+                        .join(" → ")}
+                      {" "}
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                        across {metricTrend.points.length} audits
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      Currently {metricTrend.points[0].value}
+                      {metricTrend.unit}
+                      <span className="ml-1.5 text-xs text-neutral-500 dark:text-neutral-400">— trend will show once you have a second audit with this metric.</span>
+                    </>
+                  )}
+                </p>
+                {metricTrend.targetValue !== null && (
+                  <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">Your stated target: {metricTrend.targetValue}{metricTrend.unit}</p>
+                )}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
+
+      {/* (5) Your active requests — real, structural fix kept from the
+          previous pass (this used to be gated behind `latestReport`,
+          silently hiding module/session/sprint status for any client
+          whose first action was a standalone module): still rendered
+          unconditionally on `hasAnyStatusTiles`, but now moved BELOW the
+          diagnosis content and renamed from "Active status" — the old
+          name/position read as if operational status were the page's
+          primary content, when it's actually a clearly-separate
+          secondary section a client checks in on, not the thing they came
+          here to learn. */}
       {hasAnyStatusTiles && (
         <section className="mt-8">
-          <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Active status</h2>
+          <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Your active requests</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {activeSprint && (
               <div className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
@@ -303,176 +524,7 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      {latestReport && (
-        <div className="mt-8 space-y-8">
-          {/* Section 1 + 2 — AI Opportunity & Readiness sits alongside Top
-              3, not beneath it, equal visual weight (confirmed priority
-              order: AI Opportunity is listed FIRST). Two-column on wide
-              screens, stacked on narrow — neither is visually subordinate
-              to the other. */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card title="AI Opportunity & Readiness" subtitle="Where AI could genuinely help — and whether the groundwork exists to try it safely today.">
-              {/* Real bug found and fixed during live verification, not
-                  anticipated upfront: `readiness` (readiness_scores) and
-                  `opportunities` (ai_opportunity_synthesis) are always
-                  written together by the same persist call — so
-                  `readiness !== null` is the real "synthesis has run"
-                  signal, genuinely distinct from "it ran and found zero
-                  opportunities worth surfacing" (a real, legitimate
-                  outcome — confirmed live against Nimbus Ledger Ltd's
-                  actual most recent report, which returned exactly this).
-                  The original `opportunities.length === 0` check
-                  conflated both into the same "not generated yet" copy,
-                  which would have been dishonest for the second case. */}
-              {readiness === null ? (
-                <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                  Not generated yet — this runs automatically once your report is fully approved, and can take a little while
-                  after delivery. Check back soon.
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {readiness && (
-                    <div className="grid grid-cols-2 gap-3 rounded-md border border-neutral-200 p-3 text-xs dark:border-neutral-800 sm:grid-cols-4">
-                      {(
-                        [
-                          ["data_quality", "Data quality"],
-                          ["team_skill", "Team skill"],
-                          ["process_maturity", "Process maturity"],
-                          ["governance_foundation", "Governance foundation"],
-                        ] as const
-                      ).map(([key, label]) => (
-                        <div key={key}>
-                          <p className="mb-1 font-medium text-neutral-600 dark:text-neutral-400">{label}</p>
-                          <div className="flex gap-0.5">
-                            {[0, 1, 2, 3].map((n) => (
-                              <span
-                                key={n}
-                                className={`h-1.5 flex-1 rounded-full ${
-                                  readiness[key] !== null && n <= (readiness[key] as number) ? "bg-accent" : "bg-neutral-200 dark:bg-neutral-700"
-                                }`}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {opportunities.length === 0 && (
-                    <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                      No AI opportunities were identified as safe to pursue right now, based on the readiness scores above —
-                      that&apos;s a genuine assessment, not a missing feature.
-                    </p>
-                  )}
-                  <ul className="space-y-3">
-                    {opportunities.map((o) => (
-                      <li key={o.id} className="rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
-                        <div className="mb-1 flex items-center justify-between gap-2">
-                          <span className="font-medium text-neutral-900 dark:text-neutral-50">{o.description}</span>
-                          {o.readinessStatus && (
-                            <span
-                              className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                                o.readinessStatus === "do_now"
-                                  ? "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
-                                  : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                              }`}
-                            >
-                              {o.readinessStatus === "do_now" ? "Ready now" : "Fix groundwork first"}
-                            </span>
-                          )}
-                        </div>
-                        {o.readinessReasoning && <p className="text-neutral-600 dark:text-neutral-400">{o.readinessReasoning}</p>}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </Card>
-
-            <Card title="Top 3 priorities">
-              {top3.length === 0 ? (
-                <p className="text-sm text-neutral-500 dark:text-neutral-400">No priorities to show.</p>
-              ) : (
-                <ol className="list-inside list-decimal space-y-2 text-sm text-neutral-800 dark:text-neutral-200">
-                  {top3.map((f) => (
-                    <li key={f.findingId}>{f.title}</li>
-                  ))}
-                </ol>
-              )}
-              <Link href={`/reports/${latestReport.id}`} className="mt-3 inline-block text-sm underline">
-                View full report
-              </Link>
-            </Card>
-          </div>
-
-          <section>
-            <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Roadmap status</h2>
-            <div className="grid gap-4 sm:grid-cols-3">
-              {(["day30", "day60", "day90"] as const).map((bucket, i) => (
-                <div key={bucket} className="rounded-md border border-neutral-300 bg-white p-3 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
-                  <h3 className="mb-2 font-medium text-neutral-900 dark:text-neutral-50">{[30, 60, 90][i]} days</h3>
-                  {roadmap[bucket].length === 0 ? (
-                    <p className="text-neutral-400 dark:text-neutral-500">Nothing at this horizon</p>
-                  ) : (
-                    <ul className="space-y-1 text-neutral-800 dark:text-neutral-200">
-                      {roadmap[bucket].map((item) => (
-                        <li key={item.finding.findingId}>
-                          {item.finding.title}
-                          {item.cascadeCount >= 2 && (
-                            <span className="ml-1.5 text-xs text-accent" title={item.cascadesToFindingTitles.join(", ")}>
-                              — fix this first, unlocks {item.cascadeCount} other finding{item.cascadeCount === 1 ? "" : "s"}
-                            </span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Goal metric trend (confirmed 2026-08-13, item 2) — only shown
-              once the client has both picked a metric to track at
-              onboarding AND has at least one real report containing it;
-              both are honest, common "nothing to show yet" states, not
-              errors, so this section simply doesn't render otherwise. */}
-          {metricTrend && (
-            <section>
-              <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Goal metric trend</h2>
-              <div className="rounded-md border border-neutral-300 bg-white p-4 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
-                <p className="font-medium text-neutral-900 dark:text-neutral-50">
-                  {metricTrend.label}
-                  {metricTrend.direction === "higher_is_better" ? " (higher is better)" : " (lower is better)"}
-                </p>
-                <p className="mt-1 text-neutral-700 dark:text-neutral-300">
-                  {metricTrend.points.length >= 2 ? (
-                    <>
-                      {metricTrend.points
-                        .map((p) => `${p.value}${metricTrend.unit}`)
-                        .join(" → ")}
-                      {" "}
-                      <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                        across {metricTrend.points.length} audits
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      Currently {metricTrend.points[0].value}
-                      {metricTrend.unit}
-                      <span className="ml-1.5 text-xs text-neutral-500 dark:text-neutral-400">— trend will show once you have a second audit with this metric.</span>
-                    </>
-                  )}
-                </p>
-                {metricTrend.targetValue !== null && (
-                  <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">Your stated target: {metricTrend.targetValue}{metricTrend.unit}</p>
-                )}
-              </div>
-            </section>
-          )}
-        </div>
-      )}
-
-      {/* Section 4 — Services and support (confirmed 2026-08-12). Shown
+      {/* (6) Services and support — last, progressive disclosure. Shown
           regardless of whether a report exists yet — Discovery Session and
           the general "what does Elvanis offer" question are relevant even
           before any evidence has been submitted. */}
