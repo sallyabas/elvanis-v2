@@ -4,15 +4,14 @@ import { buildTenderReadinessEvidencePack } from "@/lib/modules/tender-readiness
 
 /**
  * Downloadable evidence-pack export (confirmed 2026-08-05, Priority 3) —
- * reviewer-only for now, same "prove it works before expanding" scoping as
- * the export format itself: no client-facing download surface exists yet
- * for any module result (CLAUDE.md already documents Reports & History
- * showing "Detail view coming soon" for modules) — adding one is real,
- * deliberately-deferred follow-on scope, not silently dropped here.
- *
- * Session + role check mirrors every other reviewer-facing Server
- * Action/route in this codebase (independently reachable, not protected by
- * the page-level layout gate alone).
+ * originally reviewer-only, extended 2026-08-15 (real bug list item #6,
+ * the new client-facing module detail page) to also allow the owning
+ * client to download their own delivered request's pack. Two independent
+ * authorization paths, checked in order: a reviewer can fetch any
+ * request; a client can only fetch a request that (a) belongs to their
+ * own company and (b) has actually been delivered — both enforced here
+ * directly, not left to buildTenderReadinessEvidencePack() itself, since
+ * that function has no concept of "who's asking."
  */
 export async function GET(request: Request, { params }: { params: Promise<{ requestId: string }> }) {
   const { requestId } = await params;
@@ -24,7 +23,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ requ
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
   const { data: profile } = await supabase.from("users").select("role").eq("id", user.id).maybeSingle();
-  if (profile?.role !== "reviewer") return NextResponse.json({ error: "Not authorized as a reviewer." }, { status: 403 });
+
+  if (profile?.role !== "reviewer") {
+    // Not a reviewer — check whether this is the owning client's own,
+    // already-delivered request. RLS on module_requests already restricts
+    // a session-scoped select to the caller's own `sent` rows (see
+    // 20260806090000_module_requests_rls_fix.sql), so a real match here is
+    // itself proof of both ownership and delivery — no separate check
+    // needed.
+    const { data: ownRequest } = await supabase.from("module_requests").select("id").eq("id", requestId).eq("status", "sent").maybeSingle();
+    if (!ownRequest) return NextResponse.json({ error: "Not authorized to download this evidence pack." }, { status: 403 });
+  }
 
   try {
     const { filename, markdown } = await buildTenderReadinessEvidencePack(requestId);

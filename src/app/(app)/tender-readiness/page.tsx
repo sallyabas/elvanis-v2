@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSettingNumber } from "@/lib/app-settings";
 import { computeJurisdictionApplicability } from "@/lib/modules/tender-readiness/jurisdiction";
+import { ApplicableRegulationsBox, type ApplicableRegulationItem } from "@/app/_components/ApplicableRegulationsBox";
 import { TenderReadinessIntakeForm } from "./TenderReadinessIntakeForm";
 
 /**
@@ -21,11 +22,17 @@ import { TenderReadinessIntakeForm } from "./TenderReadinessIntakeForm";
  */
 export const maxDuration = 60;
 
-const SECTION_LABELS: Record<string, string> = {
-  euAiAct: "EU AI Act (4-tier risk classification)",
-  uaeDifcReg10: "UAE DIFC Regulation 10",
-  saudiAiGovernance: "Saudi AI governance (SDAIA)",
-  uaeAiCharterReference: "UAE AI Charter (non-binding reference)",
+// Real fix (confirmed 2026-08-15, live copy/hierarchy testing): the
+// previous single-string labels (e.g. "EU AI Act (4-tier risk
+// classification)") baked the technical descriptor into the same string
+// as the primary name, making the whole thing read as one long, dense
+// label. Split into a short primary label plus optional muted detail —
+// see ApplicableRegulationsBox for how these render.
+const SECTION_LABELS: Record<string, ApplicableRegulationItem> = {
+  euAiAct: { label: "EU AI Act", detail: "4-tier risk classification" },
+  uaeDifcReg10: { label: "UAE DIFC Regulation 10" },
+  saudiAiGovernance: { label: "Saudi AI governance", detail: "SDAIA" },
+  uaeAiCharterReference: { label: "UAE AI Charter", detail: "non-binding reference" },
 };
 
 // Tender Readiness — standalone entry page, sellable independent of the
@@ -77,10 +84,10 @@ export default async function TenderReadinessPage() {
     customerMarketCountries: (company.customer_market_countries as string[]) ?? [],
   };
   const applicability = computeJurisdictionApplicability(jurisdictionInput);
-  const applicableLabels = (Object.keys(applicability) as (keyof typeof applicability)[])
+  const applicableItems = (Object.keys(applicability) as (keyof typeof applicability)[])
     .filter((k) => applicability[k])
     .map((k) => SECTION_LABELS[k]);
-  const hasNoApplicableJurisdiction = applicableLabels.length === 0;
+  const hasNoApplicableJurisdiction = applicableItems.length === 0;
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
@@ -90,10 +97,10 @@ export default async function TenderReadinessPage() {
         registered and where its customers are.
       </p>
 
-      <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900">
-        <h2 className="mb-2 font-medium">Applicable jurisdictions (determined automatically, not something you select)</h2>
-        {hasNoApplicableJurisdiction ? (
-          <div className="text-neutral-500">
+      <ApplicableRegulationsBox
+        items={applicableItems}
+        noneContent={
+          <div>
             <p>
               No AI-specific jurisdiction currently applies, based on registration ({company.registration_country ?? "not set"}) and
               customer markets ({jurisdictionInput.customerMarketCountries.join(", ") || "none set"}).
@@ -113,14 +120,8 @@ export default async function TenderReadinessPage() {
               findings until they&apos;re set.
             </p>
           </div>
-        ) : (
-          <ul className="list-inside list-disc space-y-1">
-            {applicableLabels.map((label) => (
-              <li key={label}>{label}</li>
-            ))}
-          </ul>
-        )}
-      </section>
+        }
+      />
 
       <TenderReadinessIntakeForm companyId={company.id as string} jurisdictionInput={jurisdictionInput} reviewPeriodHours={reviewPeriodHours} />
     </div>

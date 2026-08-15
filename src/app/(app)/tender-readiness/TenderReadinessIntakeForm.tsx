@@ -45,7 +45,6 @@ export function TenderReadinessIntakeForm({
   const [existingDocumentation, setExistingDocumentation] = useState("");
   const [status, setStatus] = useState<"idle" | "confirming" | "submitting" | "done" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
-  const [requestId, setRequestId] = useState<string | null>(null);
 
   async function doSubmit() {
     setStatus("submitting");
@@ -58,7 +57,6 @@ export function TenderReadinessIntakeForm({
         existingDocumentation: existingDocumentation.trim() || null,
       });
       if (result.success) {
-        setRequestId(result.requestId ?? null);
         setStatus("done");
       } else {
         setError(result.error ?? "Something went wrong.");
@@ -92,7 +90,7 @@ export function TenderReadinessIntakeForm({
   }
 
   if (status === "done") {
-    return <ModuleSubmittedNotice requestId={requestId} reviewPeriodHours={reviewPeriodHours} />;
+    return <ModuleSubmittedNotice reviewPeriodHours={reviewPeriodHours} />;
   }
 
   return (

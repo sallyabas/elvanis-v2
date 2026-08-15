@@ -207,8 +207,70 @@ export default async function DashboardPage() {
 
       {!latestReport && <NextStepBanner journeyStatus={journeyStatus} />}
 
+      {/* Real bug found and fixed 2026-08-15 (module intake/service flow
+          review, item 7) — this whole section was previously nested INSIDE
+          `{latestReport && (...)}` below, meaning a company with real
+          active module requests, session requests, or an Execution Sprint
+          but no delivered CORE report yet would never see any of them here
+          — a structural gate on the wrong condition, not something
+          specific to any one request. Moved out to its own unconditional
+          (gated only on hasAnyStatusTiles) block so it shows regardless of
+          whether a core report exists. */}
+      {hasAnyStatusTiles && (
+        <section className="mt-8">
+          <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Active status</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {activeSprint && (
+              <div className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">Execution Sprint</h3>
+                <p className="mb-1 text-neutral-600 dark:text-neutral-400">{sprintFindingTitle ?? "In progress"}</p>
+                <p className="mb-1 text-accent">{SPRINT_STATUS_LABELS[activeSprint.status] ?? activeSprint.status}</p>
+                {sprintTaskCounts && (
+                  <p className="mb-1 text-neutral-500 dark:text-neutral-400">
+                    {sprintTaskCounts.done} of {sprintTaskCounts.total} tasks done
+                  </p>
+                )}
+                <Link href={`/execution-sprint/${activeSprint.id}`} className="mt-1 inline-block underline">
+                  View sprint
+                </Link>
+              </div>
+            )}
+
+            {(moduleRequestRows ?? []).map((r) => {
+              const meta = MODULE_META[r.module_type as ModuleType];
+              return (
+                <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                  <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{meta?.label ?? r.module_type}</h3>
+                  <p className="mb-1 text-accent">{MODULE_STATUS_LABELS[r.status as string] ?? r.status}</p>
+                  <p className="text-neutral-500 dark:text-neutral-400">Submitted {new Date(r.created_at as string).toLocaleDateString()}</p>
+                  {/* Real bug found and fixed 2026-08-15 — this used to link
+                      back to the module's own INTAKE page (with a now-
+                      unused ?companyId=), not any result view, since no
+                      client-facing detail view existed yet. Now links to
+                      the real one built for item 6. */}
+                  {r.status === "sent" && meta && (
+                    <Link href={`/services/module/${r.id}`} className="mt-1 inline-block underline">
+                      View results
+                    </Link>
+                  )}
+                </div>
+              );
+            })}
+
+            {(sessionRequestRows ?? []).map((r) => (
+              <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{SESSION_LABELS[r.session_type as string] ?? r.session_type}</h3>
+                <p className="mb-1 text-accent">{SESSION_STATUS_LABELS[r.status as string] ?? r.status}</p>
+                <p className="text-neutral-500 dark:text-neutral-400">Requested {new Date(r.requested_at as string).toLocaleDateString()}</p>
+                {r.scheduled_at && <p className="text-neutral-500 dark:text-neutral-400">Scheduled {new Date(r.scheduled_at as string).toLocaleString()}</p>}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {latestReport && (
-        <div className="space-y-8">
+        <div className="mt-8 space-y-8">
           {/* Section 1 + 2 — AI Opportunity & Readiness sits alongside Top
               3, not beneath it, equal visual weight (confirmed priority
               order: AI Opportunity is listed FIRST). Two-column on wide
@@ -307,59 +369,6 @@ export default async function DashboardPage() {
               </Link>
             </Card>
           </div>
-
-          {/* Section 3 — live status tiles (confirmed 2026-08-12). Only
-              renders tiles for things that actually exist — an empty
-              overview here isn't a bug, it just means nothing's active
-              yet; Services (section 4) is where a client goes to start
-              something new. */}
-          {hasAnyStatusTiles && (
-            <section>
-              <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Active status</h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {activeSprint && (
-                  <div className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-                    <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">Execution Sprint</h3>
-                    <p className="mb-1 text-neutral-600 dark:text-neutral-400">{sprintFindingTitle ?? "In progress"}</p>
-                    <p className="mb-1 text-accent">{SPRINT_STATUS_LABELS[activeSprint.status] ?? activeSprint.status}</p>
-                    {sprintTaskCounts && (
-                      <p className="mb-1 text-neutral-500 dark:text-neutral-400">
-                        {sprintTaskCounts.done} of {sprintTaskCounts.total} tasks done
-                      </p>
-                    )}
-                    <Link href={`/execution-sprint/${activeSprint.id}`} className="mt-1 inline-block underline">
-                      View sprint
-                    </Link>
-                  </div>
-                )}
-
-                {(moduleRequestRows ?? []).map((r) => {
-                  const meta = MODULE_META[r.module_type as ModuleType];
-                  return (
-                    <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-                      <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{meta?.label ?? r.module_type}</h3>
-                      <p className="mb-1 text-accent">{MODULE_STATUS_LABELS[r.status as string] ?? r.status}</p>
-                      <p className="text-neutral-500 dark:text-neutral-400">Submitted {new Date(r.created_at as string).toLocaleDateString()}</p>
-                      {r.status === "sent" && meta && (
-                        <Link href={`${meta.routePath}?companyId=${company.id}`} className="mt-1 inline-block underline">
-                          View
-                        </Link>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {(sessionRequestRows ?? []).map((r) => (
-                  <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-                    <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{SESSION_LABELS[r.session_type as string] ?? r.session_type}</h3>
-                    <p className="mb-1 text-accent">{SESSION_STATUS_LABELS[r.status as string] ?? r.status}</p>
-                    <p className="text-neutral-500 dark:text-neutral-400">Requested {new Date(r.requested_at as string).toLocaleDateString()}</p>
-                    {r.scheduled_at && <p className="text-neutral-500 dark:text-neutral-400">Scheduled {new Date(r.scheduled_at as string).toLocaleString()}</p>}
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
 
           <section>
             <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Roadmap status</h2>

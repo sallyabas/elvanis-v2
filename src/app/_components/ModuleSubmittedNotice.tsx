@@ -35,12 +35,21 @@ import Link from "next/link";
  * not multiple rendered lines). Fixed the same way: an explicit `{" "}`
  * after the expression, not relying on a plain space surviving JSX's
  * line-based trimming.
+ *
+ * Real bug found live 2026-08-15 (a second real-testing pass on this same
+ * page): a raw internal database UUID ("Request ID: 852c2e4e-...") was
+ * shown directly to the client — the same class of internal-identifier
+ * leak already fixed once for conflict descriptions in the Reviewer
+ * Workspace. Removed entirely; nothing client-facing needs it (a real
+ * support conversation can look the request up by company/date, and no
+ * client-facing detail view existed to link it to at the time this was
+ * written either way).
  */
-export function ModuleSubmittedNotice({ requestId, reviewPeriodHours }: { requestId: string | null; reviewPeriodHours: number }) {
+export function ModuleSubmittedNotice({ reviewPeriodHours }: { reviewPeriodHours: number }) {
   return (
     <div className="space-y-4">
       <p className="rounded-md border border-green-300 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-        Submitted for review. Request ID: {requestId}
+        Submitted for review.
       </p>
       <p className="text-sm text-neutral-600 dark:text-neutral-400">
         A reviewer typically responds within {reviewPeriodHours}{" "}

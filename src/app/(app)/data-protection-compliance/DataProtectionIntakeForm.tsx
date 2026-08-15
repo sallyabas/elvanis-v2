@@ -89,7 +89,6 @@ export function DataProtectionIntakeForm({
   const [existingDocumentationText, setExistingDocumentationText] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "confirming" | "submitting" | "done" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
-  const [requestId, setRequestId] = useState<string | null>(null);
 
   const anyFilled = Object.values(values).some((v) => v.trim().length > 0) || Boolean(existingDocumentationText?.trim());
 
@@ -115,7 +114,6 @@ export function DataProtectionIntakeForm({
         existingDocumentationText: existingDocumentationText?.trim() || null,
       });
       if (result.success) {
-        setRequestId(result.requestId ?? null);
         setStatus("done");
       } else {
         setError(result.error ?? "Something went wrong.");
@@ -136,7 +134,7 @@ export function DataProtectionIntakeForm({
   }
 
   if (status === "done") {
-    return <ModuleSubmittedNotice requestId={requestId} reviewPeriodHours={reviewPeriodHours} />;
+    return <ModuleSubmittedNotice reviewPeriodHours={reviewPeriodHours} />;
   }
 
   return (

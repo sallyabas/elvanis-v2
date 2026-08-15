@@ -24,7 +24,6 @@ export function AiReliabilityIntakeForm({ companyId, reviewPeriodHours }: { comp
   });
   const [status, setStatus] = useState<"idle" | "submitting" | "done" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
-  const [requestId, setRequestId] = useState<string | null>(null);
 
   async function handleSubmit() {
     if (!systemType) return;
@@ -63,7 +62,6 @@ export function AiReliabilityIntakeForm({ companyId, reviewPeriodHours }: { comp
     try {
       const result = await submitAiReliabilityAudit(input);
       if (result.success) {
-        setRequestId(result.requestId ?? null);
         setStatus("done");
       } else {
         setError(result.error ?? "Something went wrong.");
@@ -79,7 +77,7 @@ export function AiReliabilityIntakeForm({ companyId, reviewPeriodHours }: { comp
     return (
       <div className="mx-auto max-w-2xl px-6 py-10">
         <h1 className="mb-2 text-2xl font-semibold">AI Reliability Audit</h1>
-        <ModuleSubmittedNotice requestId={requestId} reviewPeriodHours={reviewPeriodHours} />
+        <ModuleSubmittedNotice reviewPeriodHours={reviewPeriodHours} />
       </div>
     );
   }

@@ -16,12 +16,7 @@ interface HistoryItem {
   id: string;
   label: string;
   deliveredAt: string | null;
-  /** Null for module requests — no client-facing detail view exists for
-   * them yet (only the internal reviewer workspace renders module
-   * findings, which a client account can't reach). A real, separate gap
-   * from "list them at all," not silently worked around by linking to a
-   * route the client would just get bounced from. */
-  href: string | null;
+  href: string;
 }
 
 // Reports & History — chronological, frozen-snapshot archive of every
@@ -89,7 +84,10 @@ export default async function ReportsHistoryPage() {
       id: r.id as string,
       label: MODULE_LABELS[r.module_type as string] ?? (r.module_type as string),
       deliveredAt: r.delivered_at as string | null,
-      href: null,
+      // Real gap closed (confirmed 2026-08-15, real bug list item #6) — a
+      // real client-facing detail view now exists; this previously showed
+      // "Detail view coming soon" with no link at all.
+      href: `/services/module/${r.id}`,
     })),
   ].sort((a, b) => new Date(b.deliveredAt ?? 0).getTime() - new Date(a.deliveredAt ?? 0).getTime());
 
@@ -116,13 +114,9 @@ export default async function ReportsHistoryPage() {
                   Delivered {item.deliveredAt ? new Date(item.deliveredAt).toLocaleDateString() : "unknown"}
                 </div>
               </div>
-              {item.href ? (
-                <Link href={item.href} className="text-sm underline">
-                  View
-                </Link>
-              ) : (
-                <span className="text-xs text-neutral-400 dark:text-neutral-500">Detail view coming soon</span>
-              )}
+              <Link href={item.href} className="text-sm underline">
+                View
+              </Link>
             </li>
           ))}
         </ul>

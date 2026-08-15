@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSettingNumber } from "@/lib/app-settings";
 import { computeJurisdictionApplicability } from "@/lib/modules/data-protection-compliance/jurisdiction";
+import { ApplicableRegulationsBox, type ApplicableRegulationItem } from "@/app/_components/ApplicableRegulationsBox";
 import { DataProtectionIntakeForm } from "./DataProtectionIntakeForm";
 
 /**
@@ -12,10 +13,13 @@ import { DataProtectionIntakeForm } from "./DataProtectionIntakeForm";
  */
 export const maxDuration = 60;
 
-const REGIME_LABELS: Record<string, string> = {
-  ukGdpr: "UK GDPR",
-  euGdpr: "EU GDPR",
-  saudiPdpl: "Saudi PDPL",
+// Real fix (confirmed 2026-08-15, live copy/hierarchy testing) — see
+// ApplicableRegulationsBox for how these render; same shape as Tender
+// Readiness's own SECTION_LABELS for consistency.
+const REGIME_LABELS: Record<string, ApplicableRegulationItem> = {
+  ukGdpr: { label: "UK GDPR" },
+  euGdpr: { label: "EU GDPR" },
+  saudiPdpl: { label: "Saudi PDPL" },
 };
 
 // Data Protection Compliance — standalone entry page, sellable independent
@@ -60,10 +64,10 @@ export default async function DataProtectionCompliancePage() {
     customerMarketCountries: (company.customer_market_countries as string[]) ?? [],
   };
   const applicability = computeJurisdictionApplicability(jurisdictionInput);
-  const applicableLabels = (Object.keys(applicability) as (keyof typeof applicability)[])
+  const applicableItems = (Object.keys(applicability) as (keyof typeof applicability)[])
     .filter((k) => applicability[k])
     .map((k) => REGIME_LABELS[k]);
-  const hasNoApplicableJurisdiction = applicableLabels.length === 0;
+  const hasNoApplicableJurisdiction = applicableItems.length === 0;
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
@@ -73,10 +77,10 @@ export default async function DataProtectionCompliancePage() {
         cross-border transfer, based on where {company.name} is registered and where its customers are.
       </p>
 
-      <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900">
-        <h2 className="mb-2 font-medium">Applicable regulations (determined automatically, not something you select)</h2>
-        {hasNoApplicableJurisdiction ? (
-          <div className="text-neutral-500">
+      <ApplicableRegulationsBox
+        items={applicableItems}
+        noneContent={
+          <div>
             <p>
               None of UK GDPR, EU GDPR, or Saudi PDPL currently apply, based on registration ({company.registration_country ?? "not set"}) and
               customer markets ({jurisdictionInput.customerMarketCountries.join(", ") || "none set"}).
@@ -95,17 +99,9 @@ export default async function DataProtectionCompliancePage() {
               findings until they&apos;re set.
             </p>
           </div>
-        ) : (
-          <ul className="list-inside list-disc space-y-1">
-            {applicableLabels.map((label) => (
-              <li key={label}>{label}</li>
-            ))}
-          </ul>
-        )}
-        <p className="mt-2 text-xs text-neutral-400">
-          The UAE&apos;s data-protection regime (federal PDPL, ADGM DPR 2021) isn&apos;t assessed by this module yet — it&apos;s a planned extension for once Gulf market entry is real.
-        </p>
-      </section>
+        }
+        footnote="The UAE's data-protection regime (federal PDPL, ADGM DPR 2021) isn't assessed by this module yet — it's a planned extension for once Gulf market entry is real."
+      />
 
       <DataProtectionIntakeForm companyId={company.id as string} jurisdictionInput={jurisdictionInput} reviewPeriodHours={reviewPeriodHours} />
     </div>
