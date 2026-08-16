@@ -5,9 +5,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { LensFinding, LensType, Severity } from "@/lib/lenses/types";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
+import { formatCurrencyRange, isUsableFinancialImpact } from "@/lib/reports/financial-impact";
 import { loadRecommendationLibrary } from "@/lib/recommendations/repository";
 import { SessionRequestButton } from "@/app/_components/SessionRequestButton";
 import { SprintInterestButton } from "@/app/_components/SprintInterestButton";
+import { FindingNotApplicableButton } from "@/app/_components/FindingNotApplicableButton";
+import { loadFlaggedFindingIds } from "@/lib/reports/finding-feedback";
 import { EvidenceSubmittedDisclosure, type EvidenceSnapshotShape } from "@/app/_components/EvidenceSubmittedDisclosure";
 import { loadGovernanceDimensions } from "@/lib/lenses/benchmarks-repository";
 import { getTotalTurnaroundHours } from "@/lib/reports/sla";
@@ -225,6 +228,12 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
   const { data: existingSprintInterest } = await supabase.from("sprint_interest_requests").select("finding_id").eq("report_id", reportId);
   const requestedFindingIds = new Set((existingSprintInterest ?? []).map((r) => r.finding_id as string));
 
+  // Real "Does not apply to us" feedback (confirmed 2026-08-16, final
+  // Dashboard redesign pass, item 2) — a correctness signal, deliberately
+  // separate from the sprint-interest choices above, which are about
+  // acting on a finding rather than flagging it as simply wrong.
+  const flaggedFindingIds = await loadFlaggedFindingIds(company.id as string);
+
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold">{company.name}&apos;s Execution Audit</h1>
@@ -387,9 +396,9 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
                       — starts a new, paid re-audit cycle (your free audit has already been used).
                     </p>
                   )}
-                  {f.financialImpact && (f.financialImpact.impactBandLow !== null || f.financialImpact.impactBandHigh !== null) && (
+                  {isUsableFinancialImpact(f.financialImpact) && (
                     <p className="mt-1 text-xs text-neutral-500">
-                      Estimated impact: {f.financialImpact.impactBandLow ?? "?"}–{f.financialImpact.impactBandHigh ?? "?"} {f.financialImpact.currency ?? ""}
+                      Estimated impact: {formatCurrencyRange(f.financialImpact.impactBandLow, f.financialImpact.impactBandHigh, f.financialImpact.currency)}
                     </p>
                   )}
                   {/* Client-facing Execution Sprint interest (confirmed
@@ -405,6 +414,21 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
                       reportId={reportId}
                       findingId={row.id}
                       alreadyRequested={requestedFindingIds.has(row.id)}
+                    />
+                  )}
+                  {/* Real "Does not apply to us" feedback (confirmed
+                      2026-08-16) — a correctness signal, not an action
+                      choice, so it's shown regardless of severity (unlike
+                      SprintInterestButton above) and never on
+                      isMissingDataFinding rows — there's no finding to
+                      dispute when the gap is "you didn't submit evidence." */}
+                  {!f.isMissingDataFinding && (
+                    <FindingNotApplicableButton
+                      companyId={company.id}
+                      findingSource="lens_finding"
+                      findingId={row.id}
+                      findingTitle={f.title}
+                      alreadyFlagged={flaggedFindingIds.has(row.id)}
                     />
                   )}
                 </div>

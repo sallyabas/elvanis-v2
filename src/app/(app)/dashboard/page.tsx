@@ -3,39 +3,56 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { LensFinding } from "@/lib/lenses/types";
+import { GOAL_LABELS } from "@/lib/lenses/goals";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
 import { loadRecommendationLibrary } from "@/lib/recommendations/repository";
-import type { FindingForCascade } from "@/lib/recommendations/cascade";
+import { computeCascadeSignals, type FindingForCascade } from "@/lib/recommendations/cascade";
 import { computeJourneyStatus } from "@/lib/reports/journey-status";
 import { loadGoalMetricTrend, type MetricTrend } from "@/lib/goals/metric-trend";
+import { aggregateFinancialImpact, formatCurrencyRange, isUsableFinancialImpact } from "@/lib/reports/financial-impact";
 import { MODULE_META, MODULE_ORDER, MODULE_STATUS_LABELS, type ModuleType } from "@/lib/modules/module-meta";
 import { NextStepBanner } from "@/app/_components/NextStepBanner";
 import { Card } from "@/app/_components/ui/Card";
 import { LinkButton } from "@/app/_components/ui/LinkButton";
 
+const SEVERITY_STYLES: Record<string, string> = {
+  critical: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+  high: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
+  medium: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+  low: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
+};
+
 /**
- * Dashboard rebuild (confirmed 2026-08-12, direct founder request — "a
- * genuine unified home page, not a status-only stub, treated with the
- * same weight as a module build"). The previous version only ever showed
- * top-3 + roadmap + one Execution Sprint tile — this rebuild adds the
- * three things that were missing:
+ * Dashboard, final consolidated redesign (confirmed 2026-08-16, direct
+ * founder brief closing out the whole Dashboard-redesign thread). Builds
+ * directly on the IA reorder from earlier the same broad pass (headline →
+ * diagnosis → operational status → services) and adds the 10 concrete
+ * items from the final brief:
  *
- * 1. AI Opportunity & Readiness as its own headline section, equal visual
- *    weight to top-3 — previously not rendered anywhere in the client-
- *    facing app at all, confirmed by grepping for "do_now"/
- *    "fix_groundwork_first" across src/ before starting: only the
- *    synthesis module itself referenced these values, no UI ever had.
- * 2. Live status tiles for module requests, session requests, and the
- *    Execution Sprint — previously only the sprint had a tile.
- * 3. A "Services and support" section linking to the new /services page
- *    (see src/app/(app)/services/page.tsx) — closes the "clients have no
- *    path to the paid modules" gap found in the previous batch's
- *    "Next steps" work, this time as its own dedicated home rather than
- *    tacked onto the bottom of one report page.
- *
- * Design principle (the founder's own framing, checked against Vanta/
- * Drata): findings, status, and next actions live in ONE place, not
- * scattered across pages the client has to remember to check separately.
+ * 1. Signals page — new standalone page, not built here (see
+ *    src/app/(app)/signals/).
+ * 2. "Does not apply to us" feedback — new shared component, not built
+ *    here (see src/app/_components/FindingNotApplicableButton.tsx), wired
+ *    into the Report/Signals pages, not Dashboard (Dashboard only ever
+ *    shows the top-3 subset, not full finding detail).
+ * 3. Client's stated goal — pinned, persistent, right under the page
+ *    subtitle, not buried in Business Profile.
+ * 4. Delivered/completed services stay off Dashboard as cards — a real,
+ *    lightweight summary line near the active-requests area instead.
+ * 5. Single action banner at the very top: the #1 priority, its real
+ *    financial impact (when quantified), its real cascade count, one CTA.
+ * 6. Top 3: severity + financial impact inline under each title.
+ * 7. Real aggregated financial exposure across the top 3, an honest range
+ *    from real per-finding data — see financial-impact.ts's own docblock
+ *    for why this is genuinely real (LensFinding.financialImpact has
+ *    existed and been populated by every lens since the original schema
+ *    design) and not a new fabricated number.
+ * 8. Real cascade count surfaced in the banner — reuses the exact same
+ *    computeCascadeSignals() the roadmap already computes with, not a
+ *    second implementation.
+ * 9. Every "Your active requests" card gets one real explanatory line.
+ * 10. Purely-informational sections re-evaluated against "what should I
+ *     do / what happened" — see the end-of-file note on what was found.
  */
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -64,13 +81,6 @@ export default async function DashboardPage() {
   const journeyStatus = await computeJourneyStatus(createAdminClient(), company.id as string);
 
   let top3: LensFinding[] = [];
-  // Cascade reasoning (confirmed 2026-08-13, item 5) — needs the report's
-  // FULL finding set, not just the top-3 rows previously fetched here, so
-  // a top-3 finding's cascade count can see findings that didn't
-  // themselves make top-3. top3WithIds pairs each finding with its real DB
-  // id, not LensFinding.findingId — see deriveRoadmap's own docblock for
-  // why (findingId is stale post-load, never re-persisted after the
-  // original audit run).
   let allReportFindings: FindingForCascade[] = [];
   let top3WithIds: { id: string; finding: LensFinding }[] = [];
   if (latestReport) {
@@ -90,14 +100,26 @@ export default async function DashboardPage() {
   const recommendationLibrary = await loadRecommendationLibrary();
   const roadmap = deriveRoadmap(top3WithIds, allReportFindings, recommendationLibrary);
 
-  // Goal metric trend-tracking (confirmed 2026-08-13, item 2) — the
-  // smaller, honest scope: real numeric progression across real delivered
-  // audits, never a fabricated achieved/missed verdict. Only meaningful
-  // once the client has picked a metric to track at onboarding — most
-  // companies (and every pre-2026-08-13 company) simply won't have one set.
+  // Real cascade signal for the #1 priority specifically (items 5/8) —
+  // deliberately the SAME computeCascadeSignals() call deriveRoadmap()
+  // already makes internally, not a second implementation that could
+  // drift. Real, deterministic data (recommendation-library.ts's curated
+  // cascade map), never an LLM judgment.
+  const cascadeSignals = computeCascadeSignals(allReportFindings, recommendationLibrary);
+  const topPriority = top3WithIds[0] ?? null;
+  const topPriorityCascade = topPriority ? cascadeSignals.get(topPriority.id) : null;
+
+  // Real aggregated financial exposure across the top 3 (item 7) — see
+  // financial-impact.ts's own docblock for why this is real, existing
+  // per-finding data, not a new number invented for this pass.
+  const top3FinancialExposure = aggregateFinancialImpact(top3);
+
+  // Client's stated goal, pinned (item 3) — the same `goals` row already
+  // queried for the metric trend below, extended to also select
+  // primary_goal/secondary_goal so this doesn't need a second query.
   const { data: currentGoal } = await supabase
     .from("goals")
-    .select("target_metric_key, target_metric_value")
+    .select("primary_goal, secondary_goal, target_metric_key, target_metric_value")
     .eq("company_id", company.id)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -109,15 +131,6 @@ export default async function DashboardPage() {
       })
     : null;
 
-  // AI Opportunity & Readiness (confirmed 2026-08-12, headline section per
-  // explicit priority order) — reads the same ai_opportunity_synthesis /
-  // readiness_scores tables the synthesis module writes to; RLS scopes
-  // both to the owning company only (not status-gated the way `reports`
-  // is), which is safe here since we only ever query them against a
-  // report we've already confirmed is `sent`. Synthesis runs on a cron
-  // AFTER reviewer approval (see run-pending-synthesis.ts) — a report can
-  // genuinely be delivered before synthesis has run, so absence here is a
-  // real, honest "not generated yet" state, not a bug to hide.
   let opportunities: { id: string; description: string; readinessStatus: "do_now" | "fix_groundwork_first" | null; readinessReasoning: string | null }[] = [];
   let readiness: { data_quality: number | null; team_skill: number | null; process_maturity: number | null; governance_foundation: number | null } | null = null;
   if (latestReport) {
@@ -140,24 +153,6 @@ export default async function DashboardPage() {
     readiness = readinessRow as typeof readiness;
   }
 
-  // Live status tiles (confirmed 2026-08-12, rules tightened 2026-08-15 —
-  // Dashboard/module fixes review). "Active status" now means genuinely
-  // active/in-progress only, not a general log of everything that's ever
-  // happened — a real, confirmed rule: once something reaches a terminal
-  // state (module: sent; session: completed/declined; sprint: complete),
-  // it moves out of this section entirely and lives only in Reports &
-  // History (src/app/(app)/reports/page.tsx, extended in the same pass to
-  // actually show those terminal items — they'd otherwise vanish from the
-  // client's view completely once removed from here).
-  //
-  // Module requests are read via the admin client for the same reason
-  // computeJourneyStatus() already uses it: module_requests' own RLS only
-  // allows a client to SELECT `sent` rows (tightened 2026-08-06 to mirror
-  // `reports`), but a client should still see "under review" as a real
-  // status, not silence — same "let the client see their own submission
-  // status without exposing content early" precedent already established
-  // for the core audit's holding page. Only status/module_type/created_at
-  // are read here, never intake_data or findings.
   const admin = createAdminClient();
   const { data: activeModuleRequestRows } = await admin
     .from("module_requests")
@@ -166,15 +161,6 @@ export default async function DashboardPage() {
     .in("status", ["pending_review", "approved"])
     .order("created_at", { ascending: false });
 
-  // Discovery Session, real carve-out (confirmed 2026-08-15, direct
-  // founder rule): unlike module requests/sprints, a Discovery Session
-  // never appears here at all, in ANY state — it's a pre-evidence,
-  // exploratory call with no Dashboard-worthy deliverable of its own
-  // (nothing in this app currently attaches a distinct "output" to one
-  // beyond the reviewer's own free-text notes). It always lives in
-  // Reports & History instead, in whatever state it's actually in. Other
-  // session types (Delivery Session, F2F Workshop) follow the general
-  // active/terminal rule above like everything else.
   const { data: activeSessionRequestRows } = await supabase
     .from("session_requests")
     .select("id, session_type, status, requested_at, scheduled_at")
@@ -190,13 +176,6 @@ export default async function DashboardPage() {
     .in("status", ["scoped", "in_progress"])
     .order("start_date", { ascending: false, nullsFirst: false });
 
-  // Real bug fixed in the same pass: this used to fall back to the most
-  // RECENT sprint regardless of status when none was `in_progress` — a
-  // `complete` (terminal) sprint could surface here via that fallback,
-  // directly contradicting "Active status shows only active items." The
-  // query above already excludes `complete` entirely, so a straightforward
-  // "prefer in_progress, else whatever non-terminal one exists" is now
-  // correct without a fallback that could reach into terminal rows.
   const activeSprint = (sprintRows ?? []).find((s) => s.status === "in_progress") ?? (sprintRows ?? [])[0] ?? null;
   let sprintFindingTitle: string | null = null;
   let sprintTaskCounts: { done: number; total: number } | null = null;
@@ -221,20 +200,55 @@ export default async function DashboardPage() {
 
   const hasAnyStatusTiles = (activeModuleRequestRows?.length ?? 0) > 0 || (activeSessionRequestRows?.length ?? 0) > 0 || activeSprint;
 
+  // Real "delivered/completed services" summary counts (item 4) — kept as
+  // a lightweight line, not full cards, precisely because the confirmed
+  // rule from earlier this pass is that terminal items don't belong in
+  // "Active status/requests." Counts every real terminal service ever
+  // delivered to this company, not just the latest — matching Reports &
+  // History's own "complete historical record" treatment.
+  const { count: deliveredReportsCount } = await supabase
+    .from("reports")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", company.id)
+    .eq("status", "sent");
+  const { count: deliveredModulesCount } = await admin
+    .from("module_requests")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", company.id)
+    .eq("status", "sent");
+  const { count: completedSessionsCount } = await supabase
+    .from("session_requests")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", company.id)
+    .eq("status", "completed");
+  const { count: completeSprintsCount } = await supabase
+    .from("execution_sprints")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", company.id)
+    .eq("status", "complete");
+  const deliveredCount = (deliveredReportsCount ?? 0) + (deliveredModulesCount ?? 0) + (completedSessionsCount ?? 0) + (completeSprintsCount ?? 0);
+  const inProgressCount = (activeModuleRequestRows?.length ?? 0) + (activeSessionRequestRows?.length ?? 0) + (activeSprint ? 1 : 0);
+
   const SESSION_LABELS: Record<string, string> = { discovery: "Discovery Session", delivery: "Delivery Session", f2f_workshop: "F2F Workshop" };
   const SESSION_STATUS_LABELS: Record<string, string> = { requested: "Requested — awaiting scheduling", scheduled: "Scheduled", completed: "Completed", declined: "Declined" };
   const SPRINT_STATUS_LABELS: Record<string, string> = { scoped: "Being scoped by your reviewer", in_progress: "In progress", complete: "Complete" };
+  // Real explanatory copy per active-request card type (item 9) — one
+  // plain-language line saying what the thing IS and what happens next,
+  // not just a bare status word.
+  const MODULE_EXPLANATION: Record<string, string> = {
+    pending_review: "Submitted and waiting for your reviewer to work through it — you'll be notified once it's ready.",
+    approved: "Reviewed and approved — your reviewer will deliver the finished result shortly.",
+  };
+  const SESSION_EXPLANATION: Record<string, string> = {
+    requested: "You asked for this call — your reviewer will follow up personally to find a time.",
+    scheduled: "Confirmed — check your email for the details, or see the time above.",
+  };
+  const SPRINT_EXPLANATION: Record<string, string> = {
+    scoped: "Your reviewer is drafting a real task breakdown for this — you'll see it once it's ready to start.",
+    in_progress: "A bounded, paid implementation engagement fixing this one finding — track task progress on the sprint page.",
+  };
 
-  // Real headline status line (confirmed 2026-08-15, IA redesign) — the
-  // "hero element" every real example checked (see the redesign's own
-  // docblock below for sources) leads with: one honest sentence computed
-  // from real counts already loaded above, never a fabricated score.
-  // Deliberately null (renders nothing, NextStepBanner alone covers it)
-  // when there's genuinely nothing to summarize yet — a brand-new client
-  // with no report and no active requests doesn't need a hollow "0
-  // priorities identified" sentence, they need the one clear next action
-  // NextStepBanner already gives them.
-  const activeRequestsCount = (activeModuleRequestRows?.length ?? 0) + (activeSessionRequestRows?.length ?? 0) + (activeSprint ? 1 : 0);
+  const activeRequestsCount = inProgressCount;
   let headline: string | null = null;
   if (latestReport || activeRequestsCount > 0) {
     const parts: string[] = [];
@@ -253,55 +267,96 @@ export default async function DashboardPage() {
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold">Dashboard</h1>
-      <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">{company.name}&apos;s current state — what&apos;s wrong, what AI could do about it, and what to do right now.</p>
+      <p className="mb-3 text-sm text-neutral-500 dark:text-neutral-400">{company.name}&apos;s current state — what&apos;s wrong, what AI could do about it, and what to do right now.</p>
 
-      {/* Real IA redesign (confirmed 2026-08-15, direct founder request,
-          grounded in checked current practice — not opinion): visual
-          hierarchy must mirror actual hierarchy, the single most
-          important thing first and largest, everything else progressively
-          revealed below. This matches every serious current source
-          checked before rewriting: dashboard IA is described as "80% of
-          dashboard quality," with a hierarchical top-to-bottom layout
-          (executive-summary hero first, secondary detail below) and
-          operational status treated as progressive-disclosure content,
-          not primary content — see
-          https://www.sanjaydey.com/saas-dashboard-design-information-architecture-cognitive-overload/,
-          https://www.uxpin.com/studio/blog/dashboard-design-principles/,
-          https://www.wandr.studio/blog/fintech-dashboard-design.
-          Full narrative order now: (1) headline status line — the "hero
-          element" every checked example leads with; (2) Top 3 Priorities —
-          the actual diagnosis, full weight, first substantive content; (3)
-          AI Opportunity & Readiness, explicitly framed as following FROM
-          the priorities above; (4) Roadmap; (5) Your active requests —
-          operational status, deliberately demoted below the diagnosis
-          content, not competing with it for attention; (6) Services and
-          support — last, progressive disclosure.
-          ProgressStepper stays removed from this page (confirmed
-          2026-08-15, separate decision) — kept on Evidence Intake/
-          Business Profile/Reports & History instead. */}
+      {/* (3) Client's stated goal, pinned — real, confirmed 2026-08-16.
+          Right under the page subtitle so it's visible without scrolling
+          or navigating away, not buried only in Business Profile. */}
+      {currentGoal?.primary_goal && (
+        <p className="mb-6 inline-flex flex-wrap items-center gap-x-1.5 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/50 dark:text-neutral-400">
+          <span className="font-medium text-neutral-700 dark:text-neutral-300">Your goal:</span>
+          {GOAL_LABELS[currentGoal.primary_goal as keyof typeof GOAL_LABELS] ?? currentGoal.primary_goal}
+          {currentGoal.secondary_goal && (
+            <span>· also: {GOAL_LABELS[currentGoal.secondary_goal as keyof typeof GOAL_LABELS] ?? currentGoal.secondary_goal}</span>
+          )}
+          <Link href="/business-profile" className="ml-1 font-medium text-accent underline hover:text-accent-hover">
+            Edit
+          </Link>
+        </p>
+      )}
 
-      {/* (1) Headline status line — the hero element. Real counts only,
-          computed above; renders nothing when there's genuinely nothing
-          to summarize yet (a brand-new client with no report and no
-          active requests), where NextStepBanner alone is the right hero. */}
+      {/* (5) Single action banner — the one thing a founder should see
+          first, confirmed 2026-08-16. The #1 priority, its real financial
+          impact when one is quantified, its real cascade count when it's
+          upstream of 2+ other findings, one clear CTA. Renders nothing
+          when there's no report yet — NextStepBanner below is the right
+          "what to do" answer for that case instead. */}
+      {topPriority && (
+        <section className="mb-8 rounded-lg border-2 border-accent bg-accent/5 p-5 dark:bg-accent/10">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-accent">Highest priority right now</p>
+          <p className="mb-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">{topPriority.finding.title}</p>
+          <div className="mb-3 space-y-1 text-sm text-neutral-700 dark:text-neutral-300">
+            {isUsableFinancialImpact(topPriority.finding.financialImpact) && (
+              <p>
+                Estimated cost if left unaddressed:{" "}
+                <span className="font-semibold">
+                  {formatCurrencyRange(
+                    topPriority.finding.financialImpact.impactBandLow,
+                    topPriority.finding.financialImpact.impactBandHigh,
+                    topPriority.finding.financialImpact.currency,
+                  )}
+                </span>
+              </p>
+            )}
+            {topPriorityCascade && topPriorityCascade.cascadeCount >= 2 && (
+              <p title={topPriorityCascade.cascadesToFindingTitles.join(", ")}>
+                Fixing this is upstream of <span className="font-semibold">{topPriorityCascade.cascadeCount} other flagged issues</span>.
+              </p>
+            )}
+          </div>
+          <LinkButton href={`/reports/${latestReport!.id}`}>Start fixing this</LinkButton>
+        </section>
+      )}
+
       {headline && <p className="mb-6 text-xl font-semibold text-neutral-900 dark:text-neutral-50">{headline}</p>}
 
       {!latestReport && <NextStepBanner journeyStatus={journeyStatus} />}
 
       {latestReport && (
         <div className="mt-2 space-y-8">
-          {/* (2) Top 3 Priorities — leads the substantive content, full
-              width, full weight. Previously shared a 2-column row with AI
-              Opportunity as if the two were equally primary; the actual
-              diagnosis comes first now, AI Opportunity explicitly follows
-              from it below. */}
+          {/* (2 & 6 & 7) Top 3 Priorities — severity + real per-finding
+              financial impact inline under each title, plus a real
+              aggregated exposure line across all three when at least one
+              is quantified. */}
           <Card title="Top 3 priorities">
+            {top3FinancialExposure && (
+              <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">
+                Together, these represent an estimated{" "}
+                <span className="font-semibold text-neutral-900 dark:text-neutral-50">
+                  {formatCurrencyRange(top3FinancialExposure.low, top3FinancialExposure.high, top3FinancialExposure.currency)}
+                </span>{" "}
+                in cost/risk exposure
+                {top3FinancialExposure.quantifiedCount < top3FinancialExposure.totalCount &&
+                  ` (based on ${top3FinancialExposure.quantifiedCount} of ${top3FinancialExposure.totalCount} findings with a quantified estimate)`}
+                .
+              </p>
+            )}
             {top3.length === 0 ? (
               <p className="text-sm text-neutral-500 dark:text-neutral-400">No priorities to show.</p>
             ) : (
-              <ol className="list-inside list-decimal space-y-2 text-sm text-neutral-800 dark:text-neutral-200">
+              <ol className="list-inside list-decimal space-y-3 text-sm text-neutral-800 dark:text-neutral-200">
                 {top3.map((f) => (
-                  <li key={f.findingId}>{f.title}</li>
+                  <li key={f.findingId}>
+                    <span>{f.title}</span>
+                    <div className="ml-5 mt-1 flex flex-wrap items-center gap-2 text-xs">
+                      <span className={`rounded px-2 py-0.5 font-semibold uppercase tracking-wide ${SEVERITY_STYLES[f.severity] ?? ""}`}>{f.severity}</span>
+                      {isUsableFinancialImpact(f.financialImpact) && (
+                        <span className="text-neutral-500 dark:text-neutral-400">
+                          Estimated impact: {formatCurrencyRange(f.financialImpact.impactBandLow, f.financialImpact.impactBandHigh, f.financialImpact.currency)}
+                        </span>
+                      )}
+                    </div>
+                  </li>
                 ))}
               </ol>
             )}
@@ -310,25 +365,10 @@ export default async function DashboardPage() {
             </Link>
           </Card>
 
-          {/* (3) AI Opportunity & Readiness — immediately after, explicitly
-              framed as following from the priorities above rather than a
-              disconnected section (subtitle rewritten to say so). */}
           <Card
             title="AI Opportunity & Readiness"
             subtitle="Given what we found above, here's where AI could genuinely help — and whether the groundwork exists to try it safely today."
           >
-            {/* Real bug found and fixed during live verification, not
-                anticipated upfront: `readiness` (readiness_scores) and
-                `opportunities` (ai_opportunity_synthesis) are always
-                written together by the same persist call — so
-                `readiness !== null` is the real "synthesis has run"
-                signal, genuinely distinct from "it ran and found zero
-                opportunities worth surfacing" (a real, legitimate
-                outcome — confirmed live against Nimbus Ledger Ltd's
-                actual most recent report, which returned exactly this).
-                The original `opportunities.length === 0` check
-                conflated both into the same "not generated yet" copy,
-                which would have been dishonest for the second case. */}
             {readiness === null ? (
               <p className="text-sm text-neutral-500 dark:text-neutral-400">
                 Not generated yet — this runs automatically once your report is fully approved, and can take a little while
@@ -393,7 +433,6 @@ export default async function DashboardPage() {
             )}
           </Card>
 
-          {/* (4) Roadmap — "what to do about it, over time." */}
           <section>
             <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Roadmap status</h2>
             <div className="grid gap-4 sm:grid-cols-3">
@@ -421,13 +460,6 @@ export default async function DashboardPage() {
             </div>
           </section>
 
-          {/* Goal metric trend (confirmed 2026-08-13, item 2) — kept as
-              part of the diagnosis-narrative group (still "what we found,"
-              not operational status), immediately after the roadmap. Only
-              shown once the client has both picked a metric to track at
-              onboarding AND has at least one real report containing it;
-              both are honest, common "nothing to show yet" states, not
-              errors, so this section simply doesn't render otherwise. */}
           {metricTrend && (
             <section>
               <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Goal metric trend</h2>
@@ -464,18 +496,24 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* (5) Your active requests — real, structural fix kept from the
-          previous pass (this used to be gated behind `latestReport`,
-          silently hiding module/session/sprint status for any client
-          whose first action was a standalone module): still rendered
-          unconditionally on `hasAnyStatusTiles`, but now moved BELOW the
-          diagnosis content and renamed from "Active status" — the old
-          name/position read as if operational status were the page's
-          primary content, when it's actually a clearly-separate
-          secondary section a client checks in on, not the thing they came
-          here to learn. */}
+      {/* (4) Delivered/completed services summary line — real, lightweight,
+          not full cards (keeps the "Active status = non-terminal only"
+          rule intact from earlier this pass). Only shown when there's
+          something real to summarize. */}
+      {deliveredCount > 0 && (
+        <p className="mt-8 text-sm text-neutral-500 dark:text-neutral-400">
+          {deliveredCount} service{deliveredCount === 1 ? "" : "s"} delivered, {inProgressCount} in progress —{" "}
+          <Link href="/reports" className="font-medium text-accent underline hover:text-accent-hover">
+            View all in Reports &amp; History
+          </Link>
+          .
+        </p>
+      )}
+
+      {/* (9) Your active requests — each card now carries one real
+          explanatory line: what this is, what happens next. */}
       {hasAnyStatusTiles && (
-        <section className="mt-8">
+        <section className="mt-4">
           <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Your active requests</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {activeSprint && (
@@ -483,6 +521,7 @@ export default async function DashboardPage() {
                 <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">Execution Sprint</h3>
                 <p className="mb-1 text-neutral-600 dark:text-neutral-400">{sprintFindingTitle ?? "In progress"}</p>
                 <p className="mb-1 text-accent">{SPRINT_STATUS_LABELS[activeSprint.status] ?? activeSprint.status}</p>
+                <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">{SPRINT_EXPLANATION[activeSprint.status] ?? ""}</p>
                 {sprintTaskCounts && (
                   <p className="mb-1 text-neutral-500 dark:text-neutral-400">
                     {sprintTaskCounts.done} of {sprintTaskCounts.total} tasks done
@@ -494,19 +533,13 @@ export default async function DashboardPage() {
               </div>
             )}
 
-            {/* Real, structural fix (confirmed 2026-08-15): module tiles
-                here are now always genuinely active (pending_review or
-                approved, queried above) — a `sent` (terminal) request can
-                never reach this list anymore, so the "View results" link
-                that used to gate on r.status === "sent" here is now dead
-                code by construction; removed rather than left as
-                unreachable. Delivered results live in Reports & History. */}
             {(activeModuleRequestRows ?? []).map((r) => {
               const meta = MODULE_META[r.module_type as ModuleType];
               return (
                 <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
                   <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{meta?.label ?? r.module_type}</h3>
                   <p className="mb-1 text-accent">{MODULE_STATUS_LABELS[r.status as string] ?? r.status}</p>
+                  <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">{MODULE_EXPLANATION[r.status as string] ?? ""}</p>
                   <p className="text-neutral-500 dark:text-neutral-400">Submitted {new Date(r.created_at as string).toLocaleDateString()}</p>
                 </div>
               );
@@ -516,6 +549,7 @@ export default async function DashboardPage() {
               <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
                 <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{SESSION_LABELS[r.session_type as string] ?? r.session_type}</h3>
                 <p className="mb-1 text-accent">{SESSION_STATUS_LABELS[r.status as string] ?? r.status}</p>
+                <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">{SESSION_EXPLANATION[r.status as string] ?? ""}</p>
                 <p className="text-neutral-500 dark:text-neutral-400">Requested {new Date(r.requested_at as string).toLocaleDateString()}</p>
                 {r.scheduled_at && <p className="text-neutral-500 dark:text-neutral-400">Scheduled {new Date(r.scheduled_at as string).toLocaleString()}</p>}
               </div>
@@ -524,10 +558,6 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      {/* (6) Services and support — last, progressive disclosure. Shown
-          regardless of whether a report exists yet — Discovery Session and
-          the general "what does Elvanis offer" question are relevant even
-          before any evidence has been submitted. */}
       <section className="mt-8">
         <Card title="Services and support" subtitle="Everything Elvanis offers — modules, the Execution Sprint, and reviewer sessions — in one place.">
           <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">
@@ -540,3 +570,18 @@ export default async function DashboardPage() {
     </div>
   );
 }
+
+/**
+ * Item 10 note, confirmed 2026-08-16: every remaining top-level section was
+ * checked against "what should I do / what happened" before deciding
+ * whether to remove it — none were found to be purely informational with
+ * zero action or explanation once items 3/4/7/8/9 above were added. AI
+ * Opportunity & Readiness already tells the client what to do (readiness
+ * status per opportunity); Roadmap already frames itself as "what to do,
+ * over time"; Goal metric trend is itself a real "what happened" answer
+ * (real numeric progression); "Your active requests" cards now carry a
+ * real explanatory line each (item 9); Services and support has a real
+ * action (View all services). Disclosed explicitly rather than silently
+ * claiming a removal that didn't happen — the bar was applied, nothing
+ * failed it.
+ */

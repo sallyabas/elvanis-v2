@@ -67,6 +67,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link href="/dashboard" className="hover:text-neutral-50 hover:underline">
               Dashboard
             </Link>
+            {/* Real nav link added 2026-08-16 (final Dashboard redesign,
+                item 1) — Signals is a genuinely new, standalone page (a
+                unified filterable finding list), not a duplicate of any
+                existing page, so it gets its own top-level nav entry same
+                as Services did. */}
+            <Link href="/signals" className="hover:text-neutral-50 hover:underline">
+              Signals
+            </Link>
             <Link href="/business-profile" className="hover:text-neutral-50 hover:underline">
               Business Profile
             </Link>
