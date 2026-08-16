@@ -152,61 +152,116 @@ export function ModuleReviewWorkspaceClient({
   const [blockedReason, setBlockedReason] = useState<string | null>(null);
   const [procurementError, setProcurementError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Real bug found live (confirmed 2026-08-16): every action button on this
+  // workspace could get stuck disabled/loading forever on a genuine
+  // RPC-level failure — none of these handlers had a try/catch around
+  // their await, the same uncaught-RPC-failure class already found and
+  // fixed repeatedly on the CLIENT-facing intake forms but never
+  // propagated to the reviewer-side workspaces. Fixed with a shared error
+  // state and try/catch/finally on every handler here.
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const duration = formatDuration(timing.createdAt, timing.approvedAt);
 
   async function handleAccept(findingId: string) {
     setPending(true);
-    await acceptModuleFindingAction(requestId, findingId);
-    setPending(false);
+    setActionError(null);
+    try {
+      await acceptModuleFindingAction(requestId, findingId);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleReject(findingId: string) {
     setPending(true);
-    await rejectModuleFindingAction(requestId, findingId);
-    setPending(false);
+    setActionError(null);
+    try {
+      await rejectModuleFindingAction(requestId, findingId);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleSaveEdit(f: FindingRow, changes: Partial<GenericModuleFinding>, notes: string) {
     setPending(true);
-    const edited = { ...displayedContent(f), ...changes };
-    await editModuleFindingAction(requestId, f.id, edited, notes || undefined);
-    setEditingId(null);
-    setPending(false);
+    setActionError(null);
+    try {
+      const edited = { ...displayedContent(f), ...changes };
+      await editModuleFindingAction(requestId, f.id, edited, notes || undefined);
+      setEditingId(null);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleApprove() {
     setPending(true);
-    const result = await approveModuleRequestAction(requestId);
-    setBlockedReason(result.approved ? null : (result.blockedReason ?? "Blocked"));
-    setPending(false);
+    setActionError(null);
+    try {
+      const result = await approveModuleRequestAction(requestId);
+      setBlockedReason(result.approved ? null : (result.blockedReason ?? "Blocked"));
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleGenerateProcurementAnswers() {
     setPending(true);
     setProcurementError(null);
-    const result = await generateProcurementAnswersAction(requestId);
-    if (!result.success) setProcurementError(result.error ?? "Something went wrong.");
-    setPending(false);
+    try {
+      const result = await generateProcurementAnswersAction(requestId);
+      if (!result.success) setProcurementError(result.error ?? "Something went wrong.");
+    } catch {
+      setProcurementError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleAcceptAnswer(answerId: string) {
     setPending(true);
-    await acceptProcurementAnswerAction(requestId, answerId);
-    setPending(false);
+    setActionError(null);
+    try {
+      await acceptProcurementAnswerAction(requestId, answerId);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleRejectAnswer(answerId: string) {
     setPending(true);
-    await rejectProcurementAnswerAction(requestId, answerId);
-    setPending(false);
+    setActionError(null);
+    try {
+      await rejectProcurementAnswerAction(requestId, answerId);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleSaveAnswerEdit(answerId: string, editedAnswer: string, notes: string) {
     setPending(true);
-    await editProcurementAnswerAction(requestId, answerId, editedAnswer, notes || undefined);
-    setEditingAnswerId(null);
-    setPending(false);
+    setActionError(null);
+    try {
+      await editProcurementAnswerAction(requestId, answerId, editedAnswer, notes || undefined);
+      setEditingAnswerId(null);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   const draftCount = findings.filter((f) => f.reviewer_status === "draft").length;
@@ -221,6 +276,12 @@ export function ModuleReviewWorkspaceClient({
         <p className="mb-6 text-xs text-neutral-500 dark:text-neutral-400">
           Time in review ({timing.approvedAt ? "submitted → approved" : "submitted → now"}): <span className="font-medium">{duration}</span>
         </p>
+      )}
+
+      {actionError && (
+        <Alert variant="error" className="mb-4">
+          {actionError}
+        </Alert>
       )}
 
       {draftCount > 0 && (

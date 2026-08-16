@@ -50,39 +50,82 @@ export function SprintReviewWorkspaceClient({ sprintId, companyName, findingTitl
   const [blockedReason, setBlockedReason] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [commentary, setCommentary] = useState(reviewerCommentary ?? "");
+  // Real bug found live (confirmed 2026-08-16): "Approve sprint plan" (and
+  // every other action button here) stayed stuck disabled/loading forever
+  // on a genuine RPC-level failure — none of these handlers had a
+  // try/catch around their await, the same uncaught-RPC-failure class
+  // already found and fixed repeatedly on the CLIENT-facing intake forms
+  // (Tender Readiness, AI Reliability, Data Protection, Evidence Intake)
+  // but never propagated to the reviewer-side action handlers. A thrown
+  // rejection (platform timeout, dropped connection, an unhandled
+  // exception inside the Server Action itself) left `pending` stuck
+  // `true` with no way out and no visible error. Fixed with a real,
+  // shared error state and try/catch/finally on every handler in this
+  // file, matching the exact defensive pattern already proven elsewhere.
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const draftCount = tasks.filter((t) => t.reviewer_status === "draft").length;
 
   async function handleAccept(taskId: string) {
     setPending(true);
-    await acceptSprintTaskAction(sprintId, taskId);
-    setPending(false);
+    setActionError(null);
+    try {
+      await acceptSprintTaskAction(sprintId, taskId);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleReject(taskId: string) {
     setPending(true);
-    await rejectSprintTaskAction(sprintId, taskId);
-    setPending(false);
+    setActionError(null);
+    try {
+      await rejectSprintTaskAction(sprintId, taskId);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleSaveEdit(taskId: string, edits: Parameters<typeof editSprintTaskAction>[2]) {
     setPending(true);
-    await editSprintTaskAction(sprintId, taskId, edits);
-    setEditingId(null);
-    setPending(false);
+    setActionError(null);
+    try {
+      await editSprintTaskAction(sprintId, taskId, edits);
+      setEditingId(null);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleApprove() {
     setPending(true);
-    const result = await approveSprintTasksAction(sprintId);
-    setBlockedReason(result.approved ? null : (result.blockedReason ?? "Blocked"));
-    setPending(false);
+    setActionError(null);
+    try {
+      const result = await approveSprintTasksAction(sprintId);
+      setBlockedReason(result.approved ? null : (result.blockedReason ?? "Blocked"));
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleSaveCommentary() {
     setPending(true);
-    await addSprintReviewerCommentaryAction(sprintId, commentary);
-    setPending(false);
+    setActionError(null);
+    try {
+      await addSprintReviewerCommentaryAction(sprintId, commentary);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -92,6 +135,12 @@ export function SprintReviewWorkspaceClient({ sprintId, companyName, findingTitl
         Execution Sprint · status: <span className="font-medium">{sprintStatus}</span>
       </p>
       <p className="mb-6 text-xs text-neutral-500 dark:text-neutral-400">Fixing: {findingTitle}</p>
+
+      {actionError && (
+        <Alert variant="error" className="mb-4">
+          {actionError}
+        </Alert>
+      )}
 
       {draftCount > 0 && (
         <section className="mb-6 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">

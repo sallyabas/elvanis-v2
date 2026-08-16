@@ -152,47 +152,97 @@ export function ReviewWorkspaceClient({
   const [delivered, setDelivered] = useState(false);
   const [sprintError, setSprintError] = useState<string | null>(null);
   const [startingSprintFor, setStartingSprintFor] = useState<string | null>(null);
+  // Real bug found live (confirmed 2026-08-16): every action button on
+  // this workspace — Accept/Edit/Reject, Approve, plan-tier, top-3
+  // reordering, conflict/dispute resolution — could get stuck disabled/
+  // loading forever on a genuine RPC-level failure. None of these
+  // handlers had a try/catch around their await, the same uncaught-RPC-
+  // failure class already found and fixed repeatedly on the CLIENT-facing
+  // intake forms (Tender Readiness, AI Reliability, Data Protection,
+  // Evidence Intake) but never propagated to the reviewer-side workspaces
+  // — this is the biggest and most-used one, so the gap was the most
+  // visible here. Handlers that already had their own dedicated error
+  // state (deliverError/sprintError/rerunError) keep using it — a thrown
+  // exception now lands there too, not just a resolved {success: false}.
+  // Everything else shares one new actionError state.
+  const [actionError, setActionError] = useState<string | null>(null);
 
   async function handleSetPlanTier(tier: "free" | "concierge") {
     if (!companyUserId) return;
     setTierPending(true);
-    await setPlanTierAction(reportId, companyUserId, tier);
-    setTierPending(false);
+    setActionError(null);
+    try {
+      await setPlanTierAction(reportId, companyUserId, tier);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setTierPending(false);
+    }
   }
 
   const findingById = new Map(findings.map((f) => [f.id, f]));
 
   async function handleAccept(findingId: string) {
     setPending(true);
-    await acceptFindingAction(reportId, findingId);
-    setPending(false);
+    setActionError(null);
+    try {
+      await acceptFindingAction(reportId, findingId);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleReject(findingId: string) {
     setPending(true);
-    await rejectFindingAction(reportId, findingId);
-    setPending(false);
+    setActionError(null);
+    try {
+      await rejectFindingAction(reportId, findingId);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleSaveEdit(f: FindingRow, changes: EditFormValues, notes: string) {
     setPending(true);
-    await editFindingAction(reportId, f.id, displayedContent(f), changes, notes || undefined);
-    setEditingId(null);
-    setPending(false);
+    setActionError(null);
+    try {
+      await editFindingAction(reportId, f.id, displayedContent(f), changes, notes || undefined);
+      setEditingId(null);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleResolveDispute(f: FindingRow, resolution: DisputeResolution, notes: string, changes?: EditFormValues) {
     setPending(true);
-    await resolveDisputeAction(reportId, f.id, resolution, notes, displayedContent(f), resolution === "edit" ? changes : undefined);
-    setDisputingId(null);
-    setPending(false);
+    setActionError(null);
+    try {
+      await resolveDisputeAction(reportId, f.id, resolution, notes, displayedContent(f), resolution === "edit" ? changes : undefined);
+      setDisputingId(null);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleResolveConflict(conflictId: string, notes: string) {
     setPending(true);
-    await resolveConflictAction(reportId, conflictId, notes);
-    setResolvingConflictId(null);
-    setPending(false);
+    setActionError(null);
+    try {
+      await resolveConflictAction(reportId, conflictId, notes);
+      setResolvingConflictId(null);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleMoveTop3(index: number, direction: -1 | 1) {
@@ -201,21 +251,39 @@ export function ReviewWorkspaceClient({
     if (swapWith < 0 || swapWith >= next.length) return;
     [next[index], next[swapWith]] = [next[swapWith], next[index]];
     setPending(true);
-    await reRankTop3Action(reportId, next);
-    setPending(false);
+    setActionError(null);
+    try {
+      await reRankTop3Action(reportId, next);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handlePromoteToTop3(findingId: string) {
     setPending(true);
-    await reRankTop3Action(reportId, [findingId, ...top3FindingIds.filter((id) => id !== findingId)]);
-    setPending(false);
+    setActionError(null);
+    try {
+      await reRankTop3Action(reportId, [findingId, ...top3FindingIds.filter((id) => id !== findingId)]);
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleApprove() {
     setPending(true);
-    const result = await approveReportAction(reportId);
-    setBlockedReason(result.approved ? null : (result.blockedReason ?? "Blocked"));
-    setPending(false);
+    setActionError(null);
+    try {
+      const result = await approveReportAction(reportId);
+      setBlockedReason(result.approved ? null : (result.blockedReason ?? "Blocked"));
+    } catch {
+      setActionError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   /**
@@ -227,13 +295,18 @@ export function ReviewWorkspaceClient({
   async function handleDeliver() {
     setPending(true);
     setDeliverError(null);
-    const result = await deliverReportAction(reportId);
-    if (result.success) {
-      setDelivered(true);
-    } else {
-      setDeliverError(result.error ?? "Something went wrong.");
+    try {
+      const result = await deliverReportAction(reportId);
+      if (result.success) {
+        setDelivered(true);
+      } else {
+        setDeliverError(result.error ?? "Something went wrong.");
+      }
+    } catch {
+      setDeliverError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
     }
-    setPending(false);
   }
 
   /**
@@ -246,11 +319,22 @@ export function ReviewWorkspaceClient({
   async function handleStartSprint(findingId: string) {
     setStartingSprintFor(findingId);
     setSprintError(null);
-    const result = await startExecutionSprintAction(reportId, findingId);
-    if (result.success) {
-      router.push(`/review-sprint/${result.sprintId}`);
-    } else {
+    try {
+      const result = await startExecutionSprintAction(reportId, findingId);
+      if (result.success) {
+        // Deliberately NOT resetting startingSprintFor here — the button
+        // stays showing "Drafting tasks…" through the navigation
+        // transition, same as before this fix. Only the failure paths
+        // (below and in catch) reset it, since those are the only cases
+        // where the reviewer stays on this page and needs the button
+        // clickable again.
+        router.push(`/review-sprint/${result.sprintId}`);
+        return;
+      }
       setSprintError(result.error ?? "Something went wrong.");
+      setStartingSprintFor(null);
+    } catch {
+      setSprintError("Something went wrong reaching the server — please try again.");
       setStartingSprintFor(null);
     }
   }
@@ -258,13 +342,18 @@ export function ReviewWorkspaceClient({
   async function handleRerun() {
     setPending(true);
     setRerunError(null);
-    const result = await rerunAuditAction(reportId);
-    if (result.success) {
-      setRerunResultId(result.newReportId ?? null);
-    } else {
-      setRerunError(result.error ?? "Something went wrong.");
+    try {
+      const result = await rerunAuditAction(reportId);
+      if (result.success) {
+        setRerunResultId(result.newReportId ?? null);
+      } else {
+        setRerunError(result.error ?? "Something went wrong.");
+      }
+    } catch {
+      setRerunError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
     }
-    setPending(false);
   }
 
   const undisputedFindings = findings.filter((f) => !f.is_disputed);
@@ -321,6 +410,12 @@ export function ReviewWorkspaceClient({
       <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
         Report status: <span className="font-medium">{reportStatus}</span>
       </p>
+
+      {actionError && (
+        <Alert variant="error" className="mb-4">
+          {actionError}
+        </Alert>
+      )}
 
       {(fullCycle || reviewerOnly) && (
         <p className="mb-6 text-xs text-neutral-500 dark:text-neutral-400">
