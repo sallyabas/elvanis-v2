@@ -173,7 +173,10 @@ export default async function DashboardPage() {
     .from("execution_sprints")
     .select("id, status, target_end_date, selected_finding_id, report_id")
     .eq("company_id", company.id)
-    .in("status", ["scoped", "in_progress"])
+    // "proposed" added 2026-08-18 — the new leading stage, awaiting the
+    // client's own confirm-or-reselect step, is non-terminal too and
+    // belongs in "active status" same as "scoped"/"in_progress".
+    .in("status", ["proposed", "scoped", "in_progress"])
     .order("start_date", { ascending: false, nullsFirst: false });
 
   const activeSprint = (sprintRows ?? []).find((s) => s.status === "in_progress") ?? (sprintRows ?? [])[0] ?? null;
@@ -188,14 +191,18 @@ export default async function DashboardPage() {
     const findingContent = (findingRow?.reviewer_edited_content ?? findingRow?.ai_draft) as LensFinding | undefined;
     sprintFindingTitle = findingContent?.title ?? null;
 
-    const { data: sprintTasks } = await supabase
-      .from("sprint_tasks")
-      .select("status")
-      .eq("execution_sprint_id", activeSprint.id)
-      .neq("reviewer_status", "rejected");
-    const total = sprintTasks?.length ?? 0;
-    const done = (sprintTasks ?? []).filter((t) => t.status === "done").length;
-    sprintTaskCounts = { done, total };
+    // No tasks exist yet while 'proposed' — skip the query rather than
+    // render a confusing "0 of 0 tasks done."
+    if (activeSprint.status !== "proposed") {
+      const { data: sprintTasks } = await supabase
+        .from("sprint_tasks")
+        .select("status")
+        .eq("execution_sprint_id", activeSprint.id)
+        .neq("reviewer_status", "rejected");
+      const total = sprintTasks?.length ?? 0;
+      const done = (sprintTasks ?? []).filter((t) => t.status === "done").length;
+      sprintTaskCounts = { done, total };
+    }
   }
 
   const hasAnyStatusTiles = (activeModuleRequestRows?.length ?? 0) > 0 || (activeSessionRequestRows?.length ?? 0) > 0 || activeSprint;
@@ -231,7 +238,12 @@ export default async function DashboardPage() {
 
   const SESSION_LABELS: Record<string, string> = { discovery: "Discovery Session", delivery: "Delivery Session", f2f_workshop: "F2F Workshop" };
   const SESSION_STATUS_LABELS: Record<string, string> = { requested: "Requested — awaiting scheduling", scheduled: "Scheduled", completed: "Completed", declined: "Declined" };
-  const SPRINT_STATUS_LABELS: Record<string, string> = { scoped: "Being scoped by your reviewer", in_progress: "In progress", complete: "Complete" };
+  const SPRINT_STATUS_LABELS: Record<string, string> = {
+    proposed: "Awaiting your confirmation",
+    scoped: "Being scoped by your reviewer",
+    in_progress: "In progress",
+    complete: "Complete",
+  };
   // Real explanatory copy per active-request card type (item 9) — one
   // plain-language line saying what the thing IS and what happens next,
   // not just a bare status word.
@@ -244,6 +256,7 @@ export default async function DashboardPage() {
     scheduled: "Confirmed — check your email for the details, or see the time above.",
   };
   const SPRINT_EXPLANATION: Record<string, string> = {
+    proposed: "Your reviewer suggests starting here — confirm it, or pick a different finding you'd marked \"interested in help\" on.",
     scoped: "Your reviewer is drafting a real task breakdown for this — you'll see it once it's ready to start.",
     in_progress: "A bounded, paid implementation engagement fixing this one finding — track task progress on the sprint page.",
   };

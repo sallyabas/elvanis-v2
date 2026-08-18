@@ -66,6 +66,28 @@ export function SprintReviewWorkspaceClient({ sprintId, companyName, findingTitl
 
   const draftCount = tasks.filter((t) => t.reviewer_status === "draft").length;
 
+  // Real "proposed" holding state (confirmed 2026-08-18) — nothing to
+  // review yet: proposeSprintFinding() deliberately doesn't draft tasks
+  // until the client has confirmed which finding the sprint should
+  // address. Shown here instead of a disabled Approve button + "No
+  // tasks." card, which would otherwise render but read as confusing/
+  // broken rather than a real, expected waiting state.
+  if (sprintStatus === "proposed") {
+    return (
+      <div className="mx-auto max-w-2xl px-6 py-16 text-center">
+        <h1 className="mb-2 text-xl font-semibold text-neutral-900 dark:text-neutral-50">{companyName}</h1>
+        <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
+          Proposed: <span className="font-medium text-neutral-700 dark:text-neutral-300">{findingTitle}</span>
+        </p>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+          Waiting on the client to confirm this finding (or pick a different one they&apos;d previously marked
+          &quot;interested in help&quot; on) before task-scoping begins. You&apos;ll be able to review the drafted
+          tasks here once they have.
+        </p>
+      </div>
+    );
+  }
+
   async function handleAccept(taskId: string) {
     setPending(true);
     setActionError(null);

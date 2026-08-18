@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettingNumber } from "@/lib/app-settings";
-import { createSprintQueueItem } from "@/lib/execution-sprint/workspace";
+import { createSprintQueueItem, confirmSprintFinding } from "@/lib/execution-sprint/workspace";
 
 /**
  * Client-facing Execution Sprint actions (confirmed 2026-08-06). The
@@ -157,6 +157,39 @@ export async function signOffSprintAction(sprintId: string): Promise<{ success: 
       });
     }
 
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Something went wrong." };
+  }
+}
+
+/**
+ * Real client confirm-or-reselect step (confirmed 2026-08-18) — the
+ * direct closure of the reported gap: a client can confirm the reviewer's
+ * proposed finding, or choose a different one they'd previously marked
+ * "interested in help" on. Session-verified here (RLS-scoped read
+ * confirms the caller owns this sprint and it's genuinely still
+ * 'proposed'), then the real re-verification and task-drafting happens in
+ * confirmSprintFinding() itself — defensive, not just trusted from this
+ * layer.
+ */
+export async function confirmSprintFindingAction(sprintId: string, confirmedFindingId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not signed in." };
+
+    const { data: sprint, error: sprintError } = await supabase
+      .from("execution_sprints")
+      .select("id, status")
+      .eq("id", sprintId)
+      .single();
+    if (sprintError || !sprint) return { success: false, error: "Sprint not found, or you don't have access to it." };
+    if (sprint.status !== "proposed") return { success: false, error: "This sprint has already been confirmed." };
+
+    await confirmSprintFinding(sprintId, confirmedFindingId);
     return { success: true };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Something went wrong." };

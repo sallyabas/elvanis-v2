@@ -60,7 +60,13 @@ interface FindingTitleLookup {
  */
 async function templateFor(
   admin: Admin,
-  notification: { event_type: string; recipient_type: "client" | "reviewer"; recipient_id: string; related_report_id: string | null },
+  notification: {
+    event_type: string;
+    recipient_type: "client" | "reviewer";
+    recipient_id: string;
+    related_report_id: string | null;
+    related_sprint_id: string | null;
+  },
 ): Promise<{ subject: string; html: string }> {
   const eventType = notification.event_type;
 
@@ -186,6 +192,38 @@ async function templateFor(
         subject: "Reply to your Execution Sprint question",
         html: `${greeting}<p>Your reviewer replied to your Execution Sprint note. Check your sprint page for details.</p>${loginReminder}`,
       };
+    case "sprint_proposed": {
+      // Client-facing (confirmed 2026-08-18, closes the real "sprint just
+      // appears already started" gap) — fires the moment a reviewer
+      // proposes a sprint, before any task-scoping happens. Links to the
+      // specific sprint via related_sprint_id (same structured-link
+      // precedent as related_report_id) and names the actual proposed
+      // finding, same "hint at what's inside with real content" standard
+      // already applied to report_ready.
+      let sprintUrl = `${SITE_URL}/dashboard`;
+      let findingHint = "one of your findings";
+      if (notification.related_sprint_id) {
+        sprintUrl = `${SITE_URL}/execution-sprint/${notification.related_sprint_id}`;
+        const { data: sprint } = await admin
+          .from("execution_sprints")
+          .select("selected_finding_id")
+          .eq("id", notification.related_sprint_id)
+          .maybeSingle();
+        if (sprint?.selected_finding_id) {
+          const { data: finding } = await admin
+            .from("lens_findings")
+            .select("ai_draft, reviewer_edited_content")
+            .eq("id", sprint.selected_finding_id as string)
+            .maybeSingle();
+          const title = (finding?.reviewer_edited_content as { title?: string } | null)?.title ?? (finding?.ai_draft as { title?: string } | null)?.title;
+          if (title) findingHint = `"${title}"`;
+        }
+      }
+      return {
+        subject: "Your reviewer suggests an Execution Sprint",
+        html: `${greeting}<p>Your reviewer suggests starting an Execution Sprint on ${findingHint}. Confirm it, or pick a different finding you'd previously marked "interested in help" on instead.</p><p><a href="${sprintUrl}">Review and confirm</a></p>${loginReminder}`,
+      };
+    }
     case "module_new_submission":
       // Reviewer-facing (confirmed 2026-08-15, module intake/service flow
       // review) — closes a real gap: a standalone module request
@@ -231,7 +269,7 @@ export async function sendPendingNotifications(): Promise<DispatchResult> {
 
   const { data: pending, error } = await supabase
     .from("notifications")
-    .select("id, recipient_type, recipient_id, event_type, related_report_id")
+    .select("id, recipient_type, recipient_id, event_type, related_report_id, related_sprint_id")
     .is("sent_at", null)
     .eq("channel", "email");
   if (error) throw new Error(`sendPendingNotifications: failed to load pending notifications: ${error.message}`);
@@ -269,6 +307,7 @@ export async function sendPendingNotifications(): Promise<DispatchResult> {
         recipient_type: notification.recipient_type as "client" | "reviewer",
         recipient_id: notification.recipient_id as string,
         related_report_id: (notification.related_report_id as string | null) ?? null,
+        related_sprint_id: (notification.related_sprint_id as string | null) ?? null,
       });
       await sendEmail({ to: user.email as string, subject, html });
 

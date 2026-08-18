@@ -310,10 +310,12 @@ export function ReviewWorkspaceClient({
   }
 
   /**
-   * Execution Sprint entry point (confirmed 2026-08-06) — creates the
-   * sprint and triggers the AI-drafted task breakdown, then navigates the
-   * reviewer straight to the mandatory Accept/Edit/Reject pass. Only ever
-   * offered for approved/edited findings, matching createSprintFromFinding()'s
+   * Execution Sprint entry point (confirmed 2026-08-06, split into a real
+   * client-confirmation step 2026-08-18) — proposes the sprint to the
+   * client rather than immediately drafting tasks; the reviewer's
+   * Accept/Edit/Reject pass only becomes available once the client has
+   * confirmed (or reselected) which finding it should address. Only ever
+   * offered for approved/edited findings, matching proposeSprintFinding()'s
    * own server-side guard.
    */
   async function handleStartSprint(findingId: string) {
@@ -323,11 +325,11 @@ export function ReviewWorkspaceClient({
       const result = await startExecutionSprintAction(reportId, findingId);
       if (result.success) {
         // Deliberately NOT resetting startingSprintFor here — the button
-        // stays showing "Drafting tasks…" through the navigation
-        // transition, same as before this fix. Only the failure paths
-        // (below and in catch) reset it, since those are the only cases
-        // where the reviewer stays on this page and needs the button
-        // clickable again.
+        // stays showing "Proposing…" through the navigation transition,
+        // same as before this fix. Only the failure paths (below and in
+        // catch) reset it, since those are the only cases where the
+        // reviewer stays on this page and needs the button clickable
+        // again.
         router.push(`/review-sprint/${result.sprintId}`);
         return;
       }
@@ -657,13 +659,19 @@ export function ReviewWorkspaceClient({
         )}
       </Card>
 
-      {/* Execution Sprint entry point (confirmed 2026-08-06) — reviewer-triggered from an approved/edited finding, no in-app checkout (payment confirmed externally first). */}
+      {/* Execution Sprint entry point (confirmed 2026-08-06, split into a
+          real client-confirmation step 2026-08-18 — direct founder
+          question, "does the client see any confirmation before a sprint
+          formally begins?" confirmed no, closed the gap) —
+          reviewer-triggered from an approved/edited finding, no in-app
+          checkout (payment confirmed externally first). */}
       {(reportStatus === "approved" || reportStatus === "sent") && (
-        <Card title="Start an Execution Sprint" className="mt-6">
+        <Card title="Propose an Execution Sprint" className="mt-6">
           <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
             A bounded 2-4 week paid implementation engagement fixing ONE finding below — only once payment is
-            confirmed outside the app. Creates the sprint and AI-drafts its task breakdown; you&apos;ll land on a
-            review pass before the client ever sees it.
+            confirmed outside the app. Proposes the sprint to the client for confirmation first — once they confirm
+            (or pick a different finding they&apos;d previously marked &quot;interested in help&quot; on), you&apos;ll
+            land on a review pass before the client ever sees the actual task plan.
           </p>
           {sprintError && (
             <Alert variant="error" className="mb-3">
@@ -682,7 +690,7 @@ export function ReviewWorkspaceClient({
                     onClick={() => handleStartSprint(f.id)}
                     className="shrink-0 px-2 py-1 text-xs"
                   >
-                    {startingSprintFor === f.id ? "Drafting tasks…" : "Start Execution Sprint"}
+                    {startingSprintFor === f.id ? "Proposing…" : "Propose Execution Sprint"}
                   </Button>
                 </li>
               ))}

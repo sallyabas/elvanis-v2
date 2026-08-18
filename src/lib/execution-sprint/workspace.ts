@@ -1,7 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/notifications/send-email";
 import { draftSprintTasks } from "./draft-tasks";
-import type { CompanyProfileForLens, GoalContext, LensFinding } from "@/lib/lenses/types";
+import { loadCompanyProfileForLens, loadGoalContext } from "@/lib/audit/load-profile";
+import type { LensFinding } from "@/lib/lenses/types";
 
 /**
  * Execution Sprint reviewer workspace (confirmed 2026-08-06) — the paid
@@ -34,91 +35,140 @@ export interface CreateSprintResult {
   taskCount: number;
 }
 
+export interface ProposeSprintResult {
+  sprintId: string;
+}
+
 /**
- * Reviewer-triggered from an approved report's finding (confirmed
- * 2026-08-06) — no in-app checkout exists anywhere in this codebase,
- * payment is confirmed externally first, same pattern already used for
- * Concierge/F2F Workshop. Loads the CURRENT company/goal profile, never a
- * cached copy (same "living record" principle as every lens call), then
- * calls the AI drafter and persists tasks in `draft` status — nothing is
- * client-visible until the reviewer's Accept/Edit/Reject pass clears the
- * mandatory gate (approveSprintTasks below).
+ * Real gap found and closed (confirmed 2026-08-18, direct founder
+ * question): "does the client see any confirmation step before a Sprint
+ * formally begins, or does it just appear already started?" Investigated
+ * before building anything — confirmed the answer was genuinely no
+ * confirmation step existed anywhere, not even a notification. This
+ * function is the first of the two-step replacement for what used to be
+ * createSprintFromFinding()'s single step: the reviewer proposes ONE
+ * finding (still their call, not opened up to a free client choice), but
+ * task-drafting no longer happens yet — that's confirmSprintFinding()
+ * below, which only runs once the client has actually confirmed (or
+ * reselected) which finding the sprint should address. Same "no in-app
+ * checkout, payment confirmed externally first" pattern as before.
  */
-export async function createSprintFromFinding(reportId: string, findingId: string): Promise<CreateSprintResult> {
+export async function proposeSprintFinding(reportId: string, findingId: string): Promise<ProposeSprintResult> {
   const supabase = createAdminClient();
 
   const { data: findingRow, error: findingError } = await supabase
     .from("lens_findings")
-    .select("id, report_id, reviewer_status, ai_draft, reviewer_edited_content")
+    .select("id, report_id, reviewer_status")
     .eq("id", findingId)
     .single();
-  if (findingError || !findingRow) throw new Error(`createSprintFromFinding: finding not found: ${findingError?.message}`);
-  if (findingRow.report_id !== reportId) throw new Error("createSprintFromFinding: finding does not belong to this report");
+  if (findingError || !findingRow) throw new Error(`proposeSprintFinding: finding not found: ${findingError?.message}`);
+  if (findingRow.report_id !== reportId) throw new Error("proposeSprintFinding: finding does not belong to this report");
   if (findingRow.reviewer_status !== "approved" && findingRow.reviewer_status !== "edited") {
-    throw new Error("createSprintFromFinding: only a reviewer-approved or reviewer-edited finding can seed an Execution Sprint");
+    throw new Error("proposeSprintFinding: only a reviewer-approved or reviewer-edited finding can seed an Execution Sprint");
   }
-  const finding = (findingRow.reviewer_edited_content ?? findingRow.ai_draft) as LensFinding;
 
   const { data: report, error: reportError } = await supabase
     .from("reports")
-    .select("company_id, goal_id, status")
+    .select("company_id, status, companies(user_id)")
     .eq("id", reportId)
     .single();
-  if (reportError || !report) throw new Error(`createSprintFromFinding: report not found: ${reportError?.message}`);
+  if (reportError || !report) throw new Error(`proposeSprintFinding: report not found: ${reportError?.message}`);
   if (report.status !== "approved" && report.status !== "sent") {
-    throw new Error(`createSprintFromFinding: report must be approved or delivered first (current status: ${report.status})`);
+    throw new Error(`proposeSprintFinding: report must be approved or delivered first (current status: ${report.status})`);
   }
-
-  const { data: company, error: companyError } = await supabase
-    .from("companies")
-    .select("id, name, industry, business_model, registration_country, customer_market_countries, employee_count, stage, revenue_range_band, customer_type, main_tools_stack, team_structure_summary")
-    .eq("id", report.company_id)
-    .single();
-  if (companyError || !company) throw new Error(`createSprintFromFinding: company not found: ${companyError?.message}`);
-
-  const { data: goal, error: goalError } = await supabase
-    .from("goals")
-    .select("primary_goal, secondary_goal, urgency_level, target_metric, time_horizon, success_definition, desired_future_state_primary, desired_future_state_secondary")
-    .eq("id", report.goal_id)
-    .single();
-  if (goalError || !goal) throw new Error(`createSprintFromFinding: goal not found: ${goalError?.message}`);
-
-  const companyProfile: CompanyProfileForLens = {
-    name: company.name as string,
-    industry: company.industry as string | null,
-    businessModel: company.business_model as "B2B" | "B2C" | null,
-    registrationCountry: company.registration_country as string | null,
-    customerMarketCountries: (company.customer_market_countries as string[]) ?? [],
-    employeeCount: company.employee_count as number | null,
-    stage: company.stage as string | null,
-    revenueRangeBand: company.revenue_range_band as string | null,
-    customerType: company.customer_type as string | null,
-    mainToolsStack: company.main_tools_stack as Record<string, unknown> | null,
-    teamStructureSummary: company.team_structure_summary as string | null,
-  };
-
-  const goalContext: GoalContext = {
-    primaryGoal: goal.primary_goal,
-    secondaryGoal: goal.secondary_goal,
-    urgencyLevel: goal.urgency_level,
-    targetMetric: goal.target_metric,
-    timeHorizon: goal.time_horizon,
-    successDefinition: goal.success_definition,
-    desiredFutureStatePrimary: goal.desired_future_state_primary,
-    desiredFutureStateSecondary: goal.desired_future_state_secondary,
-  };
 
   const { data: sprintRow, error: sprintError } = await supabase
     .from("execution_sprints")
-    .insert({ company_id: report.company_id, report_id: reportId, selected_finding_id: findingId, status: "scoped" })
+    .insert({ company_id: report.company_id, report_id: reportId, selected_finding_id: findingId, status: "proposed" })
     .select("id")
     .single();
-  if (sprintError || !sprintRow) throw new Error(`createSprintFromFinding: failed to create sprint: ${sprintError?.message}`);
+  if (sprintError || !sprintRow) throw new Error(`proposeSprintFinding: failed to create sprint: ${sprintError?.message}`);
+
+  // Real, client-facing notification — the exact thing that was missing
+  // before this fix. Logged now, actually sent on the next dispatch pass,
+  // same "log now, send explicitly" pattern as every other notification-
+  // creating function in this codebase.
+  const owner = report.companies as unknown as { user_id: string } | null;
+  if (owner?.user_id) {
+    const { error: notifError } = await supabase.from("notifications").insert({
+      recipient_type: "client",
+      recipient_id: owner.user_id,
+      event_type: "sprint_proposed",
+      channel: "email",
+      sent_at: null,
+      related_sprint_id: sprintRow.id,
+    });
+    if (notifError) throw new Error(`proposeSprintFinding: failed to log notification: ${notifError.message}`);
+  }
+
+  return { sprintId: sprintRow.id as string };
+}
+
+/**
+ * The real confirm-or-reselect step (confirmed 2026-08-18) — runs the
+ * task-drafting work that used to happen immediately inside
+ * createSprintFromFinding(), but only now, once the client has actually
+ * confirmed which finding the sprint should address. `confirmedFindingId`
+ * must be either the reviewer's originally-proposed finding, or a finding
+ * the client had previously marked "interested in help" on for the SAME
+ * report (via sprint_interest_requests) — this isn't opened up to a free
+ * choice from scratch, the client is choosing among findings they've
+ * already flagged real interest in, or sticking with the reviewer's own
+ * pick. Re-verified here defensively (not just trusted from the caller),
+ * since this function's caller is a client-facing Server Action. The
+ * reviewer still does the actual task-scoping work (Accept/Edit/Reject)
+ * from here via the existing mandatory gate — this only decides WHICH
+ * finding gets scoped, never skips that review pass.
+ */
+export async function confirmSprintFinding(sprintId: string, confirmedFindingId: string): Promise<CreateSprintResult> {
+  const supabase = createAdminClient();
+
+  const { data: sprint, error: sprintError } = await supabase
+    .from("execution_sprints")
+    .select("id, report_id, company_id, status, selected_finding_id")
+    .eq("id", sprintId)
+    .single();
+  if (sprintError || !sprint) throw new Error(`confirmSprintFinding: sprint not found: ${sprintError?.message}`);
+  if (sprint.status !== "proposed") {
+    throw new Error(`confirmSprintFinding: sprint must be in 'proposed' status (current status: ${sprint.status})`);
+  }
+
+  if (confirmedFindingId !== sprint.selected_finding_id) {
+    const { data: interestRow } = await supabase
+      .from("sprint_interest_requests")
+      .select("id")
+      .eq("company_id", sprint.company_id)
+      .eq("report_id", sprint.report_id)
+      .eq("finding_id", confirmedFindingId)
+      .eq("response", "interested")
+      .maybeSingle();
+    if (!interestRow) {
+      throw new Error("confirmSprintFinding: the chosen finding must be one you'd previously marked 'interested in help' on");
+    }
+  }
+
+  const { data: findingRow, error: findingError } = await supabase
+    .from("lens_findings")
+    .select("id, report_id, reviewer_status, ai_draft, reviewer_edited_content")
+    .eq("id", confirmedFindingId)
+    .single();
+  if (findingError || !findingRow) throw new Error(`confirmSprintFinding: finding not found: ${findingError?.message}`);
+  if (findingRow.report_id !== sprint.report_id) throw new Error("confirmSprintFinding: finding does not belong to this sprint's report");
+  if (findingRow.reviewer_status !== "approved" && findingRow.reviewer_status !== "edited") {
+    throw new Error("confirmSprintFinding: only a reviewer-approved or reviewer-edited finding can be selected");
+  }
+  const finding = (findingRow.reviewer_edited_content ?? findingRow.ai_draft) as LensFinding;
+
+  const { data: reportRow, error: reportRowError } = await supabase.from("reports").select("goal_id").eq("id", sprint.report_id).single();
+  if (reportRowError || !reportRow) throw new Error(`confirmSprintFinding: report not found: ${reportRowError?.message}`);
+
+  const companyProfile = await loadCompanyProfileForLens(supabase, sprint.company_id as string);
+  const goalContext = await loadGoalContext(supabase, reportRow.goal_id as string);
 
   const draftedTasks = await draftSprintTasks(finding, companyProfile, goalContext);
 
   const taskRows = draftedTasks.map((t) => ({
-    execution_sprint_id: sprintRow.id,
+    execution_sprint_id: sprintId,
     task_description: t.taskDescription,
     owner: t.ownerRoleLabel,
     kpi_description: t.kpiDescription,
@@ -132,9 +182,15 @@ export async function createSprintFromFinding(reportId: string, findingId: strin
   }));
 
   const { error: tasksError } = await supabase.from("sprint_tasks").insert(taskRows);
-  if (tasksError) throw new Error(`createSprintFromFinding: failed to persist drafted tasks: ${tasksError.message}`);
+  if (tasksError) throw new Error(`confirmSprintFinding: failed to persist drafted tasks: ${tasksError.message}`);
 
-  return { sprintId: sprintRow.id as string, taskCount: taskRows.length };
+  const { error: updateError } = await supabase
+    .from("execution_sprints")
+    .update({ selected_finding_id: confirmedFindingId, confirmed_at: new Date().toISOString(), status: "scoped" })
+    .eq("id", sprintId);
+  if (updateError) throw new Error(`confirmSprintFinding: failed to update sprint: ${updateError.message}`);
+
+  return { sprintId, taskCount: taskRows.length };
 }
 
 // ── Per-task review (Accept/Edit/Reject) ────────────────────────────────
@@ -294,7 +350,7 @@ export async function listOpenSprintQueueItems(): Promise<(SprintQueueItemRow & 
 export interface SprintListRow {
   id: string;
   companyName: string;
-  status: "scoped" | "in_progress" | "complete";
+  status: "proposed" | "scoped" | "in_progress" | "complete";
   findingTitle: string | null;
   targetEndDate: string | null;
   createdAt: string | null;
@@ -324,7 +380,7 @@ export async function listAllSprints(): Promise<SprintListRow[]> {
     return {
       id: row.id as string,
       companyName: company?.name ?? "Unknown company",
-      status: row.status as "scoped" | "in_progress" | "complete",
+      status: row.status as "proposed" | "scoped" | "in_progress" | "complete",
       findingTitle: finding?.reviewer_edited_content?.title ?? finding?.ai_draft?.title ?? null,
       targetEndDate: row.target_end_date as string | null,
       createdAt: row.created_at as string | null,
