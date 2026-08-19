@@ -6,6 +6,7 @@ import { listPricing } from "@/lib/pricing";
 import { listOpenSprintQueueItems, listAllSprints } from "@/lib/execution-sprint/workspace";
 import { listOpenSprintInterestRequests } from "@/lib/execution-sprint/interest-requests";
 import { computeSubmissionDisplayStage, SUBMISSION_STAGE_LABELS } from "@/lib/evidence/submission-status";
+import { getTotalTurnaroundHours } from "@/lib/reports/sla";
 import {
   markRegulatoryContentReviewedAction,
   scheduleSessionRequestAction,
@@ -105,6 +106,23 @@ export default async function ReviewerQueuePage() {
   if (moduleError) {
     return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {moduleError.message}</div>;
   }
+
+  // Real gap closed (confirmed 2026-08-19, direct founder request) — once
+  // a reviewer approves a module request, it dropped out of this queue
+  // entirely with no reminder that delivery is still owed. Reuses the
+  // exact same DB-backed total-turnaround-hours target core reports
+  // already enforce (getTotalTurnaroundHours()) against created_at, since
+  // modules have no separate client-edit-window step — created_at IS the
+  // real submission moment here.
+  const { data: awaitingDeliveryModules, error: awaitingDeliveryError } = await supabase
+    .from("module_requests")
+    .select("id, module_type, created_at, approved_at, companies(name)")
+    .eq("status", "approved");
+
+  if (awaitingDeliveryError) {
+    return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {awaitingDeliveryError.message}</div>;
+  }
+  const { totalHours: moduleTurnaroundHours } = await getTotalTurnaroundHours();
 
   const { data: scopedSprints, error: sprintsError } = await supabase
     .from("execution_sprints")
@@ -479,6 +497,51 @@ export default async function ReviewerQueuePage() {
               </ul>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Real gap closed (confirmed 2026-08-19, direct founder request) —
+          once a reviewer approves a module request, it previously dropped
+          out of this queue entirely (this page only ever queried
+          status = 'pending_review') with nothing to remind the reviewer
+          delivery is still owed. Same visual "Overdue" badge pattern as
+          "Ready for review" above, reusing the same DB-backed total-
+          turnaround-hours target against created_at (modules have no
+          separate client-edit-window step, so created_at is the real
+          submission moment here). */}
+      {(awaitingDeliveryModules ?? []).length > 0 && (
+        <div className="mt-8">
+          <h2 className="mb-3 text-lg font-medium text-neutral-900 dark:text-neutral-50">Awaiting delivery</h2>
+          <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
+            Reviewed and approved, not yet delivered to the client.
+          </p>
+          <ul className="space-y-2">
+            {(awaitingDeliveryModules ?? []).map((r) => {
+              const deliveryDeadline = new Date(new Date(r.created_at as string).getTime() + moduleTurnaroundHours * 60 * 60 * 1000);
+              const overdue = deliveryDeadline < new Date();
+              const companyName = (r.companies as unknown as { name: string } | null)?.name ?? "Unknown company";
+              return (
+                <li key={r.id as string} className="flex items-center justify-between rounded-md border border-neutral-200 bg-white p-3 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">
+                      {companyName} — {MODULE_LABELS[r.module_type as string] ?? (r.module_type as string)}
+                      {overdue && (
+                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-800 dark:bg-red-950 dark:text-red-300">
+                          Overdue
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                      Approved {r.approved_at ? new Date(r.approved_at as string).toLocaleString() : "unknown"}
+                    </div>
+                  </div>
+                  <LinkButton href={`/review-module/${r.id}`} className="px-3 py-1.5 text-sm">
+                    Open
+                  </LinkButton>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 

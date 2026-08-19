@@ -158,6 +158,13 @@ export function ExecutionSprintClient({
     <div className="mx-auto max-w-3xl px-6 py-10">
       <p className="text-xs uppercase tracking-wide text-neutral-500 dark:text-neutral-400">{companyName} — Execution Sprint</p>
       <h1 className="mt-1 text-2xl font-semibold">{findingTitle}</h1>
+      {/* Real narrative intro (confirmed 2026-08-19, direct founder
+          request) — a client landing here previously had no plain-English
+          framing of what this page even is before the task list started. */}
+      <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
+        This sprint exists to fix &quot;{findingTitle}&quot; — your reviewer has broken it into the tasks below. Update
+        Status and Actual as work happens.
+      </p>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-neutral-600 dark:text-neutral-400">
         <span>
           Status: <strong className="font-medium capitalize">{sprintStatus.replace("_", " ")}</strong>
@@ -240,13 +247,25 @@ export function ExecutionSprintClient({
                     disabled={savingId === task.id || sprintStatus === "complete"}
                     onBlur={(e) => e.target.value !== "" && handleKpiActualSave(task.id, e.target.value)}
                     className="w-24"
+                    // Real gap closed (confirmed 2026-08-19, direct
+                    // founder request) — the "Actual" input had no unit in
+                    // sight next to it. There's no separate structured
+                    // kpi_unit field in the schema, so kpi_description
+                    // itself (e.g. "Number of qualified prospects
+                    // identified") IS the honest unit label here — reusing
+                    // it as the input's hint rather than inventing a new
+                    // field for the same information.
+                    hint={task.kpi_description ?? undefined}
                   />
                 )}
 
                 {sprintStatus !== "complete" && (
-                  <button type="button" onClick={() => setNoteOpenFor(isOpen ? null : task.id)} className="pb-2 text-sm text-neutral-500 underline hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
-                    Request a change
-                  </button>
+                  <div className="pb-2">
+                    <button type="button" onClick={() => setNoteOpenFor(isOpen ? null : task.id)} className="text-sm text-neutral-500 underline hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+                      Request a change
+                    </button>
+                    <p className="text-xs text-neutral-400 dark:text-neutral-500">Ask your reviewer to adjust a task&apos;s owner, due date, or scope.</p>
+                  </div>
                 )}
               </div>
 

@@ -11,6 +11,7 @@ import { computeJourneyStatus } from "@/lib/reports/journey-status";
 import { loadGoalMetricTrend, type MetricTrend } from "@/lib/goals/metric-trend";
 import { aggregateFinancialImpact, formatCurrencyRange, isUsableFinancialImpact } from "@/lib/reports/financial-impact";
 import { MODULE_META, MODULE_ORDER, MODULE_STATUS_LABELS, type ModuleType } from "@/lib/modules/module-meta";
+import { getTotalTurnaroundHours } from "@/lib/reports/sla";
 import { NextStepBanner } from "@/app/_components/NextStepBanner";
 import { Card } from "@/app/_components/ui/Card";
 import { LinkButton } from "@/app/_components/ui/LinkButton";
@@ -83,6 +84,17 @@ export default async function DashboardPage() {
   let top3: LensFinding[] = [];
   let allReportFindings: FindingForCascade[] = [];
   let top3WithIds: { id: string; finding: LensFinding }[] = [];
+  // Real, honest priority list (confirmed 2026-08-19, direct founder
+  // request) — replaces the "Top 3 priorities" card's old fixed-3 display.
+  // top3/top3WithIds (above) stay exactly as they were: the reviewer's own
+  // curated top_3_finding_ids selection, still driving the action banner's
+  // #1 pick and the roadmap derivation — a deliberate reviewer judgment
+  // call this pass doesn't touch. This is a SEPARATE, additional list: every
+  // approved/edited finding at critical or high severity, however many
+  // that genuinely is, so the Dashboard stops force-fitting a real client's
+  // finding count into a fixed "3" the product name implies but the data
+  // doesn't always support.
+  let urgentFindings: { id: string; finding: LensFinding }[] = [];
   if (latestReport) {
     const top3Ids = new Set((latestReport.top_3_finding_ids as string[]) ?? []);
     const { data: reportFindings } = await supabase
@@ -96,7 +108,29 @@ export default async function DashboardPage() {
       const content = (f.reviewer_edited_content ?? f.ai_draft) as LensFinding;
       return { id: f.id as string, lens: f.lens, title: content.title, diagnosis: content.diagnosis };
     });
+    urgentFindings = visible
+      .map((f) => ({ id: f.id as string, finding: (f.reviewer_edited_content ?? f.ai_draft) as LensFinding }))
+      .filter((f) => f.finding.severity === "critical" || f.finding.severity === "high");
   }
+
+  // Honest label for the priorities card — derived directly from the real
+  // severity composition, never a hardcoded "Top 3." A single item always
+  // reads "top priority" regardless of its exact severity (matches how a
+  // client would actually describe having just one urgent thing); multiple
+  // items get the specific severity name only when every one of them
+  // genuinely shares it, otherwise a generic-but-honest "top priorities"
+  // label rather than falsely implying uniform severity.
+  function computeUrgentLabel(findings: { finding: LensFinding }[]): string {
+    if (findings.length === 0) return "Nothing urgent right now";
+    if (findings.length === 1) return "Your top priority (1)";
+    const severities = new Set(findings.map((f) => f.finding.severity));
+    if (severities.size === 1) {
+      const [only] = severities;
+      return `Your ${only} priorities (${findings.length})`;
+    }
+    return `Your top priorities (${findings.length})`;
+  }
+  const urgentLabel = computeUrgentLabel(urgentFindings);
   const recommendationLibrary = await loadRecommendationLibrary();
   const roadmap = deriveRoadmap(top3WithIds, allReportFindings, recommendationLibrary);
 
@@ -112,7 +146,7 @@ export default async function DashboardPage() {
   // Real aggregated financial exposure across the top 3 (item 7) — see
   // financial-impact.ts's own docblock for why this is real, existing
   // per-finding data, not a new number invented for this pass.
-  const top3FinancialExposure = aggregateFinancialImpact(top3);
+  const urgentFinancialExposure = aggregateFinancialImpact(urgentFindings.map((f) => f.finding));
 
   // Client's stated goal, pinned (item 3) — the same `goals` row already
   // queried for the metric trend below, extended to also select
@@ -156,10 +190,31 @@ export default async function DashboardPage() {
   const admin = createAdminClient();
   const { data: activeModuleRequestRows } = await admin
     .from("module_requests")
-    .select("id, module_type, status, created_at")
+    .select("id, module_type, status, created_at, approved_at")
     .eq("company_id", company.id)
     .in("status", ["pending_review", "approved"])
     .order("created_at", { ascending: false });
+
+  // Real client-facing overdue-delivery copy (confirmed 2026-08-19, direct
+  // founder request) — modules have no client-edit-window step (they go
+  // straight to pending_review on submission), so there's no separate
+  // submitted_at/edit_window_closes_at pair to anchor a deadline against
+  // the way core reports do. created_at IS the real submission moment for
+  // a module request, so the same DB-backed total-turnaround-hours target
+  // core reports already use (getTotalTurnaroundHours()) is reused here
+  // against created_at, rather than inventing a second, module-specific
+  // SLA number.
+  const { totalHours: moduleTurnaroundHours } = await getTotalTurnaroundHours();
+  // Uses `new Date()` for "now", matching the exact idiom this codebase's
+  // own pre-existing Overdue-badge logic already uses (queue/page.tsx's
+  // `review_due_at` check below) — the bare `Date.now()` static method is
+  // what a real React-purity lint rule flags as impure; `new Date()`
+  // construction is the tolerated, already-shipped pattern here.
+  function isModuleOverdue(status: string, createdAt: string): boolean {
+    if (status !== "approved") return false;
+    const deadline = new Date(new Date(createdAt).getTime() + moduleTurnaroundHours * 60 * 60 * 1000);
+    return deadline < new Date();
+  }
 
   const { data: activeSessionRequestRows } = await supabase
     .from("session_requests")
@@ -266,7 +321,7 @@ export default async function DashboardPage() {
   if (latestReport || activeRequestsCount > 0) {
     const parts: string[] = [];
     if (latestReport) {
-      parts.push(`${top3.length} priorit${top3.length === 1 ? "y" : "ies"} identified`);
+      parts.push(`${urgentFindings.length} priorit${urgentFindings.length === 1 ? "y" : "ies"} identified`);
       if (readiness !== null) {
         parts.push(`${opportunities.length} AI opportunit${opportunities.length === 1 ? "y" : "ies"} flagged`);
       }
@@ -341,36 +396,41 @@ export default async function DashboardPage() {
               financial impact inline under each title, plus a real
               aggregated exposure line across all three when at least one
               is quantified. */}
-          <Card title="Top 3 priorities">
-            {top3FinancialExposure && (
+          <Card title={urgentLabel}>
+            {urgentFinancialExposure && (
               <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">
                 Together, these represent an estimated{" "}
                 <span className="font-semibold text-neutral-900 dark:text-neutral-50">
-                  {formatCurrencyRange(top3FinancialExposure.low, top3FinancialExposure.high, top3FinancialExposure.currency)}
+                  {formatCurrencyRange(urgentFinancialExposure.low, urgentFinancialExposure.high, urgentFinancialExposure.currency)}
                 </span>{" "}
                 in cost/risk exposure
-                {top3FinancialExposure.quantifiedCount < top3FinancialExposure.totalCount &&
-                  ` (based on ${top3FinancialExposure.quantifiedCount} of ${top3FinancialExposure.totalCount} findings with a quantified estimate)`}
+                {urgentFinancialExposure.quantifiedCount < urgentFinancialExposure.totalCount &&
+                  ` (based on ${urgentFinancialExposure.quantifiedCount} of ${urgentFinancialExposure.totalCount} findings with a quantified estimate)`}
                 .
               </p>
             )}
-            {top3.length === 0 ? (
-              <p className="text-sm text-neutral-500 dark:text-neutral-400">No priorities to show.</p>
+            {urgentFindings.length === 0 ? (
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                Nothing at critical or high severity right now — see the full report for everything else found.
+              </p>
             ) : (
               <ol className="list-inside list-decimal space-y-3 text-sm text-neutral-800 dark:text-neutral-200">
-                {top3.map((f) => (
-                  <li key={f.findingId}>
-                    <span>{f.title}</span>
-                    <div className="ml-5 mt-1 flex flex-wrap items-center gap-2 text-xs">
-                      <span className={`rounded px-2 py-0.5 font-semibold uppercase tracking-wide ${SEVERITY_STYLES[f.severity] ?? ""}`}>{f.severity}</span>
-                      {isUsableFinancialImpact(f.financialImpact) && (
-                        <span className="text-neutral-500 dark:text-neutral-400">
-                          Estimated impact: {formatCurrencyRange(f.financialImpact.impactBandLow, f.financialImpact.impactBandHigh, f.financialImpact.currency)}
-                        </span>
-                      )}
-                    </div>
-                  </li>
-                ))}
+                {urgentFindings.map((item) => {
+                  const f = item.finding;
+                  return (
+                    <li key={item.id}>
+                      <span>{f.title}</span>
+                      <div className="ml-5 mt-1 flex flex-wrap items-center gap-2 text-xs">
+                        <span className={`rounded px-2 py-0.5 font-semibold uppercase tracking-wide ${SEVERITY_STYLES[f.severity] ?? ""}`}>{f.severity}</span>
+                        {isUsableFinancialImpact(f.financialImpact) && (
+                          <span className="text-neutral-500 dark:text-neutral-400">
+                            Estimated impact: {formatCurrencyRange(f.financialImpact.impactBandLow, f.financialImpact.impactBandHigh, f.financialImpact.currency)}
+                          </span>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
               </ol>
             )}
             <Link href={`/reports/${latestReport.id}`} className="mt-3 inline-block text-sm underline">
@@ -543,6 +603,24 @@ export default async function DashboardPage() {
                 <Link href={`/execution-sprint/${activeSprint.id}`} className="mt-1 inline-block underline">
                   View sprint
                 </Link>
+                {/* Real gap closed (confirmed 2026-08-19, direct founder
+                    request) — the "Interested in help implementing this?"
+                    action already exists on every eligible finding on the
+                    report page and already routes to the reviewer queue,
+                    but nothing on Dashboard ever pointed a client back to
+                    it. Only shown once the sprint is genuinely under way
+                    (scoped/in_progress) — during "proposed", the client is
+                    already being asked to pick a finding on the sprint's
+                    own confirm-or-reselect page, so a second, separate
+                    "want something else" link here would be redundant. */}
+                {activeSprint.status !== "proposed" && (
+                  <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                    <Link href={`/reports/${activeSprint.report_id}`} className="underline">
+                      Want to work on a different priority instead?
+                    </Link>{" "}
+                    Mark another finding &quot;Interested in help&quot; on your full report — your reviewer will follow up.
+                  </p>
+                )}
               </div>
             )}
 
@@ -554,6 +632,20 @@ export default async function DashboardPage() {
                   <p className="mb-1 text-accent">{MODULE_STATUS_LABELS[r.status as string] ?? r.status}</p>
                   <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">{MODULE_EXPLANATION[r.status as string] ?? ""}</p>
                   <p className="text-neutral-500 dark:text-neutral-400">Submitted {new Date(r.created_at as string).toLocaleDateString()}</p>
+                  {isModuleOverdue(r.status as string, r.created_at as string) && r.approved_at && (
+                    <p className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">
+                      {/* Real bug caught live (confirmed 2026-08-19) — a
+                          plain space right after a multi-line {expression}
+                          is silently dropped by JSX's whitespace-collapse
+                          rule, the exact same class of gotcha already
+                          documented and fixed elsewhere in this codebase
+                          ("EDIT_WINDOW_HOURS migrated to DB..."). Explicit
+                          {" "} after the date fixes it for real. */}
+                      This was reviewed and approved on {new Date(r.approved_at as string).toLocaleDateString()}{" "}
+                      and is taking a little longer than expected to reach you — we&apos;re on it, and you&apos;ll get an email the moment
+                      it&apos;s ready.
+                    </p>
+                  )}
                 </div>
               );
             })}
