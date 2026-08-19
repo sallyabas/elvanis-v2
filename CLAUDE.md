@@ -1408,7 +1408,7 @@ Direct founder decision, following straight from item 4 of the six-item batch ab
 
 `tsc --noEmit`, `eslint src/ --quiet`, and `npm run build` all clean throughout, re-checked after the temporary debug route was removed. Temporary `/api/debug-set-session` route and all scratch verification/DB-check scripts deleted afterward, never committed — confirmed via `git status` before this writeup. No test data left in an altered state — both real, kept accounts (Sally's `scoped` and `in_progress` sprints) were restored to their exact pre-verification values.
 
-**Not yet committed/pushed** — held for explicit go-ahead, same standing pattern as every other change this session.
+Committed and pushed (commit `83f7be0`), per explicit go-ahead.
 
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
