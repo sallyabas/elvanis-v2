@@ -96,13 +96,35 @@ export default async function DashboardPage() {
   // doesn't always support.
   let urgentFindings: { id: string; finding: LensFinding }[] = [];
   if (latestReport) {
-    const top3Ids = new Set((latestReport.top_3_finding_ids as string[]) ?? []);
+    const top3Ids = (latestReport.top_3_finding_ids as string[]) ?? [];
     const { data: reportFindings } = await supabase
       .from("lens_findings")
       .select("id, lens, ai_draft, reviewer_edited_content, reviewer_status")
       .eq("report_id", latestReport.id);
     const visible = (reportFindings ?? []).filter((f) => f.reviewer_status === "approved" || f.reviewer_status === "edited");
-    top3WithIds = visible.filter((f) => top3Ids.has(f.id)).map((f) => ({ id: f.id as string, finding: (f.reviewer_edited_content ?? f.ai_draft) as LensFinding }));
+    // Real data-integrity gap found live while building the restored "Top
+    // 3" card (confirmed 2026-08-19): reRankTop3() (src/lib/reviewer/
+    // workspace.ts) only checks orderedFindingIds is non-empty — nothing
+    // caps it at 3 — and a real report in this DB (Sally's) genuinely has
+    // 5 ids in top_3_finding_ids from earlier reviewer-side testing this
+    // session. The OLD code here also silently discarded the reviewer's
+    // actual ranked order (it filtered `visible`, whose order is just
+    // whatever the DB query returned, by Set membership) — so even a
+    // correctly-sized array wasn't necessarily shown in rank order.
+    // Fixed at the read site, not by touching reRankTop3()'s own
+    // validation (a separate, reviewer-workspace-side fix, not in scope
+    // here): map over top_3_finding_ids in ITS OWN order first, THEN cap
+    // at 3 — this both restores the reviewer's real ranking and keeps the
+    // "Top 3" label honest regardless of how the underlying array got
+    // longer than 3. Flows through everywhere top3WithIds/top3 is used
+    // (this card, the action banner's #1 pick, the roadmap derivation),
+    // not just the new card.
+    const visibleById = new Map(visible.map((f) => [f.id as string, f]));
+    top3WithIds = top3Ids
+      .map((id) => visibleById.get(id))
+      .filter((f): f is NonNullable<typeof f> => !!f)
+      .slice(0, 3)
+      .map((f) => ({ id: f.id as string, finding: (f.reviewer_edited_content ?? f.ai_draft) as LensFinding }));
     top3 = top3WithIds.map((t) => t.finding);
     allReportFindings = visible.map((f) => {
       const content = (f.reviewer_edited_content ?? f.ai_draft) as LensFinding;
@@ -113,24 +135,36 @@ export default async function DashboardPage() {
       .filter((f) => f.finding.severity === "critical" || f.finding.severity === "high");
   }
 
-  // Honest label for the priorities card — derived directly from the real
-  // severity composition, never a hardcoded "Top 3." A single item always
-  // reads "top priority" regardless of its exact severity (matches how a
-  // client would actually describe having just one urgent thing); multiple
-  // items get the specific severity name only when every one of them
-  // genuinely shares it, otherwise a generic-but-honest "top priorities"
-  // label rather than falsely implying uniform severity.
-  function computeUrgentLabel(findings: { finding: LensFinding }[]): string {
-    if (findings.length === 0) return "Nothing urgent right now";
-    if (findings.length === 1) return "Your top priority (1)";
-    const severities = new Set(findings.map((f) => f.finding.severity));
-    if (severities.size === 1) {
-      const [only] = severities;
-      return `Your ${only} priorities (${findings.length})`;
-    }
-    return `Your top priorities (${findings.length})`;
+  // Two visibly distinct labels (confirmed 2026-08-19, direct founder
+  // request — real conceptual gap fixed, not just a copy tweak): the old
+  // single "Your top priorities (N)" label tried to do two jobs at once —
+  // "top" implies a small, curated, ranked subset (the reviewer's actual
+  // Top 3), but the card underneath it showed an EXHAUSTIVE count of every
+  // critical/high finding, however many that was. These are now genuinely
+  // two different things, each with its own honest label:
+  //
+  // computeTop3Label — for the reviewer's real curated selection
+  // (top3WithIds, from reports.top_3_finding_ids), capped at 3 by design.
+  // Never claims "3" when the reviewer genuinely picked fewer.
+  function computeTop3Label(items: { finding: LensFinding }[]): string {
+    if (items.length === 0) return "Top priorities";
+    if (items.length === 1) return "Top priority";
+    if (items.length === 2) return "Top 2 priorities";
+    return "Top 3 priorities";
   }
-  const urgentLabel = computeUrgentLabel(urgentFindings);
+  const top3Label = computeTop3Label(top3WithIds);
+
+  // computeSignalsLabel — for the exhaustive critical/high count. "Signals"
+  // deliberately replaces "top"/"priorities," which both wrongly implied a
+  // curated pick — this is a plain count of everything above a severity
+  // threshold, not a ranked selection.
+  function computeSignalsLabel(findings: { finding: LensFinding }[]): string {
+    if (findings.length === 0) return "Nothing urgent right now";
+    const severities = new Set(findings.map((f) => f.finding.severity));
+    const severityWord = severities.size === 1 ? [...severities][0] : "critical/high";
+    return `${findings.length} ${severityWord} signal${findings.length === 1 ? "" : "s"}`;
+  }
+  const signalsLabel = computeSignalsLabel(urgentFindings);
   const recommendationLibrary = await loadRecommendationLibrary();
   const roadmap = deriveRoadmap(top3WithIds, allReportFindings, recommendationLibrary);
 
@@ -143,9 +177,13 @@ export default async function DashboardPage() {
   const topPriority = top3WithIds[0] ?? null;
   const topPriorityCascade = topPriority ? cascadeSignals.get(topPriority.id) : null;
 
-  // Real aggregated financial exposure across the top 3 (item 7) — see
+  // Real aggregated financial exposure — now computed separately for each
+  // of the two cards above, matching their now-distinct scopes (item 7's
+  // original single aggregate implicitly assumed "top 3" and "exhaustive
+  // critical/high" were the same set, which they're genuinely not). See
   // financial-impact.ts's own docblock for why this is real, existing
   // per-finding data, not a new number invented for this pass.
+  const top3FinancialExposure = aggregateFinancialImpact(top3WithIds.map((t) => t.finding));
   const urgentFinancialExposure = aggregateFinancialImpact(urgentFindings.map((f) => f.finding));
 
   // Client's stated goal, pinned (item 3) — the same `goals` row already
@@ -324,19 +362,24 @@ export default async function DashboardPage() {
   };
 
   const activeRequestsCount = inProgressCount;
-  let headline: string | null = null;
-  if (latestReport || activeRequestsCount > 0) {
+  // Diagnosis headline vs. operational-status count — deliberately two
+  // separate variables now (confirmed 2026-08-19, direct founder request).
+  // The old single `headline` blended "X priorities identified, Y AI
+  // opportunities flagged" (real audit findings) with "Z requests in
+  // review" (active module/session work) into one run-on sentence, reading
+  // like extra unresolved priorities rather than two unrelated categories.
+  // `diagnosisHeadline` is audit-derived only, stays at the top of the
+  // page; the request count moves down to sit directly next to "Your
+  // active requests," where it's contextually grounded instead of floating
+  // in a sentence about findings.
+  let diagnosisHeadline: string | null = null;
+  if (latestReport) {
     const parts: string[] = [];
-    if (latestReport) {
-      parts.push(`${urgentFindings.length} priorit${urgentFindings.length === 1 ? "y" : "ies"} identified`);
-      if (readiness !== null) {
-        parts.push(`${opportunities.length} AI opportunit${opportunities.length === 1 ? "y" : "ies"} flagged`);
-      }
+    parts.push(`${urgentFindings.length} priorit${urgentFindings.length === 1 ? "y" : "ies"} identified`);
+    if (readiness !== null) {
+      parts.push(`${opportunities.length} AI opportunit${opportunities.length === 1 ? "y" : "ies"} flagged`);
     }
-    if (activeRequestsCount > 0) {
-      parts.push(`${activeRequestsCount} request${activeRequestsCount === 1 ? "" : "s"} in review`);
-    }
-    headline = `${parts.join(", ")}.`;
+    diagnosisHeadline = `${parts.join(", ")}.`;
   }
 
   return (
@@ -410,17 +453,62 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      {headline && <p className="mb-6 text-xl font-semibold text-neutral-900 dark:text-neutral-50">{headline}</p>}
+      {diagnosisHeadline && <p className="mb-6 text-xl font-semibold text-neutral-900 dark:text-neutral-50">{diagnosisHeadline}</p>}
 
       {!latestReport && <NextStepBanner journeyStatus={journeyStatus} />}
 
       {latestReport && (
         <div className="mt-2 space-y-8">
-          {/* (2 & 6 & 7) Top 3 Priorities — severity + real per-finding
-              financial impact inline under each title, plus a real
-              aggregated exposure line across all three when at least one
-              is quantified. */}
-          <Card title={urgentLabel}>
+          {/* (2 & 6 & 7) Top 3 Priorities — now genuinely two distinct
+              cards (confirmed 2026-08-19, direct founder request), not one
+              card/label trying to do both jobs: a small, curated,
+              reviewer-ranked "Top 3" (matches the product name and report
+              structure), and a separate, honestly-labeled exhaustive
+              critical/high count ("signals," never "top"). Severity +
+              real per-finding financial impact still shown inline under
+              each title in both, plus each card's own aggregated exposure
+              line across exactly what it lists. */}
+          <Card title={top3Label} subtitle="Your reviewer's curated, ranked pick — not every urgent finding, just the ones to act on first.">
+            {top3FinancialExposure && (
+              <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">
+                Together, these represent an estimated{" "}
+                <span className="font-semibold text-neutral-900 dark:text-neutral-50">
+                  {formatCurrencyRange(top3FinancialExposure.low, top3FinancialExposure.high, top3FinancialExposure.currency)}
+                </span>{" "}
+                in cost/risk exposure
+                {top3FinancialExposure.quantifiedCount < top3FinancialExposure.totalCount &&
+                  ` (based on ${top3FinancialExposure.quantifiedCount} of ${top3FinancialExposure.totalCount} findings with a quantified estimate)`}
+                .
+              </p>
+            )}
+            {top3WithIds.length === 0 ? (
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">Your reviewer hasn&apos;t selected a Top 3 for this report yet.</p>
+            ) : (
+              <ol className="list-inside list-decimal space-y-3 text-sm text-neutral-800 dark:text-neutral-200">
+                {top3WithIds.map((item) => {
+                  const f = item.finding;
+                  return (
+                    <li key={item.id}>
+                      <span>{f.title}</span>
+                      <div className="ml-5 mt-1 flex flex-wrap items-center gap-2 text-xs">
+                        <span className={`rounded px-2 py-0.5 font-semibold uppercase tracking-wide ${SEVERITY_STYLES[f.severity] ?? ""}`}>{f.severity}</span>
+                        {isUsableFinancialImpact(f.financialImpact) && (
+                          <span className="text-neutral-500 dark:text-neutral-400">
+                            Estimated impact: {formatCurrencyRange(f.financialImpact.impactBandLow, f.financialImpact.impactBandHigh, f.financialImpact.currency)}
+                          </span>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+            <Link href={`/reports/${latestReport.id}`} className="mt-3 inline-block text-sm underline">
+              View full report
+            </Link>
+          </Card>
+
+          <Card title={signalsLabel} subtitle="Every finding at critical or high severity — an exhaustive count, not a curated pick.">
             {urgentFinancialExposure && (
               <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">
                 Together, these represent an estimated{" "}
@@ -624,11 +712,22 @@ export default async function DashboardPage() {
       )}
 
       {/* (9) Your active requests — each card now carries one real
-          explanatory line: what this is, what happens next. */}
+          explanatory line: what this is, what happens next. The request
+          count (module + session requests, deliberately excluding the
+          Execution Sprint — which already carries its own status/card, see
+          the separate Execution Sprint summary line above) now lives right
+          here, contextually grounded next to the actual list, instead of
+          floating in the top diagnosis headline about audit findings
+          (confirmed 2026-08-19, direct founder request). */}
       {hasAnyStatusTiles && (
         <section className="mt-4">
-          <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Your active requests</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <h2 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">Your active requests</h2>
+          {activeRequestsCount > 0 && (
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+              {activeRequestsCount} request{activeRequestsCount === 1 ? "" : "s"} in review.
+            </p>
+          )}
+          <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {activeSprint && (
               <div className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
                 <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">Execution Sprint</h3>
