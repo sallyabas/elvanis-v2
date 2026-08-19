@@ -268,6 +268,12 @@ export default async function DashboardPage() {
   // "Active status/requests." Counts every real terminal service ever
   // delivered to this company, not just the latest — matching Reports &
   // History's own "complete historical record" treatment.
+  //
+  // Execution Sprint deliberately kept OUT of this generic count (confirmed
+  // 2026-08-19, direct founder request) — folding it in hid what kind of
+  // engagement it actually was: a bounded, paid, multi-week implementation
+  // project reads as materially different from "we sent you a report," and
+  // a bare combined number obscured that. It gets its own line below.
   const { count: deliveredReportsCount } = await supabase
     .from("reports")
     .select("id", { count: "exact", head: true })
@@ -288,8 +294,9 @@ export default async function DashboardPage() {
     .select("id", { count: "exact", head: true })
     .eq("company_id", company.id)
     .eq("status", "complete");
-  const deliveredCount = (deliveredReportsCount ?? 0) + (deliveredModulesCount ?? 0) + (completedSessionsCount ?? 0) + (completeSprintsCount ?? 0);
-  const inProgressCount = (activeModuleRequestRows?.length ?? 0) + (activeSessionRequestRows?.length ?? 0) + (activeSprint ? 1 : 0);
+  const deliveredCount = (deliveredReportsCount ?? 0) + (deliveredModulesCount ?? 0) + (completedSessionsCount ?? 0);
+  const inProgressCount = (activeModuleRequestRows?.length ?? 0) + (activeSessionRequestRows?.length ?? 0);
+  const sprintSummaryCount = completeSprintsCount ?? 0;
 
   const SESSION_LABELS: Record<string, string> = { discovery: "Discovery Session", delivery: "Delivery Session", f2f_workshop: "F2F Workshop" };
   const SESSION_STATUS_LABELS: Record<string, string> = { requested: "Requested — awaiting scheduling", scheduled: "Scheduled", completed: "Completed", declined: "Declined" };
@@ -339,18 +346,35 @@ export default async function DashboardPage() {
 
       {/* (3) Client's stated goal, pinned — real, confirmed 2026-08-16.
           Right under the page subtitle so it's visible without scrolling
-          or navigating away, not buried only in Business Profile. */}
+          or navigating away, not buried only in Business Profile.
+          "Edit" link removed (confirmed 2026-08-19, direct founder
+          request) — it promised in-place goal editing that doesn't exist
+          anywhere in this codebase (grepped every write to `goals`: the
+          only INSERT is at onboarding, the only UPDATE touches the
+          separate desired-future-state narrative field, never
+          primary_goal/secondary_goal itself). Real, substantial scope
+          (whether/how it triggers a new audit, pricing implications) is
+          deliberately not being built here — this only fixes the honesty
+          gap, pointing at the real mechanism that already exists: a fresh
+          evidence submission starts a new audit cycle reflecting whatever
+          goal is set at onboarding time. */}
       {currentGoal?.primary_goal && (
-        <p className="mb-6 inline-flex flex-wrap items-center gap-x-1.5 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/50 dark:text-neutral-400">
-          <span className="font-medium text-neutral-700 dark:text-neutral-300">Your goal:</span>
-          {GOAL_LABELS[currentGoal.primary_goal as keyof typeof GOAL_LABELS] ?? currentGoal.primary_goal}
-          {currentGoal.secondary_goal && (
-            <span>· also: {GOAL_LABELS[currentGoal.secondary_goal as keyof typeof GOAL_LABELS] ?? currentGoal.secondary_goal}</span>
-          )}
-          <Link href="/business-profile" className="ml-1 font-medium text-accent underline hover:text-accent-hover">
-            Edit
-          </Link>
-        </p>
+        <div className="mb-6">
+          <p className="inline-flex flex-wrap items-center gap-x-1.5 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/50 dark:text-neutral-400">
+            <span className="font-medium text-neutral-700 dark:text-neutral-300">Your goal:</span>
+            {GOAL_LABELS[currentGoal.primary_goal as keyof typeof GOAL_LABELS] ?? currentGoal.primary_goal}
+            {currentGoal.secondary_goal && (
+              <span>· also: {GOAL_LABELS[currentGoal.secondary_goal as keyof typeof GOAL_LABELS] ?? currentGoal.secondary_goal}</span>
+            )}
+          </p>
+          <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+            Want to pursue a different goal?{" "}
+            <Link href="/evidence-intake" className="font-medium text-accent underline hover:text-accent-hover">
+              Submit new evidence to start a fresh audit reflecting it
+            </Link>
+            .
+          </p>
+        </div>
       )}
 
       {/* (5) Single action banner — the one thing a founder should see
@@ -578,6 +602,22 @@ export default async function DashboardPage() {
           {deliveredCount} service{deliveredCount === 1 ? "" : "s"} delivered, {inProgressCount} in progress —{" "}
           <Link href="/reports" className="font-medium text-accent underline hover:text-accent-hover">
             View all in Reports &amp; History
+          </Link>
+          .
+        </p>
+      )}
+
+      {/* Execution Sprint — its own separate line (confirmed 2026-08-19,
+          direct founder request), never folded into the generic
+          delivered/in-progress count above. It's a categorically different
+          kind of engagement (a bounded, paid implementation project, not a
+          document/analysis delivery) and deserves to read as one. */}
+      {(sprintSummaryCount > 0 || activeSprint) && (
+        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+          Execution Sprint: {sprintSummaryCount > 0 && `${sprintSummaryCount} complete${activeSprint ? ", " : ""}`}
+          {activeSprint && "1 in progress"} —{" "}
+          <Link href="/reports" className="font-medium text-accent underline hover:text-accent-hover">
+            View in Reports &amp; History
           </Link>
           .
         </p>
