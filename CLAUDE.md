@@ -1449,7 +1449,7 @@ Direction confirmed for the two items left open from the round above.
 
 `tsc --noEmit`, `eslint src/ --quiet`, and `npm run build` all clean throughout, re-checked after clearing `.next`. Temporary `/api/debug-set-session` route deleted afterward, never committed — confirmed via `git status` before this writeup. No test data was mutated (verification was read-only against Sally's real, kept report).
 
-**Not yet committed/pushed** — held for explicit go-ahead, same standing pattern as every other change this session.
+Committed and pushed (commit `f672c7b`), per explicit go-ahead — flagged by the founder as the more important fix of the two, since a wrong #1 priority/roadmap could have reached a real client.
 
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
