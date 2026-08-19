@@ -25,7 +25,7 @@ export default async function SprintReviewWorkspacePage({ params }: { params: Pr
 
   const { data: tasks, error: tasksError } = await supabase
     .from("sprint_tasks")
-    .select("id, task_description, owner, kpi_description, kpi_target_value, kpi_actual_value, kpi_direction, status, due_date, reviewer_status")
+    .select("id, task_description, owner, kpi_description, kpi_target_value, kpi_unit, kpi_actual_value, kpi_direction, status, due_date, reviewer_status")
     .eq("execution_sprint_id", sprintId)
     .order("created_at", { ascending: true });
 

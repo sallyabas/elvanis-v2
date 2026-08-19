@@ -1,0 +1,11 @@
+-- Real, dedicated KPI unit field (confirmed 2026-08-19, direct founder
+-- request) — replaces the interim fix that reused kpi_description as the
+-- "Actual" input's hint on the client-facing Execution Sprint page.
+-- Nullable, fully additive: no backfill attempted for existing rows (their
+-- kpi_description text doesn't reliably map to a clean unit — heuristically
+-- guessing one would be exactly the kind of fabricated-structured-data-
+-- from-free-text this codebase has repeatedly refused to do elsewhere).
+-- The UI falls back to kpi_description when kpi_unit is null, which is
+-- precisely today's already-shipped behavior — existing rows are
+-- unaffected either way.
+alter table sprint_tasks add column kpi_unit text;

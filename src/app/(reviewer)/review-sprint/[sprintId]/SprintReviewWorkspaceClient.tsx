@@ -21,6 +21,7 @@ interface SprintTaskRow {
   owner: string | null;
   kpi_description: string | null;
   kpi_target_value: number | null;
+  kpi_unit: string | null;
   kpi_actual_value: number | null;
   kpi_direction: "higher_is_better" | "lower_is_better" | null;
   status: string;
@@ -245,7 +246,8 @@ function TaskCard({ t }: { t: SprintTaskRow }) {
       <div className="font-medium text-neutral-900 dark:text-neutral-50">{t.task_description}</div>
       {t.kpi_description && (
         <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-          KPI: {t.kpi_description} — target {t.kpi_target_value} ({t.kpi_direction === "higher_is_better" ? "higher is better" : "lower is better"})
+          KPI: {t.kpi_description} — target {t.kpi_target_value}
+          {t.kpi_unit ? ` ${t.kpi_unit}` : ""} ({t.kpi_direction === "higher_is_better" ? "higher is better" : "lower is better"})
         </p>
       )}
     </div>
@@ -264,6 +266,7 @@ function EditForm({
     owner?: string;
     kpiDescription?: string;
     kpiTargetValue?: number;
+    kpiUnit?: string;
     kpiDirection?: "higher_is_better" | "lower_is_better";
   }) => void;
 }) {
@@ -271,6 +274,7 @@ function EditForm({
   const [owner, setOwner] = useState(initial.owner ?? "");
   const [kpiDescription, setKpiDescription] = useState(initial.kpi_description ?? "");
   const [kpiTargetValue, setKpiTargetValue] = useState(initial.kpi_target_value?.toString() ?? "");
+  const [kpiUnit, setKpiUnit] = useState(initial.kpi_unit ?? "");
   const [kpiDirection, setKpiDirection] = useState<"higher_is_better" | "lower_is_better">(initial.kpi_direction ?? "higher_is_better");
 
   return (
@@ -280,6 +284,7 @@ function EditForm({
       <Input label="KPI description" value={kpiDescription} onChange={(e) => setKpiDescription(e.target.value)} />
       <div className="flex gap-2">
         <Input label="Target value" type="number" value={kpiTargetValue} onChange={(e) => setKpiTargetValue(e.target.value)} />
+        <Input label="Unit" placeholder="%, days, £..." value={kpiUnit} onChange={(e) => setKpiUnit(e.target.value)} />
         <Select label="Direction" value={kpiDirection} onChange={(e) => setKpiDirection(e.target.value as "higher_is_better" | "lower_is_better")}>
           <option value="higher_is_better">Higher is better</option>
           <option value="lower_is_better">Lower is better</option>
@@ -297,6 +302,7 @@ function EditForm({
               owner,
               kpiDescription,
               kpiTargetValue: kpiTargetValue === "" ? undefined : Number(kpiTargetValue),
+              kpiUnit,
               kpiDirection,
             })
           }

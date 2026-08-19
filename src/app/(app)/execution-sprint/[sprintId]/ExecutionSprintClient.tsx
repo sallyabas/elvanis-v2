@@ -26,6 +26,7 @@ interface SprintTaskRow {
   owner: string;
   kpi_description: string | null;
   kpi_target_value: number | null;
+  kpi_unit: string | null;
   kpi_actual_value: number | null;
   kpi_direction: "higher_is_better" | "lower_is_better" | null;
   status: "not_started" | "in_progress" | "done";
@@ -220,7 +221,8 @@ export function ExecutionSprintClient({
 
               {task.kpi_description && (
                 <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
-                  KPI: {task.kpi_description} — target {task.kpi_target_value} ({task.kpi_direction === "higher_is_better" ? "higher is better" : "lower is better"})
+                  KPI: {task.kpi_description} — target {task.kpi_target_value}
+                  {task.kpi_unit ? ` ${task.kpi_unit}` : ""} ({task.kpi_direction === "higher_is_better" ? "higher is better" : "lower is better"})
                 </p>
               )}
 
@@ -247,15 +249,15 @@ export function ExecutionSprintClient({
                     disabled={savingId === task.id || sprintStatus === "complete"}
                     onBlur={(e) => e.target.value !== "" && handleKpiActualSave(task.id, e.target.value)}
                     className="w-24"
-                    // Real gap closed (confirmed 2026-08-19, direct
-                    // founder request) — the "Actual" input had no unit in
-                    // sight next to it. There's no separate structured
-                    // kpi_unit field in the schema, so kpi_description
-                    // itself (e.g. "Number of qualified prospects
-                    // identified") IS the honest unit label here — reusing
-                    // it as the input's hint rather than inventing a new
-                    // field for the same information.
-                    hint={task.kpi_description ?? undefined}
+                    // Real, dedicated kpi_unit field (confirmed
+                    // 2026-08-19, direct founder request) — supersedes the
+                    // interim fix that reused kpi_description as this
+                    // input's hint. Existing (pre-migration) task rows
+                    // have kpi_unit: null (no automated backfill — see the
+                    // migration's own docblock), so this falls back to the
+                    // old kpi_description behavior for those, never a
+                    // blank hint.
+                    hint={task.kpi_unit ?? task.kpi_description ?? undefined}
                   />
                 )}
 

@@ -173,6 +173,7 @@ export async function confirmSprintFinding(sprintId: string, confirmedFindingId:
     owner: t.ownerRoleLabel,
     kpi_description: t.kpiDescription,
     kpi_target_value: t.kpiTargetValue,
+    kpi_unit: t.kpiUnit,
     kpi_actual_value: null,
     kpi_direction: t.kpiDirection,
     due_date: null, // computed at approveSprintTasks() once the sprint's start_date is known
@@ -206,6 +207,7 @@ export interface SprintTaskEdit {
   owner?: string;
   kpiDescription?: string;
   kpiTargetValue?: number;
+  kpiUnit?: string;
   kpiDirection?: "higher_is_better" | "lower_is_better";
 }
 
@@ -216,6 +218,7 @@ export async function editSprintTask(taskId: string, edits: SprintTaskEdit): Pro
   if (edits.owner !== undefined) update.owner = edits.owner;
   if (edits.kpiDescription !== undefined) update.kpi_description = edits.kpiDescription;
   if (edits.kpiTargetValue !== undefined) update.kpi_target_value = edits.kpiTargetValue;
+  if (edits.kpiUnit !== undefined) update.kpi_unit = edits.kpiUnit;
   if (edits.kpiDirection !== undefined) update.kpi_direction = edits.kpiDirection;
 
   const { error } = await supabase.from("sprint_tasks").update(update).eq("id", taskId);
