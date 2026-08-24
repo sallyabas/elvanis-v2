@@ -1530,7 +1530,7 @@ Real scoping decisions, flagged rather than assumed: (a) scoped to `lens_finding
 
 `tsc --noEmit`, `eslint src/ --quiet`, and `npm run build` all clean throughout, re-checked after clearing `.next`. Temporary `/api/debug-set-session` route and all scratch verification scripts deleted afterward, never committed — confirmed via `git status` before this writeup. The real note and the real Concierge inquiry request created during verification (both on Sally's real, kept account) were left in place, same retention precedent as every other first-of-its-kind live proof in this file.
 
-**Not yet committed/pushed** — held for explicit go-ahead, same standing pattern as every other change this session.
+Committed and pushed (commit `d781775`), per explicit go-ahead.
 
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
