@@ -1473,7 +1473,7 @@ Direct founder batch from external feedback review, worked through individually 
 
 `tsc --noEmit`, `eslint src/ --quiet`, and `npm run build` all clean throughout, re-checked after clearing `.next`. Temporary `/api/debug-set-session` route and all scratch DB-search/verification scripts deleted afterward, never committed — confirmed via `git status` before this writeup.
 
-**Not yet committed/pushed** — held for explicit go-ahead, same standing pattern as every other change this session.
+Committed and pushed (commit `1429940`), per explicit go-ahead.
 
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
