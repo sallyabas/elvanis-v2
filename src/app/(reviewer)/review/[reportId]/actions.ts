@@ -17,6 +17,7 @@ import { createClient } from "@/lib/supabase/server";
 import { rerunAudit } from "@/lib/audit/rerun-audit";
 import { setPlanTier, type PlanTier } from "@/lib/service-layer/plan-tier";
 import { proposeSprintFinding } from "@/lib/execution-sprint/workspace";
+import { saveFindingConciergeNote } from "@/lib/reviewer/finding-notes";
 
 // reviewed_by is a real FK to users.id. Now sourced from the real
 // authenticated session (confirmed 2026-08-02), not a REVIEWER_USER_ID env
@@ -59,6 +60,19 @@ export async function editFindingAction(
 export async function rejectFindingAction(reportId: string, findingId: string, notes?: string) {
   await getReviewerId();
   await rejectFinding(findingId, notes);
+  revalidatePath(`/review/${reportId}`);
+}
+
+/**
+ * Reviewer-authored finding note (confirmed 2026-08-24, Concierge tier
+ * build) — see finding-notes.ts's own docblock for the full design.
+ * Passing an empty note clears/removes it; the client UI's own "Save"
+ * button doubles as "clear" when the textarea is emptied, no separate
+ * delete action.
+ */
+export async function saveFindingConciergeNoteAction(reportId: string, findingId: string, authorName: string, note: string) {
+  const reviewerId = await getReviewerId();
+  await saveFindingConciergeNote(findingId, reviewerId, authorName, note);
   revalidatePath(`/review/${reportId}`);
 }
 

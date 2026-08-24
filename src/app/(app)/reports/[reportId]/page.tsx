@@ -161,6 +161,28 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
   // Dashboard, which was fixed to the correct behavior first.
   const top3FindingRows = resolveTop3FindingsInOrder((report.top_3_finding_ids as string[]) ?? [], visibleFindings);
   const top3 = top3FindingRows.map(displayedContent);
+
+  // Reviewer-authored finding notes (confirmed 2026-08-24, Concierge tier
+  // build) — admin client, not session-scoped, even though a client-facing
+  // RLS policy exists on finding_concierge_notes for defense-in-depth. Real
+  // gap found live during verification: this table's policy composes a
+  // join across lens_findings/reports/companies, each of which carries its
+  // own RLS — a session-scoped query silently returned zero rows despite
+  // every underlying policy looking satisfiable on paper (same class of
+  // "RLS composition across a subquery join" surprise already flagged
+  // elsewhere in this codebase's history). Ownership of this report was
+  // already verified earlier in this function (the notFound() check
+  // above), so reading via the admin client here — matching the pattern
+  // this exact file already uses for the ownership-adjacent `admin` reads
+  // — is safe and sidesteps the composition issue entirely.
+  const visibleFindingIds = visibleFindings.map((f) => f.id);
+  const { data: conciergeNoteRows } =
+    visibleFindingIds.length > 0
+      ? await admin.from("finding_concierge_notes").select("finding_id, author_name, note").in("finding_id", visibleFindingIds)
+      : { data: [] };
+  const conciergeNotesByFindingId = new Map(
+    (conciergeNoteRows ?? []).map((row) => [row.finding_id as string, { authorName: row.author_name as string, note: row.note as string }]),
+  );
   // Cascade reasoning (confirmed 2026-08-13, item 5) — allReportFindings is
   // the FULL visible finding set for this report, not just the top 3, so
   // cascade counting can see everything a top-3 finding might be upstream
@@ -407,6 +429,19 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
                     <span className="font-medium">Recommended: </span>
                     {f.recommendedAction}
                   </p>
+                  {/* Reviewer-authored Concierge note (confirmed 2026-08-24)
+                      — deliberately separate from and visually distinct
+                      from the AI-drafted fields above: real, personal
+                      context from an actual Discovery/Delivery call,
+                      clearly labeled as coming from the reviewer directly. */}
+                  {conciergeNotesByFindingId.has(row.id) && (
+                    <div className="mt-2 rounded border border-accent/40 bg-accent/10 p-2 dark:border-accent/30">
+                      <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+                        Note from your Concierge session with {conciergeNotesByFindingId.get(row.id)!.authorName}
+                      </p>
+                      <p className="whitespace-pre-wrap text-neutral-800 dark:text-neutral-200">{conciergeNotesByFindingId.get(row.id)!.note}</p>
+                    </div>
+                  )}
                   {/* Real gap closed (confirmed 2026-08-12, direct founder
                       request) — every "no evidence submitted" finding
                       previously relied on the reader remembering the one

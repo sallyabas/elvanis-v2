@@ -63,14 +63,14 @@ export default async function ServicesPage() {
           </Link>
         </Card>
 
+        {/* "Contact Sales," not a price/buy flow (confirmed 2026-08-24,
+            direct founder request) — Concierge is scoped and priced
+            personally with the reviewer, not a self-serve checkout. Reuses
+            the exact same request mechanism as Discovery/Delivery/F2F
+            below via a new "concierge_inquiry" session type — same table,
+            same reviewer queue panel, same notification pipeline. */}
         <Card title="Concierge tier" subtitle="Deeper reviewer attention, Discovery + Delivery Sessions included by default.">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              Concierge onboarding is handled directly with your reviewer — they&apos;ll scope what&apos;s right for your business
-              and confirm the details with you personally.
-            </p>
-            <span className="shrink-0 text-sm font-medium text-accent">{formatPrice(pricingByKey.get("concierge_tier") ?? { priceAmount: 300, currency: "GBP" })}</span>
-          </div>
+          <SessionRequestButton companyId={company.id} sessionType="concierge_inquiry" />
         </Card>
 
         <section>

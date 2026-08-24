@@ -26,6 +26,15 @@ const LABELS: Record<SessionType, { cta: string; sentLabel: string; description:
     sentLabel: "Face-to-Face (F2F) Workshop requested",
     description: "An in-person, multi-stakeholder version of the Delivery Session — for working through priorities with your whole team in the room.",
   },
+  // Concierge "Contact Sales" (confirmed 2026-08-24) — exact founder-
+  // specified copy, reusing this same component/mechanism rather than a
+  // new one.
+  concierge_inquiry: {
+    cta: "Contact Sales",
+    sentLabel: "Concierge inquiry sent",
+    description:
+      "Deeper reviewer attention on your audit, plus your Discovery and Delivery Sessions bundled in — scoped with you personally, not a checkout.",
+  },
 };
 
 /**

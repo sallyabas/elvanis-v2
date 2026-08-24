@@ -25,6 +25,7 @@ const SESSION_TYPE_LABELS: Record<string, string> = {
   discovery: "Discovery Session",
   delivery: "Delivery Session",
   f2f_workshop: "F2F Workshop",
+  concierge_inquiry: "Concierge inquiry",
 };
 
 const JURISDICTION_LABELS: Record<string, string> = {

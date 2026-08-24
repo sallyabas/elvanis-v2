@@ -27,7 +27,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * explicitly an upgrade OF Delivery Session specifically.
  */
 
-export type SessionType = "discovery" | "delivery" | "f2f_workshop";
+/**
+ * "concierge_inquiry" added 2026-08-24, direct founder request — the
+ * Concierge "Contact Sales" button reuses this exact mechanism (same
+ * table, same reviewer queue panel, same notification pipeline), just a
+ * new type value, not a new mechanism. No payment/checkout — manual,
+ * same as Execution Sprint's own real-world payment handling (a Stripe
+ * payment link, sent by the reviewer after the scope is agreed).
+ */
+export type SessionType = "discovery" | "delivery" | "f2f_workshop" | "concierge_inquiry";
 
 export interface RequestSessionResult {
   success: boolean;

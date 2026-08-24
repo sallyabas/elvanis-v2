@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { findSimilarPatterns } from "@/lib/synthesis/case-library";
 import { loadRecommendationLibrary } from "@/lib/recommendations/repository";
+import { loadFindingConciergeNotes } from "@/lib/reviewer/finding-notes";
 import { ReviewWorkspaceClient } from "./ReviewWorkspaceClient";
 
 export default async function ReviewWorkspacePage({ params }: { params: Promise<{ reportId: string }> }) {
@@ -65,6 +67,26 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
   // an async DB read. Same refactor pattern as GOVERNANCE_DIMENSIONS.
   const recommendationLibrary = await loadRecommendationLibrary();
 
+  // Reviewer-authored finding notes (confirmed 2026-08-24, Concierge tier
+  // build) — one query for the whole report's findings, keyed by
+  // findingId, same "one query, not N" pattern already used above for
+  // similarPatterns/patternCompanyNames.
+  const conciergeNotes = await loadFindingConciergeNotes(findingIds);
+
+  // Current reviewer's own name (confirmed 2026-08-24), used only to
+  // prefill the "Your name" field when adding/editing a note — real
+  // session-scoped lookup, not the admin client this page otherwise uses
+  // throughout, since "who is the CURRENT reviewer" genuinely needs a
+  // session, not just a report id. A blank name here just means the
+  // reviewer types it fresh, same as every prior note-authoring pass.
+  const sessionSupabase = await createClient();
+  const {
+    data: { user: currentReviewer },
+  } = await sessionSupabase.auth.getUser();
+  const { data: currentReviewerProfile } = currentReviewer
+    ? await sessionSupabase.from("users").select("name").eq("id", currentReviewer.id).maybeSingle()
+    : { data: null };
+
   return (
     <ReviewWorkspaceClient
       reportId={report.id}
@@ -79,6 +101,8 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
       findings={findings}
       conflicts={conflicts ?? []}
       recommendationLibrary={recommendationLibrary}
+      conciergeNotesByFindingId={Object.fromEntries(conciergeNotes)}
+      currentReviewerName={(currentReviewerProfile?.name as string | null) ?? ""}
       timing={{
         createdAt: report.created_at,
         submittedAt: report.submitted_at,
