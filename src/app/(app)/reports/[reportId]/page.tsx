@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { LensFinding, LensType, Severity } from "@/lib/lenses/types";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
+import { resolveTop3FindingsInOrder } from "@/lib/reports/top3";
 import { formatCurrencyRange, isUsableFinancialImpact } from "@/lib/reports/financial-impact";
 import { loadRecommendationLibrary } from "@/lib/recommendations/repository";
 import { SessionRequestButton } from "@/app/_components/SessionRequestButton";
@@ -152,8 +153,14 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
   if (findingsError) throw new Error(`Failed to load findings: ${findingsError.message}`);
 
   const visibleFindings = ((findings ?? []) as FindingRow[]).filter((f) => f.reviewer_status === "approved" || f.reviewer_status === "edited");
-  const top3FindingIds = new Set((report.top_3_finding_ids as string[]) ?? []);
-  const top3 = visibleFindings.filter((f) => top3FindingIds.has(f.id)).map(displayedContent);
+  // Real, ranked, capped-at-3 resolution (confirmed 2026-08-20) — see
+  // top3.ts's own docblock for the real bug this fixes: the old code here
+  // filtered visibleFindings by Set membership, discarding the reviewer's
+  // actual rank order and never capping at 3, which meant this page could
+  // show a different #1 finding / a longer-than-3 "Top 3" than the
+  // Dashboard, which was fixed to the correct behavior first.
+  const top3FindingRows = resolveTop3FindingsInOrder((report.top_3_finding_ids as string[]) ?? [], visibleFindings);
+  const top3 = top3FindingRows.map(displayedContent);
   // Cascade reasoning (confirmed 2026-08-13, item 5) — allReportFindings is
   // the FULL visible finding set for this report, not just the top 3, so
   // cascade counting can see everything a top-3 finding might be upstream
@@ -163,7 +170,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
   // Paired with the real DB id, not LensFinding.findingId — see
   // deriveRoadmap's own docblock for the real, pre-existing bug this works
   // around (findingId is stale, never re-persisted post-audit).
-  const top3WithIds = visibleFindings.filter((f) => top3FindingIds.has(f.id)).map((f) => ({ id: f.id, finding: displayedContent(f) }));
+  const top3WithIds = top3FindingRows.map((f) => ({ id: f.id, finding: displayedContent(f) }));
   const roadmap = deriveRoadmap(top3WithIds, allReportFindings, recommendationLibrary);
 
   const byLens = new Map<LensType, FindingRow[]>();
@@ -339,6 +346,24 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
       {LENS_ORDER.filter((lens) => byLens.has(lens)).map((lens) => (
         <section key={lens} className="mb-8">
           <h2 className="mb-3 text-lg font-medium">{LENS_LABELS[lens]}</h2>
+          {/* Fixed callout when AI-in-production is confirmed (item 8,
+              confirmed 2026-08-20) — deliberately different from the
+              "do not build" instruction elsewhere in this same request:
+              that one is about NOT showing an invented £ risk figure
+              before real findings exist; this is shown here, after real
+              findings exist, reading the report's own already-loaded
+              evidence snapshot (never a new company-level field — see
+              top3.ts/CLAUDE.md's own note on this being buried in JSON,
+              not queryable, which is fine for this single-report use but
+              would block any future cross-company query on the same
+              signal). */}
+          {lens === "ai_governance" && evidenceSnapshot?.aiGovernance?.hasLiveAiInProduction && (
+            <Alert variant="warning" className="mb-4">
+              This company has AI in production. Findings in this section carry higher urgency than for companies still in
+              the exploration phase — live AI without documented governance represents an immediate and active regulatory
+              risk, not a future consideration.
+            </Alert>
+          )}
           <div className="space-y-3">
             {byLens.get(lens)!.map((row) => {
               const f = displayedContent(row);

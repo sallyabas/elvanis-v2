@@ -66,7 +66,8 @@ export default async function ServicesPage() {
         <Card title="Concierge tier" subtitle="Deeper reviewer attention, Discovery + Delivery Sessions included by default.">
           <div className="flex items-center justify-between">
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              No self-serve upgrade exists yet — no in-app checkout anywhere in this app. Ask your reviewer if this is a fit.
+              Concierge onboarding is handled directly with your reviewer — they&apos;ll scope what&apos;s right for your business
+              and confirm the details with you personally.
             </p>
             <span className="shrink-0 text-sm font-medium text-accent">{formatPrice(pricingByKey.get("concierge_tier") ?? { priceAmount: 300, currency: "GBP" })}</span>
           </div>
@@ -103,8 +104,8 @@ export default async function ServicesPage() {
         <Card title="Execution Sprint" subtitle="A bounded 2–4 week engagement to actually fix your #1 priority.">
           <div className="flex items-center justify-between">
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              Not self-serve — your reviewer scopes this from a specific finding in your delivered report, after you signal
-              interest.
+              Every Execution Sprint is scoped specifically to your #1 finding by your reviewer — fixed price, clear
+              outcome, no open-ended engagement. Signal interest from your report and your reviewer will follow up.
             </p>
             <span className="shrink-0 text-sm font-medium text-accent">{formatPrice(pricingByKey.get("execution_sprint") ?? { priceAmount: 3000, currency: "GBP" })}</span>
           </div>

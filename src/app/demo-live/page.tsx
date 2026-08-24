@@ -5,11 +5,13 @@ import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framewor
 import type { MetricInput } from "@/lib/lenses/metrics";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
+import { resolveTop3FindingsInOrder } from "@/lib/reports/top3";
 import { loadRecommendationLibrary } from "@/lib/recommendations/repository";
 import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
 import { loadGovernanceDimensions } from "@/lib/lenses/benchmarks-repository";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEMO_LIVE_COMPANY_ID, DEMO_LIVE_REPORT_ID } from "@/lib/demo-live/config";
+import { Alert } from "@/app/_components/ui/Alert";
 
 /**
  * Real, live, no-login demo (confirmed 2026-08-07, item 6 of the landing
@@ -104,8 +106,12 @@ export default async function DemoLivePage() {
     .eq("report_id", report.id);
 
   const visibleFindings = ((findings ?? []) as FindingRow[]).filter((f) => f.reviewer_status === "approved" || f.reviewer_status === "edited");
-  const top3FindingIds = new Set((report.top_3_finding_ids as string[]) ?? []);
-  const top3 = visibleFindings.filter((f) => top3FindingIds.has(f.id)).map(displayedContent);
+  // Real, ranked, capped-at-3 resolution (confirmed 2026-08-20) — same fix
+  // as the authenticated report page, see top3.ts's own docblock. Keeps
+  // this real public demo genuinely consistent with what a real client
+  // sees on their own Dashboard/report, not a stale, simplified stand-in.
+  const top3FindingRows = resolveTop3FindingsInOrder((report.top_3_finding_ids as string[]) ?? [], visibleFindings);
+  const top3 = top3FindingRows.map(displayedContent);
   // Cascade reasoning (confirmed 2026-08-13, item 5) — same real logic as
   // the authenticated report page, so this demo genuinely shows the real
   // product's behavior, not a simplified stand-in.
@@ -113,7 +119,7 @@ export default async function DemoLivePage() {
   const allReportFindings = visibleFindings.map((f) => ({ id: f.id, lens: f.lens, title: displayedContent(f).title, diagnosis: displayedContent(f).diagnosis }));
   // Paired with the real DB id, not LensFinding.findingId — see
   // deriveRoadmap's own docblock for why (findingId is stale post-load).
-  const top3WithIds = visibleFindings.filter((f) => top3FindingIds.has(f.id)).map((f) => ({ id: f.id, finding: displayedContent(f) }));
+  const top3WithIds = top3FindingRows.map((f) => ({ id: f.id, finding: displayedContent(f) }));
   const roadmap = deriveRoadmap(top3WithIds, allReportFindings, recommendationLibrary);
 
   const byLens = new Map<LensType, FindingRow[]>();
@@ -314,6 +320,16 @@ export default async function DemoLivePage() {
         {LENS_ORDER.filter((lens) => byLens.has(lens)).map((lens) => (
           <section key={lens} className="mb-8">
             <h2 className="mb-3 text-lg font-medium">{LENS_LABELS[lens]}</h2>
+            {/* Fixed AI-in-production callout (item 8, confirmed
+                2026-08-20) — same real logic as the authenticated report
+                page, so this public demo stays consistent. */}
+            {lens === "ai_governance" && evidenceSnapshot?.aiGovernance?.hasLiveAiInProduction && (
+              <Alert variant="warning" className="mb-4">
+                This company has AI in production. Findings in this section carry higher urgency than for companies still
+                in the exploration phase — live AI without documented governance represents an immediate and active
+                regulatory risk, not a future consideration.
+              </Alert>
+            )}
             <div className="space-y-3">
               {byLens.get(lens)!.map((row) => {
                 const f = displayedContent(row);

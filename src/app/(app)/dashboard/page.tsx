@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { LensFinding } from "@/lib/lenses/types";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
+import { resolveTop3FindingsInOrder } from "@/lib/reports/top3";
 import { loadRecommendationLibrary } from "@/lib/recommendations/repository";
 import { computeCascadeSignals, type FindingForCascade } from "@/lib/recommendations/cascade";
 import { computeJourneyStatus } from "@/lib/reports/journey-status";
@@ -95,36 +96,30 @@ export default async function DashboardPage() {
   // finding count into a fixed "3" the product name implies but the data
   // doesn't always support.
   let urgentFindings: { id: string; finding: LensFinding }[] = [];
+  // Real, whole-report financial exposure — every visible finding, not
+  // just critical/high (item 7/urgentFinancialExposure below is
+  // deliberately scoped narrower for the signals card). This backs the
+  // "Report ready" subtitle's second line (confirmed 2026-08-20).
+  let allFindingsFinancialExposure: ReturnType<typeof aggregateFinancialImpact> = null;
   if (latestReport) {
-    const top3Ids = (latestReport.top_3_finding_ids as string[]) ?? [];
     const { data: reportFindings } = await supabase
       .from("lens_findings")
       .select("id, lens, ai_draft, reviewer_edited_content, reviewer_status")
       .eq("report_id", latestReport.id);
     const visible = (reportFindings ?? []).filter((f) => f.reviewer_status === "approved" || f.reviewer_status === "edited");
-    // Real data-integrity gap found live while building the restored "Top
-    // 3" card (confirmed 2026-08-19): reRankTop3() (src/lib/reviewer/
-    // workspace.ts) only checks orderedFindingIds is non-empty — nothing
-    // caps it at 3 — and a real report in this DB (Sally's) genuinely has
-    // 5 ids in top_3_finding_ids from earlier reviewer-side testing this
-    // session. The OLD code here also silently discarded the reviewer's
-    // actual ranked order (it filtered `visible`, whose order is just
-    // whatever the DB query returned, by Set membership) — so even a
-    // correctly-sized array wasn't necessarily shown in rank order.
-    // Fixed at the read site, not by touching reRankTop3()'s own
-    // validation (a separate, reviewer-workspace-side fix, not in scope
-    // here): map over top_3_finding_ids in ITS OWN order first, THEN cap
-    // at 3 — this both restores the reviewer's real ranking and keeps the
-    // "Top 3" label honest regardless of how the underlying array got
-    // longer than 3. Flows through everywhere top3WithIds/top3 is used
-    // (this card, the action banner's #1 pick, the roadmap derivation),
-    // not just the new card.
-    const visibleById = new Map(visible.map((f) => [f.id as string, f]));
-    top3WithIds = top3Ids
-      .map((id) => visibleById.get(id))
-      .filter((f): f is NonNullable<typeof f> => !!f)
-      .slice(0, 3)
-      .map((f) => ({ id: f.id as string, finding: (f.reviewer_edited_content ?? f.ai_draft) as LensFinding }));
+    // Real, ranked, capped-at-3 resolution (confirmed 2026-08-19, real
+    // data-integrity gap found while building the restored "Top 3" card,
+    // fixed properly 2026-08-20 as one shared function — see top3.ts's own
+    // docblock: reRankTop3() has no length cap, and a real report in this
+    // DB (Sally's) genuinely had 5 ids in top_3_finding_ids from earlier
+    // reviewer-side testing this session; the old code here also silently
+    // discarded the reviewer's actual ranked order. Flows through
+    // everywhere top3WithIds/top3 is used (this card, the action banner's
+    // #1 pick, the roadmap derivation), not just the new card — and is now
+    // the exact same function the client Report page and /demo-live use,
+    // so all three surfaces can never diverge again.
+    const top3FindingRows = resolveTop3FindingsInOrder((latestReport.top_3_finding_ids as string[]) ?? [], visible);
+    top3WithIds = top3FindingRows.map((f) => ({ id: f.id as string, finding: (f.reviewer_edited_content ?? f.ai_draft) as LensFinding }));
     top3 = top3WithIds.map((t) => t.finding);
     allReportFindings = visible.map((f) => {
       const content = (f.reviewer_edited_content ?? f.ai_draft) as LensFinding;
@@ -133,6 +128,68 @@ export default async function DashboardPage() {
     urgentFindings = visible
       .map((f) => ({ id: f.id as string, finding: (f.reviewer_edited_content ?? f.ai_draft) as LensFinding }))
       .filter((f) => f.finding.severity === "critical" || f.finding.severity === "high");
+    allFindingsFinancialExposure = aggregateFinancialImpact(visible.map((f) => (f.reviewer_edited_content ?? f.ai_draft) as LensFinding));
+  }
+
+  // Real, state-dependent subtitle — 5 states, exact copy (confirmed
+  // 2026-08-20, direct founder request). Was previously a single static
+  // string regardless of journey stage, confirmed by reading the code
+  // before building anything.
+  //
+  // "Awaiting review" vs. "Re-audit submitted" distinction: `latestReport`
+  // (queried at the very top of this function, `status = 'sent'` only) is
+  // reused as the "does a PRIOR delivered report already exist" signal —
+  // while journeyStatus.stage is one of the pre-report "in progress"
+  // stages, a non-null latestReport can only mean an EARLIER sent report,
+  // since a `reports` row for the current submission doesn't exist yet at
+  // all in those stages (see journey-status.ts's own docblock). No second
+  // query needed.
+  //
+  // "Post-sprint" is detected as its own small, targeted query: does the
+  // CURRENT delivered report have a `complete` Execution Sprint attached?
+  // A real, disclosed design decision, not specified by the exact-copy
+  // list: once true, this replaces "Report ready" rather than the two
+  // coexisting, since "here's your progress" is the more relevant framing
+  // once a client has already engaged with implementation on this report.
+  let hasCompleteSprintForCurrentReport = false;
+  if (latestReport) {
+    const { count } = await supabase
+      .from("execution_sprints")
+      .select("id", { count: "exact", head: true })
+      .eq("report_id", latestReport.id)
+      .eq("status", "complete");
+    hasCompleteSprintForCurrentReport = (count ?? 0) > 0;
+  }
+
+  const IN_PROGRESS_STAGES = new Set(["editing", "queued_for_audit", "audit_in_progress", "in_review"]);
+  let subtitleLine1: string;
+  let subtitleLine2: string | null = null;
+  if (journeyStatus.stage === "no_evidence") {
+    subtitleLine1 = "Tell us about your business and what you're trying to fix.";
+  } else if (IN_PROGRESS_STAGES.has(journeyStatus.stage)) {
+    subtitleLine1 = latestReport
+      ? "Your new evidence is with your reviewer — comparing against your previous audit."
+      : "Your evidence is with your reviewer — you'll hear back within 48 hours.";
+  } else if (latestReport && hasCompleteSprintForCurrentReport) {
+    subtitleLine1 = "Here's your progress since your last audit.";
+  } else if (latestReport) {
+    // Company-name fallback (confirmed 2026-08-20, explicit follow-up
+    // direction) — never a literal blank/placeholder if the name is
+    // somehow unset.
+    const companyLabel = (company.name as string | null)?.trim() || null;
+    subtitleLine1 = companyLabel
+      ? `Here's what's holding ${companyLabel} back — and what it's costing you.`
+      : "Here's what's holding your business back — and what it's costing you.";
+    // Line 2 only when at least one finding has a real quantified
+    // estimate (aggregateFinancialImpact already returns null otherwise,
+    // via isUsableFinancialImpact's own guard) — never £0, never blank.
+    if (allFindingsFinancialExposure) {
+      subtitleLine2 = `${formatCurrencyRange(allFindingsFinancialExposure.low, allFindingsFinancialExposure.high, allFindingsFinancialExposure.currency)} in estimated cost/risk exposure identified across ${allFindingsFinancialExposure.quantifiedCount} finding${allFindingsFinancialExposure.quantifiedCount === 1 ? "" : "s"}.`;
+    }
+  } else {
+    // Defensive fallback — should be unreachable (every JourneyStage is
+    // one of the branches above), kept honest rather than assuming.
+    subtitleLine1 = "Tell us about your business and what you're trying to fix.";
   }
 
   // Two visibly distinct labels (confirmed 2026-08-19, direct founder
@@ -385,7 +442,8 @@ export default async function DashboardPage() {
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold">Dashboard</h1>
-      <p className="mb-3 text-sm text-neutral-500 dark:text-neutral-400">{company.name}&apos;s current state — what&apos;s wrong, what AI could do about it, and what to do right now.</p>
+      <p className={`text-sm text-neutral-500 dark:text-neutral-400 ${subtitleLine2 ? "mb-1" : "mb-3"}`}>{subtitleLine1}</p>
+      {subtitleLine2 && <p className="mb-3 text-sm text-neutral-500 dark:text-neutral-400">{subtitleLine2}</p>}
 
       {/* (3) Client's stated goal, pinned — real, confirmed 2026-08-16.
           Right under the page subtitle so it's visible without scrolling
