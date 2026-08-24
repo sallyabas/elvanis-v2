@@ -31,7 +31,7 @@ export default async function BusinessProfilePage() {
   const { data: company, error: companyError } = await supabase
     .from("companies")
     .select(
-      "id, name, industry, business_model, employee_count, stage, website_url, social_links, revenue_range_band, customer_type, main_tools_stack, team_structure_summary, registration_country, uae_free_zone, customer_market_countries",
+      "id, name, industry, business_model, employee_count, stage, website_url, social_links, revenue_range_band, customer_type, main_tools_stack, team_structure_summary, registration_country, uae_free_zone, customer_market_countries, has_ai_in_production",
     )
     .eq("user_id", user.id)
     .single();
@@ -73,6 +73,7 @@ export default async function BusinessProfilePage() {
     registrationCountry: company.registration_country as string | null,
     uaeFreeZone: company.uae_free_zone as "mainland" | "difc" | "adgm" | null,
     customerMarketCountries: (company.customer_market_countries as string[] | null) ?? [],
+    hasAiInProduction: company.has_ai_in_production as boolean | null,
   };
 
   return (

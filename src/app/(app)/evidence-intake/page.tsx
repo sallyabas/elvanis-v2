@@ -57,7 +57,7 @@ export default async function EvidenceIntakePage() {
     redirect("/client-login");
   }
 
-  const { data: company } = await supabase.from("companies").select("id").eq("user_id", user.id).maybeSingle();
+  const { data: company } = await supabase.from("companies").select("id, has_ai_in_production").eq("user_id", user.id).maybeSingle();
   if (!company) {
     redirect("/onboarding");
   }
@@ -191,6 +191,7 @@ export default async function EvidenceIntakePage() {
         editWindowClosesAt={activeSubmission?.editWindowClosesAt ?? null}
         submittedAt={activeSubmission?.submittedAt ?? null}
         updatedAt={activeSubmission?.updatedAt ?? null}
+        initialHasAiInProduction={company.has_ai_in_production as boolean | null}
       />
     </div>
   );

@@ -93,6 +93,7 @@ export function EvidenceIntakeForm({
   editWindowClosesAt,
   submittedAt,
   updatedAt,
+  initialHasAiInProduction,
 }: {
   companyId: string;
   goalId: string;
@@ -150,6 +151,16 @@ export function EvidenceIntakeForm({
    */
   submittedAt: string | null;
   updatedAt: string | null;
+  /**
+   * Real, dedicated company-level value (confirmed 2026-08-20, item 5 of
+   * the external-feedback batch) — pre-fills the checkbox below from
+   * whatever was captured earlier at Business Profile (or a prior
+   * submission), instead of always defaulting to unanswered/false.
+   * initialDraft's own value still wins when present (an in-progress edit
+   * the client hasn't submitted yet shouldn't be silently overwritten by
+   * the company's last-confirmed value).
+   */
+  initialHasAiInProduction: boolean | null;
 }) {
   const router = useRouter();
 
@@ -171,7 +182,7 @@ export function EvidenceIntakeForm({
   const [pricingPressureNotes, setPricingPressureNotes] = useState(initialDraft?.pricingPressureNotes ?? "");
   const [lostDealsNotes, setLostDealsNotes] = useState(initialDraft?.lostDealsNotes ?? "");
 
-  const [hasLiveAiInProduction, setHasLiveAiInProduction] = useState(initialDraft?.hasLiveAiInProduction ?? false);
+  const [hasLiveAiInProduction, setHasLiveAiInProduction] = useState(initialDraft?.hasLiveAiInProduction ?? initialHasAiInProduction ?? false);
   const [governanceDocsSubmitted, setGovernanceDocsSubmitted] = useState(initialDraft?.governanceDocsSubmitted ?? false);
   const [governanceEvidenceText, setGovernanceEvidenceText] = useState(initialDraft?.governanceEvidenceText ?? "");
   /**
@@ -607,15 +618,24 @@ export function EvidenceIntakeForm({
 
       <Card title="AI & Governance">
         <div className="space-y-4">
-          <label className="flex items-center gap-2 text-sm text-neutral-800 dark:text-neutral-200">
-            <input
-              type="checkbox"
-              className="h-4 w-4 accent-accent"
-              checked={hasLiveAiInProduction}
-              onChange={(e) => setHasLiveAiInProduction(e.target.checked)}
-            />
-            We have live AI in production today
-          </label>
+          <div>
+            <label className="flex items-center gap-2 text-sm text-neutral-800 dark:text-neutral-200">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-accent"
+                checked={hasLiveAiInProduction}
+                onChange={(e) => setHasLiveAiInProduction(e.target.checked)}
+              />
+              We have live AI in production today
+            </label>
+            {/* Real, dedicated company-level sync (confirmed 2026-08-20,
+                item 5 of the external-feedback batch) — pre-filled from
+                Business Profile if already answered there; changing it
+                here updates that same record on submit. */}
+            <p className="ml-6 mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+              Pre-filled from Business Profile — confirming or changing it here keeps that record current too.
+            </p>
+          </div>
           <label className="flex items-center gap-2 text-sm text-neutral-800 dark:text-neutral-200">
             <input
               type="checkbox"

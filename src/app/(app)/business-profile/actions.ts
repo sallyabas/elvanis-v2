@@ -44,6 +44,16 @@ export interface CompanyProfileFields {
   registrationCountry: string | null;
   uaeFreeZone: "mainland" | "difc" | "adgm" | null;
   customerMarketCountries: string[];
+  /**
+   * Real, dedicated queryable column (confirmed 2026-08-20, item 5 of the
+   * external-feedback batch) — replaces "buried only in a JSON evidence
+   * blob, only capturable at Evidence Intake" with a real, early-captured,
+   * living-record field, same tri-state (null/true/false) treatment as
+   * businessModel: null genuinely means "not yet answered," not "no."
+   * Evidence Intake's own checkbox now pre-fills from this and writes back
+   * to it on submit — see that page's own actions.ts.
+   */
+  hasAiInProduction: boolean | null;
 }
 
 export interface UpdateCompanyProfileResult {
@@ -85,6 +95,7 @@ export async function updateCompanyProfile(
       registration_country: next.registrationCountry?.trim() || null,
       uae_free_zone: next.registrationCountry === "United Arab Emirates" ? next.uaeFreeZone : null,
       customer_market_countries: next.customerMarketCountries,
+      has_ai_in_production: next.hasAiInProduction,
       updated_at: new Date().toISOString(),
     })
     .eq("id", companyId);
@@ -107,6 +118,7 @@ export async function updateCompanyProfile(
     ["registration_country", "registrationCountry"],
     ["uae_free_zone", "uaeFreeZone"],
     ["customer_market_countries", "customerMarketCountries"],
+    ["has_ai_in_production", "hasAiInProduction"],
   ];
   for (const [dbField, key] of compare) {
     const oldStr = fieldToString(previous[key]);

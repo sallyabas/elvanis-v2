@@ -258,6 +258,23 @@ export function BusinessProfileForm({ companyId, initial }: { companyId: string;
         onChange={(e) => update("teamStructureSummary", e.target.value || null)}
       />
 
+      {/* Real, early-captured field (confirmed 2026-08-20, item 5 of the
+          external-feedback batch) — previously only askable at Evidence
+          Intake, buried in a JSON evidence blob. Same tri-state pattern as
+          Business model above: "Not set" genuinely means not yet answered,
+          not "no." Evidence Intake's own checkbox pre-fills from this and
+          writes back to it on submit, so it stays current going forward. */}
+      <Select
+        label="Do you have AI in production today?"
+        hint="Live AI features actually running for real users, not internal experiments — used to flag governance urgency in your audit."
+        value={fields.hasAiInProduction === null ? "" : fields.hasAiInProduction ? "yes" : "no"}
+        onChange={(e) => update("hasAiInProduction", e.target.value === "" ? null : e.target.value === "yes")}
+      >
+        <option value="">Not set</option>
+        <option value="yes">Yes</option>
+        <option value="no">No</option>
+      </Select>
+
       {status === "error" && error && <Alert variant="error">{error}</Alert>}
       {status === "saved" && <p className="text-sm text-green-600 dark:text-green-400">Saved.</p>}
 

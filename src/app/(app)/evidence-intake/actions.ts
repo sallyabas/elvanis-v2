@@ -86,6 +86,15 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
     await supabase.from("companies").update({ privacy_acknowledged_at: new Date().toISOString() }).eq("id", input.companyId);
   }
 
+  // Keep the real, queryable companies.has_ai_in_production column current
+  // (confirmed 2026-08-20, item 5 of the external-feedback batch) —
+  // "captured once, read consistently everywhere" means this checkbox is
+  // now also the mechanism that keeps the company-level living record in
+  // sync, not just a per-submission answer. Deliberately does NOT touch
+  // reports.source_evidence_snapshot's own copy of this value, which stays
+  // a frozen, historical record of what was true for THIS specific audit.
+  await supabase.from("companies").update({ has_ai_in_production: input.aiGovernance.hasLiveAiInProduction }).eq("id", input.companyId);
+
   const evidencePayload = {
     financial: input.financial,
     execution: input.execution,
