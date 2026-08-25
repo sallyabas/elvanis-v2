@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "./sign-out-button";
@@ -45,12 +46,27 @@ export default async function ReviewerLayout({ children }: { children: React.Rea
       {/* Charcoal nav (confirmed brand identity 2026-08-06) — same treatment
           as the client (app) layout, so the internal reviewer tooling reads
           as the same product, not a visually separate admin panel. */}
-      <div className="flex items-center justify-between bg-neutral-900 px-6 py-2 text-sm text-neutral-300">
-        <span>
-          <span className="font-semibold tracking-tight text-neutral-50">Elvanis</span> — internal reviewer tools, signed in as{" "}
-          {user.email}
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-neutral-900 px-6 py-2 text-sm text-neutral-300">
+        <div className="flex flex-wrap items-center gap-4">
+          <span className="font-semibold tracking-tight text-neutral-50">Elvanis</span>
+          {/* Real nav links (confirmed 2026-08-25) — the first time this
+              layout has needed one, now that there's more than one
+              reviewer-only page reachable from /queue's own internal
+              links alone. */}
+          <Link href="/queue" className="hover:text-neutral-50">
+            Queue
+          </Link>
+          <Link href="/requests" className="hover:text-neutral-50">
+            All requests
+          </Link>
+          <Link href="/ideas" className="hover:text-neutral-50">
+            Ideas
+          </Link>
+        </div>
+        <span className="flex items-center gap-3">
+          <span>signed in as {user.email}</span>
+          <SignOutButton />
         </span>
-        <SignOutButton />
       </div>
       {children}
     </div>

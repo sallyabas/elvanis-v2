@@ -3,9 +3,52 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { loadActivePendingEvidenceSubmission } from "@/lib/evidence/pending-submission";
 import { SUBMISSION_STAGE_LABELS } from "@/lib/evidence/submission-status";
+import { loadPaymentRecords, type PaymentEntityType, type PaymentRecord } from "@/lib/reviewer/payment-records";
 import { Card } from "@/app/_components/ui/Card";
+import { Input } from "@/app/_components/ui/Input";
+import { Select } from "@/app/_components/ui/Select";
 import { Button } from "@/app/_components/ui/Button";
-import { setPilotClientAction } from "./actions";
+import { setPilotClientAction, setPaymentRecordAction } from "./actions";
+
+const SESSION_TYPE_LABELS: Record<string, string> = {
+  discovery: "Discovery Session",
+  delivery: "Delivery Session",
+  f2f_workshop: "F2F Workshop",
+  concierge_inquiry: "Concierge inquiry",
+};
+
+/**
+ * One shared payment-status row, reused across every payable item on this
+ * page (confirmed 2026-08-25, direct founder request) — see
+ * payment-records.ts's own docblock for why this is one shared table, not
+ * a column bolted onto four different tables.
+ */
+function PaymentStatusRow({
+  companyId,
+  entityType,
+  entityId,
+  record,
+}: {
+  companyId: string;
+  entityType: PaymentEntityType;
+  entityId: string;
+  record: PaymentRecord | undefined;
+}) {
+  return (
+    <form action={setPaymentRecordAction.bind(null, companyId, entityType, entityId)} className="mt-1 flex flex-wrap items-center gap-1.5">
+      <Select name="status" defaultValue={record?.status ?? "not_applicable"} className="w-28 py-1 text-xs">
+        <option value="not_applicable">N/A</option>
+        <option value="unpaid">Unpaid</option>
+        <option value="invoiced">Invoiced</option>
+        <option value="paid">Paid</option>
+      </Select>
+      <Input name="amount" type="number" placeholder="£ amount" defaultValue={record?.amount ?? ""} className="w-24 py-1 text-xs" />
+      <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
+        Update
+      </Button>
+    </form>
+  );
+}
 
 // Real reviewer company-context view (confirmed 2026-08-11, live testing
 // pass) — closes a real gap found live: the Session Requests panel on
@@ -41,7 +84,7 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
 
   const { data: reports } = await admin
     .from("reports")
-    .select("id, status, submitted_at, delivered_at")
+    .select("id, status, submitted_at, delivered_at, rerun_of_report_id")
     .eq("company_id", companyId)
     .order("submitted_at", { ascending: false });
 
@@ -50,6 +93,32 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
     .select("id, module_type, status, created_at")
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
+
+  // All requests for this company (confirmed 2026-08-25, direct founder
+  // request) — sessions/Concierge and Execution Sprints, alongside the
+  // Core Audit reports and module requests already shown above.
+  const { data: sessionRequests } = await admin
+    .from("session_requests")
+    .select("id, session_type, status, requested_at, scheduled_at, completed_at")
+    .eq("company_id", companyId)
+    .order("requested_at", { ascending: false });
+
+  const { data: executionSprints } = await admin
+    .from("execution_sprints")
+    .select("id, status, start_date, target_end_date, report_id")
+    .eq("company_id", companyId)
+    .order("id", { ascending: false });
+
+  // Payment status (confirmed 2026-08-25) — only paid re-audits carry a
+  // real payment record among reports; module requests, sessions, and
+  // sprints are all real, priced items regardless.
+  const paidReportIds = (reports ?? []).filter((r) => r.rerun_of_report_id !== null).map((r) => r.id as string);
+  const [reportPayments, modulePayments, sessionPayments, sprintPayments] = await Promise.all([
+    loadPaymentRecords("report", paidReportIds),
+    loadPaymentRecords("module_request", (moduleRequests ?? []).map((m) => m.id as string)),
+    loadPaymentRecords("session_request", (sessionRequests ?? []).map((s) => s.id as string)),
+    loadPaymentRecords("execution_sprint", (executionSprints ?? []).map((s) => s.id as string)),
+  ]);
 
   const activePendingSubmission = await loadActivePendingEvidenceSubmission(companyId);
 
@@ -144,17 +213,28 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
         <Card title="Core Audit reports">
           {reports && reports.length > 0 ? (
             <ul className="space-y-2 text-sm">
-              {reports.map((r) => (
-                <li key={r.id} className="flex items-center justify-between">
-                  <span className="text-neutral-800 dark:text-neutral-200">
-                    {r.status} · submitted {r.submitted_at ? new Date(r.submitted_at).toLocaleDateString() : "—"}
-                    {r.delivered_at && <> · delivered {new Date(r.delivered_at).toLocaleDateString()}</>}
-                  </span>
-                  <Link href={`/review/${r.id}`} className="text-xs underline">
-                    Open
-                  </Link>
-                </li>
-              ))}
+              {reports.map((r) => {
+                const isPaidReAudit = r.rerun_of_report_id !== null;
+                return (
+                  <li key={r.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0 dark:border-neutral-800">
+                    <div className="flex items-center justify-between">
+                      <span className="text-neutral-800 dark:text-neutral-200">
+                        {r.status} · submitted {r.submitted_at ? new Date(r.submitted_at).toLocaleDateString() : "—"}
+                        {r.delivered_at && <> · delivered {new Date(r.delivered_at).toLocaleDateString()}</>}
+                        {isPaidReAudit && <span className="ml-1 text-xs text-neutral-500 dark:text-neutral-400">(paid re-audit)</span>}
+                      </span>
+                      <Link href={`/review/${r.id}`} className="text-xs underline">
+                        Open
+                      </Link>
+                    </div>
+                    {/* Only paid re-audits carry a real payment record — a
+                        first, free audit has nothing to pay. */}
+                    {isPaidReAudit && (
+                      <PaymentStatusRow companyId={companyId} entityType="report" entityId={r.id as string} record={reportPayments.get(r.id as string)} />
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p className="text-sm text-neutral-500 dark:text-neutral-400">No reports yet.</p>
@@ -165,19 +245,71 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
           {moduleRequests && moduleRequests.length > 0 ? (
             <ul className="space-y-2 text-sm">
               {moduleRequests.map((m) => (
-                <li key={m.id} className="flex items-center justify-between">
-                  <span className="text-neutral-800 dark:text-neutral-200">
-                    {MODULE_LABELS[m.module_type as string] ?? m.module_type} · {m.status} ·{" "}
-                    {m.created_at ? new Date(m.created_at).toLocaleDateString() : "—"}
-                  </span>
-                  <Link href={`/review-module/${m.id}`} className="text-xs underline">
-                    Open
-                  </Link>
+                <li key={m.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0 dark:border-neutral-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-neutral-800 dark:text-neutral-200">
+                      {MODULE_LABELS[m.module_type as string] ?? m.module_type} · {m.status} ·{" "}
+                      {m.created_at ? new Date(m.created_at).toLocaleDateString() : "—"}
+                    </span>
+                    <Link href={`/review-module/${m.id}`} className="text-xs underline">
+                      Open
+                    </Link>
+                  </div>
+                  <PaymentStatusRow companyId={companyId} entityType="module_request" entityId={m.id as string} record={modulePayments.get(m.id as string)} />
                 </li>
               ))}
             </ul>
           ) : (
             <p className="text-sm text-neutral-500 dark:text-neutral-400">No module requests yet.</p>
+          )}
+        </Card>
+
+        {/* Sessions & Concierge requests, and Execution Sprints (confirmed
+            2026-08-25, direct founder request) — closes the real gap: this
+            page previously only showed Core Audit reports and module
+            requests, not the full picture of every request type for this
+            company. */}
+        <Card title="Sessions & Concierge requests">
+          {sessionRequests && sessionRequests.length > 0 ? (
+            <ul className="space-y-2 text-sm">
+              {sessionRequests.map((s) => (
+                <li key={s.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0 dark:border-neutral-800">
+                  <span className="text-neutral-800 dark:text-neutral-200">
+                    {SESSION_TYPE_LABELS[s.session_type as string] ?? s.session_type} · {s.status} · requested{" "}
+                    {s.requested_at ? new Date(s.requested_at).toLocaleDateString() : "—"}
+                    {s.scheduled_at && <> · scheduled {new Date(s.scheduled_at).toLocaleString()}</>}
+                    {s.completed_at && <> · completed {new Date(s.completed_at).toLocaleDateString()}</>}
+                  </span>
+                  <PaymentStatusRow companyId={companyId} entityType="session_request" entityId={s.id as string} record={sessionPayments.get(s.id as string)} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">No session or Concierge requests yet.</p>
+          )}
+        </Card>
+
+        <Card title="Execution Sprints">
+          {executionSprints && executionSprints.length > 0 ? (
+            <ul className="space-y-2 text-sm">
+              {executionSprints.map((s) => (
+                <li key={s.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0 dark:border-neutral-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-neutral-800 dark:text-neutral-200">
+                      {s.status}
+                      {s.start_date && <> · started {s.start_date}</>}
+                      {s.target_end_date && <> · target end {s.target_end_date}</>}
+                    </span>
+                    <Link href={`/review-sprint/${s.id}`} className="text-xs underline">
+                      Open
+                    </Link>
+                  </div>
+                  <PaymentStatusRow companyId={companyId} entityType="execution_sprint" entityId={s.id as string} record={sprintPayments.get(s.id as string)} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">No Execution Sprints yet.</p>
           )}
         </Card>
       </div>
