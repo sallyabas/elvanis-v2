@@ -198,7 +198,7 @@ export async function deliverReport(reportId: string): Promise<void> {
   const supabase = createAdminClient();
   const { data: report, error: fetchError } = await supabase
     .from("reports")
-    .select("status, company_id, companies(user_id)")
+    .select("status, company_id, companies(user_id, is_pilot_client)")
     .eq("id", reportId)
     .single();
   if (fetchError) throw new Error(`deliverReport: failed to load report: ${fetchError.message}`);
@@ -206,7 +206,7 @@ export async function deliverReport(reportId: string): Promise<void> {
     throw new Error(`deliverReport: report must be approved first (current status: ${report.status})`);
   }
 
-  const owner = report.companies as unknown as { user_id: string } | null;
+  const owner = report.companies as unknown as { user_id: string; is_pilot_client: boolean } | null;
   if (owner?.user_id) {
     const { error: notifError } = await supabase.from("notifications").insert({
       recipient_type: "client",
@@ -221,6 +221,33 @@ export async function deliverReport(reportId: string): Promise<void> {
       related_report_id: reportId,
     });
     if (notifError) throw new Error(`deliverReport: failed to log notification: ${notifError.message}`);
+
+    // Post-delivery feedback + pilot testimonial asks (confirmed
+    // 2026-08-24, direct founder request) — general feedback fires for
+    // every client; the testimonial/referral ask additionally requires
+    // is_pilot_client, a real reviewer-set flag (see the migration's own
+    // docblock for why this can't be auto-derived).
+    const { error: feedbackNotifError } = await supabase.from("notifications").insert({
+      recipient_type: "client",
+      recipient_id: owner.user_id,
+      event_type: "report_feedback_request",
+      channel: "email",
+      sent_at: null,
+      related_report_id: reportId,
+    });
+    if (feedbackNotifError) throw new Error(`deliverReport: failed to log feedback notification: ${feedbackNotifError.message}`);
+
+    if (owner.is_pilot_client) {
+      const { error: testimonialNotifError } = await supabase.from("notifications").insert({
+        recipient_type: "client",
+        recipient_id: owner.user_id,
+        event_type: "pilot_testimonial_request",
+        channel: "email",
+        sent_at: null,
+        related_report_id: reportId,
+      });
+      if (testimonialNotifError) throw new Error(`deliverReport: failed to log testimonial notification: ${testimonialNotifError.message}`);
+    }
   }
 
   const { error } = await supabase

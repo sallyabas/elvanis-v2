@@ -151,7 +151,7 @@ export async function deliverModuleRequest(requestId: string): Promise<void> {
   const supabase = createAdminClient();
   const { data: request, error: fetchError } = await supabase
     .from("module_requests")
-    .select("status, company_id, companies(user_id)")
+    .select("status, company_id, companies(user_id, is_pilot_client)")
     .eq("id", requestId)
     .single();
   if (fetchError) throw new Error(`deliverModuleRequest: failed to load request: ${fetchError.message}`);
@@ -159,7 +159,7 @@ export async function deliverModuleRequest(requestId: string): Promise<void> {
     throw new Error(`deliverModuleRequest: request must be approved first (current status: ${request.status})`);
   }
 
-  const owner = request.companies as unknown as { user_id: string } | null;
+  const owner = request.companies as unknown as { user_id: string; is_pilot_client: boolean } | null;
   if (owner?.user_id) {
     const { error: notifError } = await supabase.from("notifications").insert({
       recipient_type: "client",
@@ -169,6 +169,31 @@ export async function deliverModuleRequest(requestId: string): Promise<void> {
       sent_at: null,
     });
     if (notifError) throw new Error(`deliverModuleRequest: failed to log notification: ${notifError.message}`);
+
+    // Post-delivery feedback + pilot testimonial asks (confirmed
+    // 2026-08-24, direct founder request) — same pattern as deliverReport(),
+    // via related_module_request_id instead of related_report_id.
+    const { error: feedbackNotifError } = await supabase.from("notifications").insert({
+      recipient_type: "client",
+      recipient_id: owner.user_id,
+      event_type: "report_feedback_request",
+      channel: "email",
+      sent_at: null,
+      related_module_request_id: requestId,
+    });
+    if (feedbackNotifError) throw new Error(`deliverModuleRequest: failed to log feedback notification: ${feedbackNotifError.message}`);
+
+    if (owner.is_pilot_client) {
+      const { error: testimonialNotifError } = await supabase.from("notifications").insert({
+        recipient_type: "client",
+        recipient_id: owner.user_id,
+        event_type: "pilot_testimonial_request",
+        channel: "email",
+        sent_at: null,
+        related_module_request_id: requestId,
+      });
+      if (testimonialNotifError) throw new Error(`deliverModuleRequest: failed to log testimonial notification: ${testimonialNotifError.message}`);
+    }
   }
 
   const { error } = await supabase

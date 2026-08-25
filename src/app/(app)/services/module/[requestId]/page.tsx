@@ -5,6 +5,8 @@ import { MODULE_META, type ModuleType } from "@/lib/modules/module-meta";
 import { PROCUREMENT_QUESTIONS, type ProcurementCategory } from "@/lib/modules/tender-readiness/procurement-categories";
 import { Card } from "@/app/_components/ui/Card";
 import { Alert } from "@/app/_components/ui/Alert";
+import { DeliveryFeedbackPrompt } from "@/app/_components/DeliveryFeedbackPrompt";
+import { hasSubmittedFeedbackFor } from "@/lib/reviewer/delivery-feedback";
 
 /**
  * Real client-facing module detail view (confirmed 2026-08-15, real bug
@@ -62,7 +64,7 @@ export default async function ClientModuleDetailPage({ params }: { params: Promi
 
   const { data: request } = await supabase
     .from("module_requests")
-    .select("id, module_type, delivered_at")
+    .select("id, module_type, delivered_at, company_id, companies(is_pilot_client)")
     .eq("id", requestId)
     .eq("status", "sent")
     .maybeSingle();
@@ -83,6 +85,12 @@ export default async function ClientModuleDetailPage({ params }: { params: Promi
 
   const moduleType = request.module_type as ModuleType;
   const meta = MODULE_META[moduleType];
+  const isPilotClient = Boolean((request.companies as unknown as { is_pilot_client: boolean } | null)?.is_pilot_client);
+
+  // Automated post-delivery feedback + pilot testimonial ask (confirmed
+  // 2026-08-24, direct founder request) — same real submitted-state check
+  // as the core-audit Report page, via related_module_request_id.
+  const feedbackStatus = await hasSubmittedFeedbackFor(request.company_id as string, { moduleRequestId: request.id as string });
 
   const { data: findingRows } = await supabase
     .from("module_findings")
@@ -194,6 +202,16 @@ export default async function ClientModuleDetailPage({ params }: { params: Promi
               longer linked from anywhere a client can reach. */}
         </Card>
       )}
+
+      {/* Automated post-delivery feedback + pilot testimonial ask
+          (confirmed 2026-08-24, direct founder request) — same real
+          mechanism as the core-audit Report page. */}
+      <div className="mt-8 space-y-3">
+        <DeliveryFeedbackPrompt companyId={request.company_id as string} feedbackType="general" relatedModuleRequestId={request.id as string} alreadySubmitted={feedbackStatus.general} />
+        {isPilotClient && (
+          <DeliveryFeedbackPrompt companyId={request.company_id as string} feedbackType="testimonial" relatedModuleRequestId={request.id as string} alreadySubmitted={feedbackStatus.testimonial} />
+        )}
+      </div>
 
       <Link href="/reports" className="mt-8 inline-block text-sm font-medium text-accent underline hover:text-accent-hover">
         ← Back to Reports &amp; History

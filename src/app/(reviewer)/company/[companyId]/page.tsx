@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { loadActivePendingEvidenceSubmission } from "@/lib/evidence/pending-submission";
 import { SUBMISSION_STAGE_LABELS } from "@/lib/evidence/submission-status";
 import { Card } from "@/app/_components/ui/Card";
+import { Button } from "@/app/_components/ui/Button";
+import { setPilotClientAction } from "./actions";
 
 // Real reviewer company-context view (confirmed 2026-08-11, live testing
 // pass) — closes a real gap found live: the Session Requests panel on
@@ -25,7 +27,7 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
   const { data: company, error: companyError } = await admin
     .from("companies")
     .select(
-      "id, name, industry, business_model, employee_count, stage, website_url, revenue_range_band, customer_type, team_structure_summary, registration_country, customer_market_countries",
+      "id, name, industry, business_model, employee_count, stage, website_url, revenue_range_band, customer_type, team_structure_summary, registration_country, customer_market_countries, is_pilot_client",
     )
     .eq("id", companyId)
     .maybeSingle();
@@ -65,6 +67,22 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
       <h1 className="mb-6 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">{company.name}</h1>
 
       <div className="space-y-6">
+        {/* Real, reviewer-set flag (confirmed 2026-08-24) — feeds the
+            automated pilot testimonial/referral ask on delivery. Not
+            auto-derived (see the migration's own docblock for why). */}
+        <Card title="Pilot client">
+          <p className="mb-2 text-sm text-neutral-600 dark:text-neutral-400">
+            {company.is_pilot_client
+              ? "Marked as a pilot client — testimonial/referral asks fire on every delivery for this company."
+              : "Not marked as a pilot client — only the general feedback ask fires on delivery."}
+          </p>
+          <form action={setPilotClientAction.bind(null, company.id as string, !company.is_pilot_client)}>
+            <Button variant="secondary" className="px-2 py-1 text-xs">
+              {company.is_pilot_client ? "Unmark as pilot client" : "Mark as pilot client"}
+            </Button>
+          </form>
+        </Card>
+
         <Card title="Business profile">
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             {(

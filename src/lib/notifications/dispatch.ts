@@ -66,6 +66,7 @@ async function templateFor(
     recipient_id: string;
     related_report_id: string | null;
     related_sprint_id: string | null;
+    related_module_request_id: string | null;
   },
 ): Promise<{ subject: string; html: string }> {
   const eventType = notification.event_type;
@@ -250,6 +251,35 @@ async function templateFor(
         subject: companyName ? `${companyName}'s module results are ready` : "Your module results are ready",
         html: `${greeting}<p>Your requested module results are ready for review.</p><p><a href="${SITE_URL}/reports">View in Reports &amp; History</a></p>${loginReminder}`,
       };
+    // Automated post-delivery feedback + pilot testimonial/referral asks
+    // (confirmed 2026-08-24, direct founder request, correcting the
+    // earlier "handle manually" decision) — both reuse
+    // related_report_id/related_module_request_id exactly like
+    // report_ready/module_ready above to link straight to the specific
+    // delivered content, where the real DeliveryFeedbackPrompt component
+    // lives.
+    case "report_feedback_request": {
+      const url = notification.related_report_id
+        ? `${SITE_URL}/reports/${notification.related_report_id}`
+        : notification.related_module_request_id
+          ? `${SITE_URL}/services/module/${notification.related_module_request_id}`
+          : `${SITE_URL}/reports`;
+      return {
+        subject: "How was your Elvanis report?",
+        html: `${greeting}<p>We'd love a minute of honest feedback on what you just received — it genuinely shapes what we build next.</p><p><a href="${url}">Leave feedback</a></p>${loginReminder}`,
+      };
+    }
+    case "pilot_testimonial_request": {
+      const url = notification.related_report_id
+        ? `${SITE_URL}/reports/${notification.related_report_id}`
+        : notification.related_module_request_id
+          ? `${SITE_URL}/services/module/${notification.related_module_request_id}`
+          : `${SITE_URL}/reports`;
+      return {
+        subject: "Would you share a testimonial or referral?",
+        html: `${greeting}<p>As one of our first pilot clients, your experience genuinely helps us reach more founders like you. If it felt valuable, we'd be grateful for a short testimonial, or an introduction to someone else who might benefit.</p><p><a href="${url}">Share a testimonial or referral</a></p>${loginReminder}`,
+      };
+    }
     default:
       return {
         subject: "Elvanis notification",
@@ -269,7 +299,7 @@ export async function sendPendingNotifications(): Promise<DispatchResult> {
 
   const { data: pending, error } = await supabase
     .from("notifications")
-    .select("id, recipient_type, recipient_id, event_type, related_report_id, related_sprint_id")
+    .select("id, recipient_type, recipient_id, event_type, related_report_id, related_sprint_id, related_module_request_id")
     .is("sent_at", null)
     .eq("channel", "email");
   if (error) throw new Error(`sendPendingNotifications: failed to load pending notifications: ${error.message}`);
@@ -308,6 +338,7 @@ export async function sendPendingNotifications(): Promise<DispatchResult> {
         recipient_id: notification.recipient_id as string,
         related_report_id: (notification.related_report_id as string | null) ?? null,
         related_sprint_id: (notification.related_sprint_id as string | null) ?? null,
+        related_module_request_id: (notification.related_module_request_id as string | null) ?? null,
       });
       await sendEmail({ to: user.email as string, subject, html });
 

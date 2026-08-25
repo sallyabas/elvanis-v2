@@ -9,6 +9,8 @@ import { resolveTop3FindingsInOrder } from "@/lib/reports/top3";
 import { formatCurrencyRange, isUsableFinancialImpact } from "@/lib/reports/financial-impact";
 import { loadRecommendationLibrary } from "@/lib/recommendations/repository";
 import { SessionRequestButton } from "@/app/_components/SessionRequestButton";
+import { DeliveryFeedbackPrompt } from "@/app/_components/DeliveryFeedbackPrompt";
+import { hasSubmittedFeedbackFor } from "@/lib/reviewer/delivery-feedback";
 import { SprintInterestButton } from "@/app/_components/SprintInterestButton";
 import { FindingNotApplicableButton } from "@/app/_components/FindingNotApplicableButton";
 import { loadFlaggedFindingIds } from "@/lib/reports/finding-feedback";
@@ -129,7 +131,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
 
   const { data: report, error: reportError } = await supabase
     .from("reports")
-    .select("id, top_3_finding_ids, goal_id, source_evidence_snapshot, companies!inner(id, name, user_id)")
+    .select("id, top_3_finding_ids, goal_id, source_evidence_snapshot, companies!inner(id, name, user_id, is_pilot_client)")
     .eq("id", reportId)
     .single();
   if (reportError || !report) notFound();
@@ -142,7 +144,12 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
   const evidenceSnapshot = report.source_evidence_snapshot as SourceEvidenceSnapshot | null;
   const governanceDimensions = evidenceSnapshot ? await loadGovernanceDimensions() : [];
 
-  const company = report.companies as unknown as { id: string; name: string; user_id: string };
+  const company = report.companies as unknown as { id: string; name: string; user_id: string; is_pilot_client: boolean };
+
+  // Automated post-delivery feedback + pilot testimonial ask (confirmed
+  // 2026-08-24, direct founder request) — real submitted-state check so
+  // the prompt reads as "thanks" instead of asking again once answered.
+  const feedbackStatus = await hasSubmittedFeedbackFor(company.id, { reportId: report.id });
 
   const { data: goal } = report.goal_id ? await supabase.from("goals").select("primary_goal").eq("id", report.goal_id).maybeSingle() : { data: null };
 
@@ -528,6 +535,15 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
        */}
       <section className="mt-10 space-y-4">
         <h2 className="text-lg font-medium">Next steps</h2>
+        {/* Automated post-delivery feedback + pilot testimonial ask
+            (confirmed 2026-08-24, direct founder request) — general
+            feedback for every client; the testimonial/referral ask
+            additionally requires is_pilot_client, a real reviewer-set
+            flag. */}
+        <DeliveryFeedbackPrompt companyId={company.id} feedbackType="general" relatedReportId={report.id} alreadySubmitted={feedbackStatus.general} />
+        {company.is_pilot_client && (
+          <DeliveryFeedbackPrompt companyId={company.id} feedbackType="testimonial" relatedReportId={report.id} alreadySubmitted={feedbackStatus.testimonial} />
+        )}
         <SessionRequestButton companyId={company.id} sessionType="delivery" />
         {hasRequestedDelivery && <SessionRequestButton companyId={company.id} sessionType="f2f_workshop" />}
 

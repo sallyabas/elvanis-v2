@@ -5,6 +5,7 @@ import { listPendingSessionRequests } from "@/lib/service-layer/session-requests
 import { listPricing } from "@/lib/pricing";
 import { listOpenSprintQueueItems, listAllSprints } from "@/lib/execution-sprint/workspace";
 import { listOpenSprintInterestRequests } from "@/lib/execution-sprint/interest-requests";
+import { listDeliveryFeedback } from "@/lib/reviewer/delivery-feedback";
 import { computeSubmissionDisplayStage, SUBMISSION_STAGE_LABELS } from "@/lib/evidence/submission-status";
 import { getTotalTurnaroundHours } from "@/lib/reports/sla";
 import {
@@ -217,6 +218,7 @@ export default async function ReviewerQueuePage() {
   const regulatoryStatus = await listRegulatoryContentReviewStatus();
   const sessionRequests = await listPendingSessionRequests();
   const pricing = await listPricing();
+  const deliveryFeedback = await listDeliveryFeedback();
   const sprintQueueItems = await listOpenSprintQueueItems();
   const sprintInterestRequests = await listOpenSprintInterestRequests();
   const allSprints = await listAllSprints();
@@ -297,6 +299,33 @@ export default async function ReviewerQueuePage() {
                       </form>
                     )}
                   </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        {/* Automated post-delivery feedback + pilot testimonial/referral
+            responses (confirmed 2026-08-24) — real place to review what
+            clients actually said, on top of (not instead of) reaching out
+            personally. */}
+        <Card title="Client feedback">
+          {deliveryFeedback.length === 0 ? (
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">No responses yet.</p>
+          ) : (
+            <ul className="space-y-3">
+              {deliveryFeedback.map((f) => (
+                <li key={f.id} className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-medium text-neutral-900 dark:text-neutral-50">{f.companyName}</span>
+                    <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                      {f.feedbackType === "testimonial" ? "Testimonial/referral" : "Feedback"} · {new Date(f.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  {f.responseText && <p className="text-neutral-700 dark:text-neutral-300">{f.responseText}</p>}
+                  {f.referralContact && (
+                    <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">Referral: {f.referralContact}</p>
+                  )}
                 </li>
               ))}
             </ul>
