@@ -1565,7 +1565,7 @@ Direct founder correction, same day as the Concierge batch above — reverses th
 
 `tsc --noEmit`, `eslint src/ --quiet`, and `npm run build` all clean throughout, re-checked after the RLS fix and after cleanup. Temporary `/api/debug-set-session` route and all scratch verification scripts deleted afterward, never committed — confirmed via `git status` before this writeup. Sally's real `is_pilot_client: true` flag, the real module delivery, and the real submitted feedback/testimonial are left in place as genuine account state and first-of-its-kind proof, same retention precedent as every other live verification in this file.
 
-**Not yet committed/pushed** — held for explicit go-ahead, same standing pattern as every other change this session.
+Committed and pushed (commit `5e32c3e`), per explicit go-ahead.
 
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
