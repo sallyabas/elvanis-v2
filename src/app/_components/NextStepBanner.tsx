@@ -45,7 +45,10 @@ const COPY: Record<JourneyStatus["stage"], { title: string; body: string; ctaLab
   },
   audit_in_progress: {
     title: "Your evidence is being analyzed",
-    body: "This usually takes under a minute — check back shortly.",
+    // Corrected 2026-08-25 (real honest-testing finding, same fix applied
+    // to every "under a minute" occurrence in this codebase) — a real
+    // live run measured 91 seconds.
+    body: "This usually takes a minute or two — check back shortly.",
     ctaLabel: "Check status",
     href: () => "/evidence-intake",
   },

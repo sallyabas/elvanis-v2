@@ -2,7 +2,7 @@ import type { EvidenceFieldInput } from "@/lib/lenses/types";
 import type { MetricInput } from "@/lib/lenses/metrics";
 import type { CommercialSelfReport } from "@/lib/lenses/commercial";
 import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
-import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
+import { EVIDENCE_FIELD_SETS, COMMERCIAL_METRICS } from "@/lib/evidence/field-sets";
 
 /**
  * Shared "what did I actually submit" renderer (extracted 2026-08-12,
@@ -92,6 +92,26 @@ export function EvidenceSubmittedDisclosure({
 
         <div>
           <h3 className="mb-2 text-sm font-medium">Commercial / Market</h3>
+          {/* Commercial's own metrics (added 2026-08-25, real gap fix) —
+              same display pattern as the FIELD_SETS loop above. */}
+          {COMMERCIAL_METRICS.length > 0 && (
+            <dl className="mb-3 grid gap-2 text-sm sm:grid-cols-2">
+              {COMMERCIAL_METRICS.map((m) => {
+                const match = (evidenceSnapshot.commercial.metrics ?? []).find((v) => v.metricKey === m.metricKey);
+                return (
+                  <div key={m.metricKey}>
+                    <dt className="text-neutral-500 dark:text-neutral-400">
+                      {m.label}
+                      {m.unit && ` (${m.unit})`}
+                    </dt>
+                    <dd className={match ? "text-neutral-700 dark:text-neutral-300" : "italic text-neutral-400"}>
+                      {match ? match.value : "Not provided"}
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
+          )}
           <dl className="space-y-2 text-sm">
             <div>
               <dt className="text-neutral-500 dark:text-neutral-400">Named competitors</dt>

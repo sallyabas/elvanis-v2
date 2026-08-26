@@ -1,4 +1,4 @@
-import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
+import { EVIDENCE_FIELD_SETS, COMMERCIAL_METRICS } from "@/lib/evidence/field-sets";
 
 /**
  * Metric direction lookup (confirmed 2026-08-13, item 2 of the
@@ -22,7 +22,7 @@ export interface MetricDefinition {
   metricKey: string;
   label: string;
   unit: string;
-  lens: "financial" | "execution" | "product";
+  lens: "financial" | "execution" | "product" | "commercial";
   direction: MetricDirection;
 }
 
@@ -40,6 +40,11 @@ const DIRECTIONS: Record<string, MetricDirection> = {
   core_feature_adoption_percent: "higher_is_better",
   activation_rate_percent: "higher_is_better",
   support_csat_percent: "higher_is_better",
+  // Commercial's 3 metrics (added 2026-08-25, real gap fix — see
+  // COMMERCIAL_METRICS's own docblock in field-sets.ts).
+  mrr_growth_rate_percent: "higher_is_better",
+  cac_ltv_ratio: "higher_is_better",
+  win_rate_percent: "higher_is_better",
 };
 
 function directionFor(metricKey: string): MetricDirection {
@@ -55,16 +60,25 @@ function directionFor(metricKey: string): MetricDirection {
   return "higher_is_better";
 }
 
-/** All 13 known metric definitions, grouped by lens in the same order as EVIDENCE_FIELD_SETS. Built once at module load, not recomputed per call. */
-export const ALL_METRIC_DEFINITIONS: MetricDefinition[] = EVIDENCE_FIELD_SETS.flatMap((set) =>
-  set.metrics.map((m) => ({
+/** All 16 known metric definitions, grouped by lens in the same order as EVIDENCE_FIELD_SETS, plus Commercial's own 3 (added 2026-08-25, kept as a separate array in field-sets.ts — see COMMERCIAL_METRICS's own docblock for why). Built once at module load, not recomputed per call. */
+export const ALL_METRIC_DEFINITIONS: MetricDefinition[] = [
+  ...EVIDENCE_FIELD_SETS.flatMap((set) =>
+    set.metrics.map((m) => ({
+      metricKey: m.metricKey,
+      label: m.label,
+      unit: m.unit,
+      lens: set.lens,
+      direction: directionFor(m.metricKey),
+    })),
+  ),
+  ...COMMERCIAL_METRICS.map((m) => ({
     metricKey: m.metricKey,
     label: m.label,
     unit: m.unit,
-    lens: set.lens,
+    lens: "commercial" as const,
     direction: directionFor(m.metricKey),
   })),
-);
+];
 
 export function findMetricDefinition(metricKey: string): MetricDefinition | null {
   return ALL_METRIC_DEFINITIONS.find((m) => m.metricKey === metricKey) ?? null;

@@ -128,3 +128,45 @@ export const EVIDENCE_FIELD_SETS: EvidenceFieldSet[] = [
     ],
   },
 ];
+
+/**
+ * Commercial/Market's own numeric metrics (added 2026-08-25, closing a
+ * real gap found in live testing: the "Growth / Revenue Efficiency" goal's
+ * own free-text example — "MRR growth rate, CAC:LTV ratio, win rate" (see
+ * GOAL_METRIC_EXAMPLES in lenses/goals.ts) — had zero matching options in
+ * the onboarding wizard's trackable-metric dropdown, since every existing
+ * metric lived under Financial/Execution/Product. Deliberately kept OUT of
+ * `EVIDENCE_FIELD_SETS` above (whose `lens` type is intentionally narrower
+ * — "financial" | "execution" | "product") rather than widened to include
+ * "commercial": that array drives one generic Card per entry in
+ * EvidenceIntakeForm.tsx, and Commercial already has its own hand-built
+ * Card there (self-report fields + independent research aren't a generic
+ * fields+metrics shape) — adding a "commercial" entry to EVIDENCE_FIELD_SETS
+ * would have rendered a second, duplicate Commercial card. These are
+ * instead rendered directly inside that existing Card, and consumed by
+ * metric-direction.ts's ALL_METRIC_DEFINITIONS as their own lens-tagged
+ * group, same as the three arrays above.
+ *
+ * Deliberately NOT benchmark-compared — Commercial has no published
+ * threshold data for these (unlike Financial/Execution/Product), so unlike
+ * those three, no `compareCommercialMetric()` exists and none is
+ * fabricated here. These are collected for the goal-metric trend feature
+ * (real numbers, real trend across audits) and narrated qualitatively by
+ * the lens, same as every other Commercial self-report field.
+ */
+export const COMMERCIAL_METRICS: EvidenceMetricDefinition[] = [
+  { metricKey: "mrr_growth_rate_percent", label: "MRR growth rate", unit: "%", placeholder: "e.g. 6" },
+  {
+    metricKey: "cac_ltv_ratio",
+    label: "CAC:LTV ratio",
+    unit: "",
+    placeholder: "e.g. 3",
+    hint: "Customer lifetime value divided by customer acquisition cost — e.g. enter 3 for a 3:1 ratio. Higher is better.",
+  },
+  { metricKey: "win_rate_percent", label: "Win rate", unit: "%", placeholder: "e.g. 25" },
+];
+
+/** Label/unit lookup for COMMERCIAL_METRICS, keyed by metricKey — used by the Commercial lens's own prompt formatting so labels aren't hand-typed a second time there. */
+export const COMMERCIAL_METRIC_LABELS: Record<string, { label: string; unit: string }> = Object.fromEntries(
+  COMMERCIAL_METRICS.map((m) => [m.metricKey, { label: m.label, unit: m.unit }]),
+);

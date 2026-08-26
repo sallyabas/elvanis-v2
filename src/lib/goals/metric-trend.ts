@@ -43,6 +43,12 @@ interface EvidenceSnapshot {
   financial?: SnapshotLensSlice;
   execution?: SnapshotLensSlice;
   product?: SnapshotLensSlice;
+  // Commercial's own metrics (added 2026-08-25) — CommercialSelfReport's
+  // `metrics` field lives directly on `commercial`, not nested under a
+  // `selfReport` key, since `source_evidence_snapshot.commercial` IS the
+  // CommercialSelfReport object verbatim (see SubmitEvidenceInput.commercial
+  // in evidence-intake/actions.ts).
+  commercial?: SnapshotLensSlice;
 }
 
 /**

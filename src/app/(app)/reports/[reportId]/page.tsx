@@ -17,7 +17,7 @@ import { loadFlaggedFindingIds } from "@/lib/reports/finding-feedback";
 import { EvidenceSubmittedDisclosure, type EvidenceSnapshotShape } from "@/app/_components/EvidenceSubmittedDisclosure";
 import { loadGovernanceDimensions } from "@/lib/lenses/benchmarks-repository";
 import { getTotalTurnaroundHours } from "@/lib/reports/sla";
-import { listPricing } from "@/lib/pricing";
+import { listPricing, formatPrice } from "@/lib/pricing";
 import { Card } from "@/app/_components/ui/Card";
 import { Alert } from "@/app/_components/ui/Alert";
 
@@ -564,8 +564,8 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
               {modulePricing("tender_readiness") && (
                 <span className="text-neutral-500 dark:text-neutral-400">
                   {" "}
-                  — {modulePricing("tender_readiness")!.currency} {modulePricing("tender_readiness")!.priceAmount}, AI-specific regulatory risk
-                  classification and procurement-readiness content
+                  — {formatPrice(modulePricing("tender_readiness")!)}, AI-specific regulatory risk classification and
+                  procurement-readiness content
                 </span>
               )}
             </li>
@@ -576,8 +576,8 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
               {modulePricing("ai_reliability_audit") && (
                 <span className="text-neutral-500 dark:text-neutral-400">
                   {" "}
-                  — {modulePricing("ai_reliability_audit")!.currency} {modulePricing("ai_reliability_audit")!.priceAmount}, adversarial testing
-                  against documented real-world AI failure patterns
+                  — {formatPrice(modulePricing("ai_reliability_audit")!)}, adversarial testing against documented
+                  real-world AI failure patterns
                 </span>
               )}
             </li>
@@ -588,8 +588,8 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
               {modulePricing("data_protection_compliance") && (
                 <span className="text-neutral-500 dark:text-neutral-400">
                   {" "}
-                  — {modulePricing("data_protection_compliance")!.currency} {modulePricing("data_protection_compliance")!.priceAmount},
-                  GDPR/PDPL readiness across consent, retention, and breach response
+                  — {formatPrice(modulePricing("data_protection_compliance")!)}, GDPR/PDPL readiness across consent,
+                  retention, and breach response
                 </span>
               )}
             </li>

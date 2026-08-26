@@ -161,12 +161,26 @@ export default async function DashboardPage() {
     hasCompleteSprintForCurrentReport = (count ?? 0) > 0;
   }
 
-  const IN_PROGRESS_STAGES = new Set(["editing", "queued_for_audit", "audit_in_progress", "in_review"]);
   let subtitleLine1: string;
   let subtitleLine2: string | null = null;
   if (journeyStatus.stage === "no_evidence") {
     subtitleLine1 = "Tell us about your business and what you're trying to fix.";
-  } else if (IN_PROGRESS_STAGES.has(journeyStatus.stage)) {
+  } else if (journeyStatus.stage === "editing") {
+    // Real, distinct copy (fixed 2026-08-25, confirmed live testing) — this
+    // stage previously shared the "with your reviewer... 48 hours" copy
+    // below, which is actively wrong here: the client's own edit window is
+    // still open and nothing has been queued or reviewed yet. This is the
+    // only stage where NextStepBanner's own accurate "still editing"
+    // framing wasn't mirrored in the headline directly above it —
+    // confirmed by reading NextStepBanner.tsx's own per-stage copy map.
+    subtitleLine1 = latestReport
+      ? "Your new evidence is saved — you're still in your edit window before this re-audit starts."
+      : "Your evidence is saved — you're still in your edit window, not with your reviewer yet.";
+  } else if (journeyStatus.stage === "queued_for_audit") {
+    subtitleLine1 = "Your edit window has closed — your evidence is queued for analysis.";
+  } else if (journeyStatus.stage === "audit_in_progress") {
+    subtitleLine1 = "Your evidence is being analyzed right now.";
+  } else if (journeyStatus.stage === "in_review") {
     subtitleLine1 = latestReport
       ? "Your new evidence is with your reviewer — comparing against your previous audit."
       : "Your evidence is with your reviewer — you'll hear back within 48 hours.";

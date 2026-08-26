@@ -11,6 +11,8 @@ import {
   severitySchema,
 } from "./schemas";
 import type { CompanyProfileForLens, EvidenceSufficiency, FindingOrigin, GoalContext, LensFinding } from "./types";
+import type { MetricInput } from "./metrics";
+import { COMMERCIAL_METRIC_LABELS } from "@/lib/evidence/field-sets";
 
 /**
  * Commercial/Market is architecturally different from Financial/Execution's
@@ -55,6 +57,20 @@ export interface CommercialSelfReport {
   marketChangeNotes: string | null;
   pricingPressureNotes: string | null;
   lostDealsNotes: string | null;
+  /**
+   * Real numeric growth/revenue-efficiency metrics (added 2026-08-25,
+   * closing a real gap found in live testing: the onboarding wizard's
+   * target-metric dropdown had zero options relevant to the "Growth /
+   * Revenue Efficiency" goal, since every existing metric lived under
+   * Financial/Execution/Product). Optional, defaults to empty for any
+   * pre-existing evidence payload that predates this field. Deliberately
+   * NOT run through a deterministic benchmark-comparison function the way
+   * Financial/Execution/Product metrics are — this lens has no published
+   * benchmark thresholds for these, and fabricating one would violate this
+   * codebase's standing non-fabrication discipline. Narrated qualitatively
+   * by the LLM, same as every other self-report field on this lens.
+   */
+  metrics?: MetricInput[];
 }
 
 export interface CommercialDraftInput {
@@ -148,12 +164,23 @@ const commercialLensOutputSchema = z.object({
 type RawCommercialLensOutput = z.infer<typeof commercialLensOutputSchema>;
 type RawCommercialFinding = z.infer<typeof commercialFindingSchema>;
 
+function formatMetricsForPrompt(metrics: MetricInput[] | undefined): string[] {
+  if (!metrics || metrics.length === 0) return [];
+  return metrics.map((m) => {
+    const def = COMMERCIAL_METRIC_LABELS[m.metricKey];
+    const label = def ? def.label : m.metricKey;
+    const unit = def?.unit ? def.unit : "";
+    return `[self_report.metric_${m.metricKey}] ${label}: ${m.value}${unit}`;
+  });
+}
+
 function formatSelfReportForPrompt(selfReport: CommercialSelfReport): string {
   return [
     `[self_report.named_competitors] Named competitors: ${selfReport.namedCompetitors.length > 0 ? selfReport.namedCompetitors.join(", ") : "(none named)"}`,
     `[self_report.market_change_notes] Market change notes: ${selfReport.marketChangeNotes ?? "(none)"}`,
     `[self_report.pricing_pressure_notes] Pricing pressure notes: ${selfReport.pricingPressureNotes ?? "(none)"}`,
     `[self_report.lost_deals_notes] Lost deals notes: ${selfReport.lostDealsNotes ?? "(none)"}`,
+    ...formatMetricsForPrompt(selfReport.metrics),
   ].join("\n");
 }
 

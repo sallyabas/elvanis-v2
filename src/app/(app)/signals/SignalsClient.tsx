@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { FinancialImpact, Severity } from "@/lib/lenses/types";
 import { formatCurrencyRange, isUsableFinancialImpact } from "@/lib/reports/financial-impact";
 import { FindingNotApplicableButton } from "@/app/_components/FindingNotApplicableButton";
+import { SprintInterestButton } from "@/app/_components/SprintInterestButton";
 import { Card } from "@/app/_components/ui/Card";
 
 export interface SignalItem {
@@ -20,6 +21,18 @@ export interface SignalItem {
   isMissingDataFinding: boolean;
   financialImpact: FinancialImpact | null;
   detailHref: string;
+  /**
+   * Execution Sprint interest (added 2026-08-25, real gap fix — the client
+   * Report page already offers "Interested in help implementing this?" per
+   * finding, but this page had no way to express it, forcing a trip back
+   * to the full report). Only ever set for `lens_finding` items — the
+   * mechanism is scoped to the core audit only, same as the report page
+   * (see sprint_interest_requests' own migration docblock), never
+   * `module_finding`s. `reportId` is the finding's own report, needed by
+   * SprintInterestButton; both are undefined for module findings.
+   */
+  reportId?: string;
+  sprintInterestAlreadyRequested?: boolean;
 }
 
 const SEVERITY_ORDER: Severity[] = ["critical", "high", "medium", "low"];
@@ -176,6 +189,22 @@ export function SignalsClient({
                   View full detail
                 </Link>
               </div>
+              {/* Same gating as the client Report page (added 2026-08-25,
+                  real gap fix): critical/high severity, not a missing-
+                  evidence placeholder, and — the part specific to this
+                  cross-source list — only ever a real lens_finding with a
+                  reportId, never a module_finding. */}
+              {item.source === "lens_finding" &&
+                item.reportId &&
+                !item.isMissingDataFinding &&
+                (item.severity === "critical" || item.severity === "high") && (
+                  <SprintInterestButton
+                    companyId={companyId}
+                    reportId={item.reportId}
+                    findingId={item.id}
+                    alreadyRequested={item.sprintInterestAlreadyRequested ?? false}
+                  />
+                )}
               {!item.isMissingDataFinding && (
                 <FindingNotApplicableButton
                   companyId={companyId}

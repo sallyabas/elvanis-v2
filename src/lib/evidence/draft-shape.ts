@@ -14,7 +14,13 @@ import type { MetricInput } from "@/lib/lenses/metrics";
 export interface EvidenceIntakeDraft {
   fieldValues?: Record<string, string>;
   metricValues?: Record<string, string>;
-  namedCompetitors?: string;
+  // Real tags array (confirmed 2026-08-25) — was a comma-joined string
+  // when this field backed a plain text Input; now backs a TagInput
+  // directly. A pre-existing draft row saved before this date may still
+  // hold the old string shape (draftData is opaque JSON, never migrated)
+  // — EvidenceIntakeForm.tsx normalizes defensively at read time rather
+  // than assuming every stored draft matches this type exactly.
+  namedCompetitors?: string[];
   marketChangeNotes?: string;
   pricingPressureNotes?: string;
   lostDealsNotes?: string;
@@ -65,11 +71,18 @@ export function evidencePayloadToDraft(payload: EvidencePayload): EvidenceIntake
       metricValues[`${lens}.${m.metricKey}`] = String(m.value);
     }
   }
+  // Commercial's own metrics (added 2026-08-25, real gap fix) — same
+  // restoration as the three lenses above, so a client returning to edit
+  // sees a previously-entered MRR growth rate / CAC:LTV ratio / win rate
+  // pre-filled, not silently dropped.
+  for (const m of payload.commercial.metrics ?? []) {
+    metricValues[`commercial.${m.metricKey}`] = String(m.value);
+  }
 
   return {
     fieldValues,
     metricValues,
-    namedCompetitors: (payload.commercial.namedCompetitors ?? []).join(", "),
+    namedCompetitors: payload.commercial.namedCompetitors ?? [],
     marketChangeNotes: payload.commercial.marketChangeNotes ?? "",
     pricingPressureNotes: payload.commercial.pricingPressureNotes ?? "",
     lostDealsNotes: payload.commercial.lostDealsNotes ?? "",

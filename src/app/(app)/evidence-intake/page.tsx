@@ -57,7 +57,11 @@ export default async function EvidenceIntakePage() {
     redirect("/client-login");
   }
 
-  const { data: company } = await supabase.from("companies").select("id, has_ai_in_production").eq("user_id", user.id).maybeSingle();
+  const { data: company } = await supabase
+    .from("companies")
+    .select("id, has_ai_in_production, privacy_acknowledged_at")
+    .eq("user_id", user.id)
+    .maybeSingle();
   if (!company) {
     redirect("/onboarding");
   }
@@ -99,7 +103,7 @@ export default async function EvidenceIntakePage() {
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
             {activeSubmission.stage === "queued_for_audit"
               ? "The window for changes has closed. Your evidence is locked and waiting for the scheduled analysis run — check back shortly."
-              : "Your evidence is being analyzed right now. This usually takes under a minute."}
+              : "Your evidence is being analyzed right now. This usually takes a minute or two."}
           </p>
           {/* Real submission/edit dates (confirmed 2026-08-12, real bug
               list item #4) — this locked view previously showed a status
@@ -192,6 +196,7 @@ export default async function EvidenceIntakePage() {
         submittedAt={activeSubmission?.submittedAt ?? null}
         updatedAt={activeSubmission?.updatedAt ?? null}
         initialHasAiInProduction={company.has_ai_in_production as boolean | null}
+        privacyAlreadyAcknowledged={company.privacy_acknowledged_at !== null}
       />
     </div>
   );

@@ -9,10 +9,11 @@ import { submitEvidence, submitEvidenceNow } from "./actions";
 import { saveEvidenceIntakeDraft } from "@/lib/evidence/draft";
 import type { EvidenceIntakeDraft } from "@/lib/evidence/draft-shape";
 import { EXPORT_INSTRUCTIONS_BY_LENS, type EvidenceLensKey } from "@/lib/evidence/export-instructions";
-import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
+import { EVIDENCE_FIELD_SETS, COMMERCIAL_METRICS } from "@/lib/evidence/field-sets";
 import { Input } from "@/app/_components/ui/Input";
 import { Textarea } from "@/app/_components/ui/Textarea";
 import { Select } from "@/app/_components/ui/Select";
+import { TagInput } from "@/app/_components/ui/TagInput";
 import { Card } from "@/app/_components/ui/Card";
 import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
@@ -94,6 +95,7 @@ export function EvidenceIntakeForm({
   submittedAt,
   updatedAt,
   initialHasAiInProduction,
+  privacyAlreadyAcknowledged,
 }: {
   companyId: string;
   goalId: string;
@@ -161,6 +163,24 @@ export function EvidenceIntakeForm({
    * the company's last-confirmed value).
    */
   initialHasAiInProduction: boolean | null;
+  /**
+   * Real, previously-persisted acknowledgment (added 2026-08-25, real
+   * friction fix from honest live testing) — `companies.privacy_acknowledged_at`
+   * is a real, permanent record stamped by submitEvidence() the first time
+   * this company ever genuinely accepted the Privacy Policy/ToS ("stamped
+   * here, at the actual point of first real evidence submission... only
+   * writes it the first time" — see that function's own docblock). The
+   * checkbox previously always defaulted to unchecked regardless of this,
+   * meaning a client who had already genuinely accepted once had to
+   * re-check the exact same box every single time they merely navigated
+   * away (even just to glance at Dashboard) and back during their own
+   * still-open edit window — real, confirmed friction, not a meaningful
+   * re-confirmation (unlike, say, Tender Readiness's deliberate
+   * confirm-without-docs gate, which asks about something that can
+   * genuinely change). Still fully uncheckable — this only fixes the
+   * default, never forces or hides the checkbox.
+   */
+  privacyAlreadyAcknowledged: boolean;
 }) {
   const router = useRouter();
 
@@ -177,7 +197,19 @@ export function EvidenceIntakeForm({
    * coerced — parsed to MetricInput[] only at submit time, in metricsFor().
    */
   const [metricValues, setMetricValues] = useState<Record<string, string>>(initialDraft?.metricValues ?? {});
-  const [namedCompetitors, setNamedCompetitors] = useState(initialDraft?.namedCompetitors ?? "");
+  // Real TagInput-backed tags array (confirmed 2026-08-25, converted from
+  // a plain comma-separated text Input for consistency with identical
+  // fields elsewhere — Business Profile's Social links/Tools stack).
+  // Defensive normalization, not a blind cast: a draft saved before this
+  // date may still hold the old joined-string shape (draftData is opaque
+  // JSON, never migrated) — a real, disposable test account's own
+  // pre-existing draft could hit this, so this must not crash on it.
+  const [namedCompetitors, setNamedCompetitors] = useState<string[]>(() => {
+    const raw = initialDraft?.namedCompetitors as unknown;
+    if (Array.isArray(raw)) return raw.filter((c): c is string => typeof c === "string");
+    if (typeof raw === "string") return raw.split(",").map((c) => c.trim()).filter(Boolean);
+    return [];
+  });
   const [marketChangeNotes, setMarketChangeNotes] = useState(initialDraft?.marketChangeNotes ?? "");
   const [pricingPressureNotes, setPricingPressureNotes] = useState(initialDraft?.pricingPressureNotes ?? "");
   const [lostDealsNotes, setLostDealsNotes] = useState(initialDraft?.lostDealsNotes ?? "");
@@ -202,7 +234,7 @@ export function EvidenceIntakeForm({
     initialDraft?.dimensionScores ?? {},
   );
 
-  const [privacyAcknowledged, setPrivacyAcknowledged] = useState(false);
+  const [privacyAcknowledged, setPrivacyAcknowledged] = useState(privacyAlreadyAcknowledged);
   /**
    * "submitting-now" is a genuinely different state from "submitting"
    * (confirmed 2026-08-11, "Submit now" fast-track), not a cosmetic
@@ -302,13 +334,28 @@ export function EvidenceIntakeForm({
    */
   function metricsFor(lens: "financial" | "execution" | "product"): MetricInput[] {
     const set = FIELD_SETS.find((s) => s.lens === lens)!;
+    return parseMetrics(lens, set.metrics.map((m) => m.metricKey));
+  }
+
+  /**
+   * Commercial's own metrics (added 2026-08-25, real gap fix — see
+   * COMMERCIAL_METRICS's own docblock in field-sets.ts). Commercial isn't
+   * part of FIELD_SETS (its Card is hand-built below, not generic), so
+   * this reads from COMMERCIAL_METRICS directly instead of metricsFor()'s
+   * FIELD_SETS lookup — same parsing logic, shared via parseMetrics().
+   */
+  function commercialMetricsFor(): MetricInput[] {
+    return parseMetrics("commercial", COMMERCIAL_METRICS.map((m) => m.metricKey));
+  }
+
+  function parseMetrics(lens: string, metricKeys: string[]): MetricInput[] {
     const result: MetricInput[] = [];
-    for (const m of set.metrics) {
-      const raw = metricValues[`${lens}.${m.metricKey}`]?.trim();
+    for (const metricKey of metricKeys) {
+      const raw = metricValues[`${lens}.${metricKey}`]?.trim();
       if (!raw) continue;
       const value = Number(raw);
       if (Number.isNaN(value)) continue;
-      result.push({ metricKey: m.metricKey, value });
+      result.push({ metricKey, value });
     }
     return result;
   }
@@ -348,13 +395,14 @@ export function EvidenceIntakeForm({
       execution: { evidenceFields: evidenceFieldsFor("execution"), metrics: metricsFor("execution") },
       product: { evidenceFields: evidenceFieldsFor("product"), metrics: metricsFor("product") },
       commercial: {
-        namedCompetitors: namedCompetitors
-          .split(",")
-          .map((c) => c.trim())
-          .filter(Boolean),
+        // Already a real string[] from TagInput (confirmed 2026-08-25) —
+        // no split/join needed anymore; kept as a plain filter for the
+        // same defensive reason as before (never send a blank entry).
+        namedCompetitors: namedCompetitors.map((c) => c.trim()).filter(Boolean),
         marketChangeNotes: marketChangeNotes.trim() || null,
         pricingPressureNotes: pricingPressureNotes.trim() || null,
         lostDealsNotes: lostDealsNotes.trim() || null,
+        metrics: commercialMetricsFor(),
       },
       aiGovernance: {
         hasLiveAiInProduction,
@@ -586,6 +634,7 @@ export function EvidenceIntakeForm({
             {set.fields.map((f) => (
               <Textarea
                 key={f.key}
+                name={`${set.lens}.${f.key}`}
                 rows={2}
                 label={f.label}
                 placeholder={f.placeholder}
@@ -599,20 +648,81 @@ export function EvidenceIntakeForm({
 
       <Card title="Commercial / Market">
         <ExportHints lens="commercial" />
+
+        {/* Key metrics (added 2026-08-25, real gap fix) — same pattern as
+            the generic FIELD_SETS loop above, but hand-placed here since
+            Commercial isn't part of that array (see COMMERCIAL_METRICS's
+            own docblock in field-sets.ts for why). Deliberately NOT
+            benchmark-compared — no fabricated thresholds, narrated
+            qualitatively by the lens, same as every other Commercial
+            self-report field. */}
+        <div className="mb-5">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+            Key metrics (optional — used for your goal&apos;s trend tracking)
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {COMMERCIAL_METRICS.map((m) => (
+              <Input
+                key={m.metricKey}
+                type="number"
+                step="any"
+                inputMode="decimal"
+                name={`commercial.${m.metricKey}`}
+                label={m.unit ? `${m.label} (${m.unit})` : m.label}
+                hint={m.hint}
+                placeholder={m.placeholder}
+                value={metricValues[`commercial.${m.metricKey}`] ?? ""}
+                onChange={(e) => setMetricValues((prev) => ({ ...prev, [`commercial.${m.metricKey}`]: e.target.value }))}
+                error={metricError(metricValues[`commercial.${m.metricKey}`]) ?? undefined}
+              />
+            ))}
+          </div>
+        </div>
+
         <div className="space-y-4">
-          {/* "(comma-separated)" was a technical formatting instruction, not
-              natural language (confirmed 2026-08-06, honest UX review) —
-              the placeholder example already shows the format without
-              lecturing the user about it. */}
-          <Input
+          {/* Converted from a plain comma-separated text Input to the
+              app's own TagInput component (confirmed 2026-08-25, for
+              consistency with identical "type these one at a time" fields
+              elsewhere — Business Profile's Social links/Tools stack). */}
+          <TagInput
             label="Named competitors"
-            placeholder="e.g. Competitor A, Competitor B"
+            placeholder="e.g. Competitor A"
             value={namedCompetitors}
-            onChange={(e) => setNamedCompetitors(e.target.value)}
+            onChange={setNamedCompetitors}
           />
-          <Textarea label="Market change notes" rows={2} value={marketChangeNotes} onChange={(e) => setMarketChangeNotes(e.target.value)} />
-          <Textarea label="Pricing pressure notes" rows={2} value={pricingPressureNotes} onChange={(e) => setPricingPressureNotes(e.target.value)} />
-          <Textarea label="Lost deals notes" rows={2} value={lostDealsNotes} onChange={(e) => setLostDealsNotes(e.target.value)} />
+          {/* Real placeholder examples added (confirmed 2026-08-25, real
+              gap fix) — these three were the only free-text fields on the
+              whole form with no guidance at all, a jarring drop right as
+              the form moved into its 4th section. `name` added on all
+              three (previously absent) so Textarea's own htmlFor/id
+              pairing — which already works correctly when given one — can
+              actually associate the visible label with the field; this
+              was a real, confirmed accessibility gap, not a Textarea
+              component bug. */}
+          <Textarea
+            label="Market change notes"
+            name="commercial.marketChangeNotes"
+            rows={2}
+            placeholder="e.g. A new competitor entered our segment, or a big customer segment shifted priorities."
+            value={marketChangeNotes}
+            onChange={(e) => setMarketChangeNotes(e.target.value)}
+          />
+          <Textarea
+            label="Pricing pressure notes"
+            name="commercial.pricingPressureNotes"
+            rows={2}
+            placeholder="e.g. We've had to discount more than usual to win deals against cheaper alternatives."
+            value={pricingPressureNotes}
+            onChange={(e) => setPricingPressureNotes(e.target.value)}
+          />
+          <Textarea
+            label="Lost deals notes"
+            name="commercial.lostDealsNotes"
+            rows={2}
+            placeholder="e.g. Lost 2 deals last quarter — both cited price as the reason."
+            value={lostDealsNotes}
+            onChange={(e) => setLostDealsNotes(e.target.value)}
+          />
         </div>
       </Card>
 
@@ -840,8 +950,15 @@ export function EvidenceIntakeForm({
        * real duration the pre-delayed-execution architecture used to show
        * a loading state for, before submission became a fast store-only
        * write). Reusing "Saving your evidence…" here would be actively
-       * misleading in the other direction now — this one genuinely does
-       * take under a minute and genuinely shouldn't have the tab closed.
+       * misleading in the other direction now — this one genuinely
+       * shouldn't have the tab closed while it runs.
+       *
+       * Copy corrected 2026-08-25 (real honest-testing finding): a real
+       * live run measured 91 seconds, not "under a minute" as this
+       * previously promised — same class of promise-vs-reality gap
+       * already documented elsewhere in this codebase for Groq call
+       * timing. "A minute or two" is honest against the real observed
+       * range without overcorrecting into vague hedging.
        */}
       {status === "submitting-now" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -853,7 +970,7 @@ export function EvidenceIntakeForm({
             <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Analyzing your evidence…</h3>
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
               We&apos;re running your Financial, Execution, Product, Commercial, and AI &amp; Governance analysis. This
-              usually takes under a minute — please don&apos;t close this tab.
+              usually takes a minute or two — please don&apos;t close this tab.
             </p>
           </div>
         </div>

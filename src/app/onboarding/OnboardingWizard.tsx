@@ -37,10 +37,15 @@ const STEP_LABELS = ["Company", "Goal", "Refine", "Details", "Review"] as const;
 // Structured goal-metric capture (confirmed 2026-08-13, item 2 of the
 // old-Elvanis-inspired batch) — grouped by lens for the dropdown, same
 // order EVIDENCE_FIELD_SETS/ALL_METRIC_DEFINITIONS already use.
-const METRIC_LENS_LABELS: Record<"financial" | "execution" | "product", string> = {
+// "commercial" added 2026-08-25 (real gap fix — see COMMERCIAL_METRICS's
+// own docblock in field-sets.ts): the "Growth / Revenue Efficiency" goal
+// previously had zero matching options here, despite its own free-text
+// example already promising "MRR growth rate, CAC:LTV ratio, win rate".
+const METRIC_LENS_LABELS: Record<"financial" | "execution" | "product" | "commercial", string> = {
   financial: "Financial",
   execution: "Execution / Operating",
   product: "Product / Customer",
+  commercial: "Commercial / Market",
 };
 
 export function OnboardingWizard() {
@@ -225,7 +230,7 @@ export function OnboardingWizard() {
               onChange={(e) => setTargetMetricKey(e.target.value)}
             >
               <option value="">Don&apos;t track a specific number</option>
-              {(["financial", "execution", "product"] as const).map((lens) => (
+              {(["financial", "execution", "product", "commercial"] as const).map((lens) => (
                 <optgroup key={lens} label={METRIC_LENS_LABELS[lens]}>
                   {ALL_METRIC_DEFINITIONS.filter((m) => m.lens === lens).map((m) => (
                     <option key={m.metricKey} value={m.metricKey}>

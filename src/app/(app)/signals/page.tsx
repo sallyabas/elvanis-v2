@@ -78,6 +78,16 @@ export default async function SignalsPage() {
       .from("lens_findings")
       .select("id, lens, ai_draft, reviewer_edited_content, reviewer_status")
       .eq("report_id", latestReport.id);
+    // Execution Sprint interest state (added 2026-08-25, real gap fix) —
+    // same query the client Report page already runs, so this page can
+    // show the exact same "already requested" state instead of always
+    // re-offering the button. Session-scoped, not admin — RLS already
+    // restricts to the caller's own company.
+    const { data: existingSprintInterest } = await supabase
+      .from("sprint_interest_requests")
+      .select("finding_id")
+      .eq("report_id", latestReport.id);
+    const requestedFindingIds = new Set((existingSprintInterest ?? []).map((r) => r.finding_id as string));
     for (const row of reportFindings ?? []) {
       if (row.reviewer_status !== "approved" && row.reviewer_status !== "edited") continue;
       const content = (row.reviewer_edited_content ?? row.ai_draft) as LensFinding;
@@ -93,6 +103,8 @@ export default async function SignalsPage() {
         isMissingDataFinding: content.isMissingDataFinding,
         financialImpact: content.financialImpact,
         detailHref: `/reports/${latestReport.id}`,
+        reportId: latestReport.id as string,
+        sprintInterestAlreadyRequested: requestedFindingIds.has(row.id as string),
       });
     }
   }

@@ -154,7 +154,7 @@ export function TenderReadinessIntakeForm({
             />
             <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Analyzing your submission…</h3>
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              We&apos;re classifying your AI use against the applicable jurisdictions. This usually takes under a minute — please don&apos;t close this
+              We&apos;re classifying your AI use against the applicable jurisdictions. This usually takes a minute or two — please don&apos;t close this
               tab.
             </p>
           </div>
