@@ -8,6 +8,8 @@ import { listOpenSprintInterestRequests } from "@/lib/execution-sprint/interest-
 import { listDeliveryFeedback } from "@/lib/reviewer/delivery-feedback";
 import { computeSubmissionDisplayStage, SUBMISSION_STAGE_LABELS } from "@/lib/evidence/submission-status";
 import { getTotalTurnaroundHours } from "@/lib/reports/sla";
+import { type ItemType, TypeBadge, moduleTypeToItemType, sessionTypeToItemType } from "@/lib/item-type-badge";
+import { SESSION_STATUS_LABELS } from "@/lib/format";
 import {
   markRegulatoryContentReviewedAction,
   scheduleSessionRequestAction,
@@ -21,13 +23,6 @@ import { Card } from "@/app/_components/ui/Card";
 import { Input } from "@/app/_components/ui/Input";
 import { Button } from "@/app/_components/ui/Button";
 import { LinkButton } from "@/app/_components/ui/LinkButton";
-
-const SESSION_TYPE_LABELS: Record<string, string> = {
-  discovery: "Discovery Session",
-  delivery: "Delivery Session",
-  f2f_workshop: "F2F Workshop",
-  concierge_inquiry: "Concierge inquiry",
-};
 
 const JURISDICTION_LABELS: Record<string, string> = {
   eu_ai_act: "EU AI Act",
@@ -52,6 +47,13 @@ interface QueueItem {
   id: string;
   companyName: string;
   label: string;
+  /**
+   * Colored badge identity (confirmed 2026-08-26, navigation-audit fix
+   * batch, item 3) — `label` stays around for the sprint case's own extra
+   * "(task review)" qualifier text, which the shared badge system has no
+   * concept of.
+   */
+  badgeType: ItemType;
   readyAt: string | null;
   notified: boolean;
   href: string;
@@ -146,6 +148,7 @@ export default async function ReviewerQueuePage() {
       id: r.id as string,
       companyName: (r.companies as unknown as { name: string } | null)?.name ?? "Unknown company",
       label: "Core Audit",
+      badgeType: "core_audit" as const,
       readyAt: r.edit_window_closes_at as string | null,
       notified: Boolean(r.reviewer_notified_at),
       href: `/review/${r.id}`,
@@ -155,6 +158,7 @@ export default async function ReviewerQueuePage() {
       id: s.id as string,
       companyName: (s.companies as unknown as { name: string } | null)?.name ?? "Unknown company",
       label: "Execution Sprint (task review)",
+      badgeType: "execution_sprint" as const,
       readyAt: s.created_at as string | null,
       notified: true,
       href: `/review-sprint/${s.id}`,
@@ -164,6 +168,7 @@ export default async function ReviewerQueuePage() {
       id: r.id as string,
       companyName: (r.companies as unknown as { name: string } | null)?.name ?? "Unknown company",
       label: MODULE_LABELS[r.module_type as string] ?? (r.module_type as string),
+      badgeType: moduleTypeToItemType(r.module_type as string),
       readyAt: (r.created_at as string | null),
       notified: Boolean(r.reviewer_notified_at),
       href: `/review-module/${r.id}`,
@@ -239,16 +244,14 @@ export default async function ReviewerQueuePage() {
             <ul className="space-y-4">
               {sessionRequests.map((r) => (
                 <li key={r.id} className="rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
-                  <div className="mb-2 flex items-center justify-between">
-                    <div>
-                      <Link href={`/company/${r.company_id}`} className="font-medium underline">
-                        {r.companyName}
-                      </Link>{" "}
-                      <span className="text-neutral-500 dark:text-neutral-400">
-                        · {SESSION_TYPE_LABELS[r.session_type] ?? r.session_type} · {r.status} · requested{" "}
-                        {new Date(r.requested_at).toLocaleDateString()}
-                      </span>
-                    </div>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <Link href={`/company/${r.company_id}`} className="font-medium underline">
+                      {r.companyName}
+                    </Link>
+                    <TypeBadge type={sessionTypeToItemType(r.session_type)} />
+                    <span className="text-neutral-500 dark:text-neutral-400">
+                      {SESSION_STATUS_LABELS[r.status] ?? r.status} · requested {new Date(r.requested_at).toLocaleDateString()}
+                    </span>
                   </div>
                   {r.client_notes && <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">&quot;{r.client_notes}&quot;</p>}
                   {r.status === "scheduled" && r.scheduled_at && (
@@ -507,7 +510,8 @@ export default async function ReviewerQueuePage() {
                   <li key={item.id} className="flex items-center justify-between rounded-md border border-neutral-100 p-3 dark:border-neutral-800">
                     <div>
                       <div className="flex items-center gap-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">
-                        {item.label}
+                        <TypeBadge type={item.badgeType} />
+                        {item.badgeType === "execution_sprint" && <span className="text-xs font-normal text-neutral-500 dark:text-neutral-400">(task review)</span>}
                         {item.overdue && (
                           <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-800 dark:bg-red-950 dark:text-red-300">
                             Overdue
@@ -553,8 +557,8 @@ export default async function ReviewerQueuePage() {
               return (
                 <li key={r.id as string} className="flex items-center justify-between rounded-md border border-neutral-200 bg-white p-3 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
                   <div>
-                    <div className="flex items-center gap-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">
-                      {companyName} — {MODULE_LABELS[r.module_type as string] ?? (r.module_type as string)}
+                    <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">
+                      {companyName} — <TypeBadge type={moduleTypeToItemType(r.module_type as string)} />
                       {overdue && (
                         <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-800 dark:bg-red-950 dark:text-red-300">
                           Overdue

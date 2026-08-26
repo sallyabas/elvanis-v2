@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Severity } from "@/lib/lenses/types";
+import { type ItemType, moduleTypeToItemType, sessionTypeToItemType } from "@/lib/item-type-badge";
 
 /**
  * Unified, filterable request list (confirmed 2026-08-25, direct founder
@@ -30,6 +31,15 @@ export interface UnifiedRequestRow {
   id: string;
   type: UnifiedRequestType;
   typeLabel: string;
+  /**
+   * Fine-grained badge identity (confirmed 2026-08-26, navigation-audit fix
+   * batch, item 3) — `type` alone can't distinguish Tender Readiness from
+   * AI Reliability Audit, or a Discovery Session from a Concierge inquiry,
+   * both of which the shared `@/lib/item-type-badge` color system needs to
+   * render a genuinely per-type badge instead of one flat color per coarse
+   * `type`.
+   */
+  badgeType: ItemType;
   companyId: string;
   companyName: string;
   /** The single date this row sorts/filters by — submitted_at / created_at / requested_at, whichever is this row's own real anchor moment. */
@@ -122,6 +132,7 @@ export async function loadUnifiedRequests(): Promise<UnifiedRequestRow[]> {
       id: r.id as string,
       type: "audit",
       typeLabel: "Core Audit",
+      badgeType: "core_audit",
       companyId: r.company_id as string,
       companyName: companyNameOf(r),
       date: r.submitted_at as string | null,
@@ -136,6 +147,7 @@ export async function loadUnifiedRequests(): Promise<UnifiedRequestRow[]> {
       id: m.id as string,
       type: "module",
       typeLabel: MODULE_LABELS[m.module_type as string] ?? (m.module_type as string),
+      badgeType: moduleTypeToItemType(m.module_type as string),
       companyId: m.company_id as string,
       companyName: companyNameOf(m),
       date: m.created_at as string | null,
@@ -150,6 +162,7 @@ export async function loadUnifiedRequests(): Promise<UnifiedRequestRow[]> {
       id: s.id as string,
       type: "session",
       typeLabel: SESSION_TYPE_LABELS[s.session_type as string] ?? (s.session_type as string),
+      badgeType: sessionTypeToItemType(s.session_type as string),
       companyId: s.company_id as string,
       companyName: companyNameOf(s),
       date: s.requested_at as string | null,
@@ -164,6 +177,7 @@ export async function loadUnifiedRequests(): Promise<UnifiedRequestRow[]> {
       id: sp.id as string,
       type: "sprint",
       typeLabel: "Execution Sprint",
+      badgeType: "execution_sprint",
       companyId: sp.company_id as string,
       companyName: companyNameOf(sp),
       date: sp.start_date as string | null,

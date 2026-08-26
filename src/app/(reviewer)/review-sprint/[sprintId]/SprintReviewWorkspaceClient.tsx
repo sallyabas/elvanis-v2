@@ -8,6 +8,7 @@ import {
   approveSprintTasksAction,
   addSprintReviewerCommentaryAction,
 } from "./actions";
+import { humanizeStatus } from "@/lib/format";
 import { Card } from "@/app/_components/ui/Card";
 import { Input } from "@/app/_components/ui/Input";
 import { Textarea } from "@/app/_components/ui/Textarea";
@@ -155,7 +156,7 @@ export function SprintReviewWorkspaceClient({ sprintId, companyName, findingTitl
     <div className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">{companyName}</h1>
       <p className="mb-1 text-sm text-neutral-500 dark:text-neutral-400">
-        Execution Sprint · status: <span className="font-medium">{sprintStatus}</span>
+        Execution Sprint · status: <span className="font-medium">{humanizeStatus(sprintStatus)}</span>
       </p>
       <p className="mb-6 text-xs text-neutral-500 dark:text-neutral-400">Fixing: {findingTitle}</p>
 
@@ -167,8 +168,32 @@ export function SprintReviewWorkspaceClient({ sprintId, companyName, findingTitl
 
       {draftCount > 0 && (
         <section className="mb-6 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          <p className="font-medium">Mandatory before this sprint can start:</p>
-          <p className="mt-1">{draftCount} task(s) still need a decision — Accept, Edit, or Reject each one below.</p>
+          {sprintStatus === "scoped" ? (
+            <>
+              <p className="font-medium">Mandatory before this sprint can start:</p>
+              <p className="mt-1">{draftCount} task(s) still need a decision — Accept, Edit, or Reject each one below.</p>
+            </>
+          ) : (
+            // Real gap found and fixed (confirmed 2026-08-26, full UX
+            // validation pass, item 1) — the banner's "before this sprint
+            // can start" framing had no dependency on sprintStatus at all,
+            // so it would misleadingly claim an already-started sprint
+            // hadn't started yet, whenever a task somehow ends up back in
+            // `draft` after approval (confirmed this exact combination is
+            // unreachable through any real code path — approveSprintTasks()
+            // can't complete while any task is draft, and nothing ever
+            // resets one afterward — so this branch only exists to
+            // describe an anomalous data state honestly if it recurs, not
+            // a real, expected flow). Same red alert (still worth a
+            // reviewer's attention), different, accurate copy.
+            <>
+              <p className="font-medium">Unexpected: this sprint has already started, but {draftCount} task(s) still show as undecided.</p>
+              <p className="mt-1">
+                This shouldn&apos;t normally happen once a sprint is under way — Accept, Edit, or Reject each one below to
+                resolve it.
+              </p>
+            </>
+          )}
         </section>
       )}
 

@@ -13,6 +13,8 @@ import { loadGoalMetricTrend, type MetricTrend } from "@/lib/goals/metric-trend"
 import { aggregateFinancialImpact, formatCurrencyRange, isUsableFinancialImpact } from "@/lib/reports/financial-impact";
 import { MODULE_META, MODULE_ORDER, MODULE_STATUS_LABELS, type ModuleType } from "@/lib/modules/module-meta";
 import { getTotalTurnaroundHours } from "@/lib/reports/sla";
+import { TYPE_LABELS, sessionTypeToItemType } from "@/lib/item-type-badge";
+import { humanizeStatus, SESSION_STATUS_LABELS } from "@/lib/format";
 import { NextStepBanner } from "@/app/_components/NextStepBanner";
 import { Card } from "@/app/_components/ui/Card";
 import { LinkButton } from "@/app/_components/ui/LinkButton";
@@ -407,8 +409,6 @@ export default async function DashboardPage() {
   const inProgressCount = (activeModuleRequestRows?.length ?? 0) + (activeSessionRequestRows?.length ?? 0);
   const sprintSummaryCount = completeSprintsCount ?? 0;
 
-  const SESSION_LABELS: Record<string, string> = { discovery: "Discovery Session", delivery: "Delivery Session", f2f_workshop: "F2F Workshop" };
-  const SESSION_STATUS_LABELS: Record<string, string> = { requested: "Requested — awaiting scheduling", scheduled: "Scheduled", completed: "Completed", declined: "Declined" };
   const SPRINT_STATUS_LABELS: Record<string, string> = {
     proposed: "Awaiting your confirmation",
     scoped: "Being scoped by your reviewer",
@@ -863,8 +863,8 @@ export default async function DashboardPage() {
 
             {(activeSessionRequestRows ?? []).map((r) => (
               <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-                <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{SESSION_LABELS[r.session_type as string] ?? r.session_type}</h3>
-                <p className="mb-1 text-accent">{SESSION_STATUS_LABELS[r.status as string] ?? r.status}</p>
+                <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{TYPE_LABELS[sessionTypeToItemType(r.session_type as string)]}</h3>
+                <p className="mb-1 text-accent">{SESSION_STATUS_LABELS[r.status as string] ?? humanizeStatus(r.status as string)}</p>
                 <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">{SESSION_EXPLANATION[r.status as string] ?? ""}</p>
                 <p className="text-neutral-500 dark:text-neutral-400">Requested {new Date(r.requested_at as string).toLocaleDateString()}</p>
                 {r.scheduled_at && <p className="text-neutral-500 dark:text-neutral-400">Scheduled {new Date(r.scheduled_at as string).toLocaleString()}</p>}

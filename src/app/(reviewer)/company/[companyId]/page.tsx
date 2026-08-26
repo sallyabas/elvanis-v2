@@ -4,18 +4,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { loadActivePendingEvidenceSubmission } from "@/lib/evidence/pending-submission";
 import { SUBMISSION_STAGE_LABELS } from "@/lib/evidence/submission-status";
 import { loadPaymentRecords, type PaymentEntityType, type PaymentRecord } from "@/lib/reviewer/payment-records";
+import { GOAL_LABELS } from "@/lib/lenses/goals";
+import type { PrimaryGoal } from "@/lib/lenses/types";
+import { TypeBadge, moduleTypeToItemType, sessionTypeToItemType } from "@/lib/item-type-badge";
+import { humanizeStatus, SESSION_STATUS_LABELS } from "@/lib/format";
 import { Card } from "@/app/_components/ui/Card";
 import { Input } from "@/app/_components/ui/Input";
 import { Select } from "@/app/_components/ui/Select";
 import { Button } from "@/app/_components/ui/Button";
 import { setPilotClientAction, setPaymentRecordAction } from "./actions";
-
-const SESSION_TYPE_LABELS: Record<string, string> = {
-  discovery: "Discovery Session",
-  delivery: "Delivery Session",
-  f2f_workshop: "F2F Workshop",
-  concierge_inquiry: "Concierge inquiry",
-};
 
 /**
  * One shared payment-status row, reused across every payable item on this
@@ -122,12 +119,6 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
 
   const activePendingSubmission = await loadActivePendingEvidenceSubmission(companyId);
 
-  const MODULE_LABELS: Record<string, string> = {
-    ai_reliability: "AI Reliability Audit",
-    tender_readiness: "Tender Readiness",
-    data_protection: "Data Protection Compliance",
-  };
-
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <Link href="/queue" className="mb-4 inline-block text-sm text-neutral-500 underline hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
@@ -186,8 +177,10 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
             <ul className="space-y-2 text-sm">
               {goals.map((g) => (
                 <li key={g.id} className="text-neutral-800 dark:text-neutral-200">
-                  <span className="font-medium">{g.primary_goal}</span>
-                  {g.secondary_goal && <span className="text-neutral-500 dark:text-neutral-400"> · also: {g.secondary_goal}</span>}
+                  <span className="font-medium">{GOAL_LABELS[g.primary_goal as PrimaryGoal] ?? g.primary_goal}</span>
+                  {g.secondary_goal && (
+                    <span className="text-neutral-500 dark:text-neutral-400"> · also: {GOAL_LABELS[g.secondary_goal as PrimaryGoal] ?? g.secondary_goal}</span>
+                  )}
                   {g.urgency_level && <span className="text-neutral-500 dark:text-neutral-400"> · urgency: {g.urgency_level}</span>}
                 </li>
               ))}
@@ -218,10 +211,11 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
                 return (
                   <li key={r.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0 dark:border-neutral-800">
                     <div className="flex items-center justify-between">
-                      <span className="text-neutral-800 dark:text-neutral-200">
-                        {r.status} · submitted {r.submitted_at ? new Date(r.submitted_at).toLocaleDateString() : "—"}
+                      <span className="flex flex-wrap items-center gap-2 text-neutral-800 dark:text-neutral-200">
+                        <TypeBadge type="core_audit" />
+                        {humanizeStatus(r.status as string)} · submitted {r.submitted_at ? new Date(r.submitted_at).toLocaleDateString() : "—"}
                         {r.delivered_at && <> · delivered {new Date(r.delivered_at).toLocaleDateString()}</>}
-                        {isPaidReAudit && <span className="ml-1 text-xs text-neutral-500 dark:text-neutral-400">(paid re-audit)</span>}
+                        {isPaidReAudit && <span className="text-xs text-neutral-500 dark:text-neutral-400">(paid re-audit)</span>}
                       </span>
                       <Link href={`/review/${r.id}`} className="text-xs underline">
                         Open
@@ -247,9 +241,9 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
               {moduleRequests.map((m) => (
                 <li key={m.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0 dark:border-neutral-800">
                   <div className="flex items-center justify-between">
-                    <span className="text-neutral-800 dark:text-neutral-200">
-                      {MODULE_LABELS[m.module_type as string] ?? m.module_type} · {m.status} ·{" "}
-                      {m.created_at ? new Date(m.created_at).toLocaleDateString() : "—"}
+                    <span className="flex flex-wrap items-center gap-2 text-neutral-800 dark:text-neutral-200">
+                      <TypeBadge type={moduleTypeToItemType(m.module_type as string)} />
+                      {humanizeStatus(m.status as string)} · {m.created_at ? new Date(m.created_at).toLocaleDateString() : "—"}
                     </span>
                     <Link href={`/review-module/${m.id}`} className="text-xs underline">
                       Open
@@ -274,8 +268,9 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
             <ul className="space-y-2 text-sm">
               {sessionRequests.map((s) => (
                 <li key={s.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0 dark:border-neutral-800">
-                  <span className="text-neutral-800 dark:text-neutral-200">
-                    {SESSION_TYPE_LABELS[s.session_type as string] ?? s.session_type} · {s.status} · requested{" "}
+                  <span className="flex flex-wrap items-center gap-2 text-neutral-800 dark:text-neutral-200">
+                    <TypeBadge type={sessionTypeToItemType(s.session_type as string)} />
+                    {SESSION_STATUS_LABELS[s.status as string] ?? humanizeStatus(s.status as string)} · requested{" "}
                     {s.requested_at ? new Date(s.requested_at).toLocaleDateString() : "—"}
                     {s.scheduled_at && <> · scheduled {new Date(s.scheduled_at).toLocaleString()}</>}
                     {s.completed_at && <> · completed {new Date(s.completed_at).toLocaleDateString()}</>}
@@ -295,8 +290,9 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
               {executionSprints.map((s) => (
                 <li key={s.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0 dark:border-neutral-800">
                   <div className="flex items-center justify-between">
-                    <span className="text-neutral-800 dark:text-neutral-200">
-                      {s.status}
+                    <span className="flex flex-wrap items-center gap-2 text-neutral-800 dark:text-neutral-200">
+                      <TypeBadge type="execution_sprint" />
+                      {humanizeStatus(s.status as string)}
                       {s.start_date && <> · started {s.start_date}</>}
                       {s.target_end_date && <> · target end {s.target_end_date}</>}
                     </span>

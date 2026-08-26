@@ -6,68 +6,8 @@ import { computeJourneyStatus } from "@/lib/reports/journey-status";
 import { NextStepBanner } from "@/app/_components/NextStepBanner";
 import { ProgressStepper } from "@/app/_components/ProgressStepper";
 import { Card } from "@/app/_components/ui/Card";
-
-const SESSION_STATUS_LABELS: Record<string, string> = { requested: "Requested — awaiting scheduling", scheduled: "Scheduled", completed: "Completed", declined: "Declined" };
-
-/**
- * Item-type identity, one per real thing this page can show (confirmed
- * 2026-08-26, full redesign — see the docblock below for the research this
- * was based on). Distinct from `group` — `type` drives the badge/color,
- * `group` drives which section the item renders in.
- *
- * "concierge" added after a real gap found live during this same pass:
- * `session_requests.session_type` has a 4th real value, `concierge_inquiry`
- * (added 2026-08-24, Concierge tier) — the pre-existing `SESSION_LABELS`
- * map on this page never had an entry for it either, but the original flat
- * list just fell back to the raw type string; a naive type→badge mapping
- * here would have actively mislabeled a completed/declined Concierge
- * inquiry as "F2F Workshop." Caught by testing against Sally's real
- * account, which has a real `concierge_inquiry` row, before this shipped.
- */
-type ItemType =
-  | "core_audit"
-  | "tender_readiness"
-  | "ai_reliability"
-  | "data_protection"
-  | "execution_sprint"
-  | "discovery"
-  | "delivery"
-  | "f2f_workshop"
-  | "concierge";
-
-const TYPE_LABELS: Record<ItemType, string> = {
-  core_audit: "Core Audit",
-  tender_readiness: "Tender Readiness",
-  ai_reliability: "AI Reliability Audit",
-  data_protection: "Data Protection Compliance",
-  execution_sprint: "Execution Sprint",
-  discovery: "Discovery Session",
-  delivery: "Delivery Session",
-  f2f_workshop: "F2F Workshop",
-  concierge: "Concierge Inquiry",
-};
-
-// One distinct color per type, so a client can tell items apart by glancing
-// at the badge alone, not just by reading the title (confirmed 2026-08-26,
-// direct founder request). Core Audit gets the real brand accent token
-// (not a raw Tailwind amber utility) — it's the flagship product, and
-// `accent` is already this app's own established "primary/flagship" signal
-// (CTAs, primary buttons) — deliberately NOT the same raw amber-100/800
-// pairing Signals/Dashboard already use for "medium severity", to avoid the
-// two unrelated meanings reading as the same color. Every other type gets
-// a genuinely distinct hue, avoiding red/orange (reserved for severity
-// elsewhere in this app).
-const TYPE_BADGE_STYLES: Record<ItemType, string> = {
-  core_audit: "bg-accent text-accent-ink",
-  tender_readiness: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
-  ai_reliability: "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300",
-  data_protection: "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300",
-  execution_sprint: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-  discovery: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-  delivery: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300",
-  f2f_workshop: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300",
-  concierge: "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-950 dark:text-fuchsia-300",
-};
+import { type ItemType, TypeBadge } from "@/lib/item-type-badge";
+import { SESSION_STATUS_LABELS } from "@/lib/format";
 
 interface HistoryItem {
   id: string;
@@ -77,10 +17,6 @@ interface HistoryItem {
   date: string | null;
   dateLabel: string;
   href: string | null;
-}
-
-function TypeBadge({ type }: { type: ItemType }) {
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_BADGE_STYLES[type]}`}>{TYPE_LABELS[type]}</span>;
 }
 
 /**
@@ -105,7 +41,10 @@ function TypeBadge({ type }: { type: ItemType }) {
  * https://uxpatterns.dev/patterns/data-display/timeline.
  *
  * Structure decided from that research:
- * 1. A colored type badge per item (see TYPE_BADGE_STYLES above) —
+ * 1. A colored type badge per item (see `@/lib/item-type-badge`, extracted
+ *    2026-08-26 so /queue, /requests, /signals, and /company/[companyId]
+ *    could reuse the exact same type/color system rather than each
+ *    inventing their own) —
  *    chosen over a new icon set specifically to match this app's own
  *    already-established "colored badge as differentiator" pattern
  *    (severity badges, plan-tier badges, missing-evidence badges) rather

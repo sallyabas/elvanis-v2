@@ -21,6 +21,9 @@ import {
 import type { DisputeResolution } from "@/lib/reviewer/workspace";
 import { matchRecommendationLibraryEntries, type RecommendationLibraryEntry } from "@/lib/recommendations/recommendation-library";
 import { computeCascadeSignals } from "@/lib/recommendations/cascade";
+import { GOAL_LABELS } from "@/lib/lenses/goals";
+import type { PrimaryGoal } from "@/lib/lenses/types";
+import { humanizeStatus } from "@/lib/format";
 import { Card } from "@/app/_components/ui/Card";
 import { Input } from "@/app/_components/ui/Input";
 import { Textarea } from "@/app/_components/ui/Textarea";
@@ -129,6 +132,32 @@ const LENS_LABELS: Record<LensType, string> = {
 };
 
 const LENS_ORDER: LensType[] = ["financial", "commercial", "execution", "product", "ai_governance"];
+
+/**
+ * Humanizes a raw `case_library` tag (confirmed 2026-08-26, navigation-
+ * audit fix batch, item 4) — real gap found live: "Similar patterns"
+ * rendered these internal, machine-parseable tags verbatim (e.g.
+ * `goal:growth_revenue_efficiency`, `lens:financial:severity:critical`),
+ * which is exactly the format case-library.ts's own tag-building functions
+ * produce (`goal:`/`industry:`/`stage:`/`lens:<key>:severity:<level>`) —
+ * see that file for the source of truth these patterns match against.
+ * Reuses this same file's own LENS_LABELS and the shared GOAL_LABELS
+ * rather than inventing new copy.
+ */
+function formatOverlapTag(tag: string): string {
+  const lensMatch = tag.match(/^lens:([a-z_]+):severity:([a-z]+)$/);
+  if (lensMatch) {
+    const [, lens, severity] = lensMatch;
+    return `${LENS_LABELS[lens as LensType] ?? lens}: ${severity} severity`;
+  }
+  if (tag.startsWith("goal:")) {
+    const goal = tag.slice("goal:".length);
+    return `Goal: ${GOAL_LABELS[goal as PrimaryGoal] ?? goal}`;
+  }
+  if (tag.startsWith("industry:")) return `Industry: ${tag.slice("industry:".length)}`;
+  if (tag.startsWith("stage:")) return `Stage: ${tag.slice("stage:".length)}`;
+  return humanizeStatus(tag);
+}
 
 function formatDuration(fromIso: string | null, toIso: string | null): string | null {
   if (!fromIso) return null;
@@ -785,7 +814,7 @@ export function ReviewWorkspaceClient({
               <li key={p.reportId} className="text-sm text-neutral-800 dark:text-neutral-200">
                 <span className="font-medium">{p.companyName}</span>{" "}
                 <span className="text-neutral-500 dark:text-neutral-400">
-                  · {(p.similarityScore * 100).toFixed(0)}% overlap · {p.overlappingTags.join(", ")}
+                  · {(p.similarityScore * 100).toFixed(0)}% overlap · {p.overlappingTags.map(formatOverlapTag).join(", ")}
                 </span>
               </li>
             ))}

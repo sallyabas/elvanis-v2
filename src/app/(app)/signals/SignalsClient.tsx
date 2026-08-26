@@ -6,6 +6,7 @@ import type { FinancialImpact, Severity } from "@/lib/lenses/types";
 import { formatCurrencyRange, isUsableFinancialImpact } from "@/lib/reports/financial-impact";
 import { FindingNotApplicableButton } from "@/app/_components/FindingNotApplicableButton";
 import { SprintInterestButton } from "@/app/_components/SprintInterestButton";
+import { TYPE_BADGE_STYLES, moduleTypeToItemType } from "@/lib/item-type-badge";
 import { Card } from "@/app/_components/ui/Card";
 
 export interface SignalItem {
@@ -42,6 +43,35 @@ const SEVERITY_STYLES: Record<Severity, string> = {
   medium: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
   low: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
 };
+
+/**
+ * Source-badge colors (confirmed 2026-08-26, navigation-audit fix batch,
+ * item 3) — a genuinely different dimension from the item-type badges used
+ * on Reports & History/Queue/Requests/Company (those distinguish which
+ * DELIVERABLE something is; this distinguishes which of the 5 Core Audit
+ * lenses a finding came from, a dimension that only ever appears here).
+ * The 3 module sourceKeys ARE the same identity as elsewhere, so those
+ * reuse `@/lib/item-type-badge`'s exact colors directly rather than
+ * re-picking new ones for the same entities. The 5 lens colors are new —
+ * chosen to avoid every hue already used by TYPE_BADGE_STYLES or by
+ * SEVERITY_STYLES above, so a source badge is never mistaken for either.
+ */
+const LENS_BADGE_STYLES: Record<string, string> = {
+  financial: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
+  execution: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300",
+  product: "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300",
+  commercial: "bg-pink-100 text-pink-800 dark:bg-pink-950 dark:text-pink-300",
+  ai_governance: "bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300",
+};
+
+// Lens and module sourceKeys are disjoint sets (financial/execution/
+// product/commercial/ai_governance vs. ai_reliability/tender_readiness/
+// data_protection), so this can key off sourceKey alone — used both for
+// each finding's own badge and for the Source filter chips, which only
+// ever have a sourceKey, not a full SignalItem.
+function sourceKeyBadgeStyle(sourceKey: string): string {
+  return LENS_BADGE_STYLES[sourceKey] ?? TYPE_BADGE_STYLES[moduleTypeToItemType(sourceKey)];
+}
 
 export function SignalsClient({
   companyId,
@@ -107,9 +137,9 @@ export function SignalsClient({
                 key={key}
                 type="button"
                 onClick={() => toggleSource(key)}
-                className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                className={`rounded-full border border-transparent px-2.5 py-1 text-xs font-medium transition-colors ${
                   activeSources.has(key)
-                    ? "border-accent bg-accent text-accent-ink"
+                    ? sourceKeyBadgeStyle(key)
                     : "border-neutral-300 text-neutral-500 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800"
                 }`}
               >
@@ -126,9 +156,9 @@ export function SignalsClient({
                 key={s}
                 type="button"
                 onClick={() => toggleSeverity(s)}
-                className={`rounded-full border px-2.5 py-1 text-xs font-medium capitalize transition-colors ${
+                className={`rounded-full border border-transparent px-2.5 py-1 text-xs font-medium capitalize transition-colors ${
                   activeSeverities.has(s)
-                    ? "border-accent bg-accent text-accent-ink"
+                    ? SEVERITY_STYLES[s]
                     : "border-neutral-300 text-neutral-500 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800"
                 }`}
               >
@@ -157,9 +187,7 @@ export function SignalsClient({
               }
             >
               <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
-                <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
-                  {item.sourceLabel}
-                </span>
+                <span className={`rounded-full px-2 py-0.5 font-medium ${sourceKeyBadgeStyle(item.sourceKey)}`}>{item.sourceLabel}</span>
                 {item.isMissingDataFinding ? (
                   <span className="rounded bg-neutral-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
                     No evidence submitted

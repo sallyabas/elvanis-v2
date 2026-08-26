@@ -3,8 +3,22 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { UnifiedRequestRow, UnifiedRequestType } from "@/lib/reviewer/unified-requests";
+import { TypeBadge } from "@/lib/item-type-badge";
+import { humanizeStatus } from "@/lib/format";
 import { Select } from "@/app/_components/ui/Select";
 import { Input } from "@/app/_components/ui/Input";
+
+// Same severity palette already used on Signals/Dashboard/the client Report
+// page (confirmed 2026-08-26, navigation-audit fix batch, item 3) — kept as
+// its own local copy rather than a new shared extraction, matching this
+// codebase's existing convention (every one of those other files already
+// keeps its own local copy too, not a prior inconsistency introduced here).
+const SEVERITY_STYLES: Record<string, string> = {
+  critical: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+  high: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
+  medium: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+  low: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
+};
 
 /**
  * Client-side filtering over an already-fetched, already-normalized row
@@ -112,10 +126,20 @@ export function RequestsFilterClient({ rows }: { rows: UnifiedRequestRow[] }) {
                       {r.companyName}
                     </Link>
                   </td>
-                  <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">{r.typeLabel}</td>
+                  <td className="px-3 py-2">
+                    <TypeBadge type={r.badgeType} />
+                  </td>
                   <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">{r.date ? new Date(r.date).toLocaleDateString() : "—"}</td>
-                  <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">{r.status}</td>
-                  <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">{r.severity ?? "—"}</td>
+                  <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">{humanizeStatus(r.status)}</td>
+                  <td className="px-3 py-2">
+                    {r.severity ? (
+                      <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${SEVERITY_STYLES[r.severity]}`}>
+                        {r.severity}
+                      </span>
+                    ) : (
+                      <span className="text-neutral-400 dark:text-neutral-500">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     <Link href={r.link} className="text-xs underline">
                       Open

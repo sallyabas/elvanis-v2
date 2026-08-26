@@ -12,6 +12,7 @@ import {
   rejectProcurementAnswerAction,
 } from "./actions";
 import { PROCUREMENT_QUESTIONS, type ProcurementCategory } from "@/lib/modules/tender-readiness/procurement-categories";
+import { humanizeStatus } from "@/lib/format";
 import { Card } from "@/app/_components/ui/Card";
 import { Input } from "@/app/_components/ui/Input";
 import { Textarea } from "@/app/_components/ui/Textarea";
@@ -270,7 +271,7 @@ export function ModuleReviewWorkspaceClient({
     <div className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">{companyName}</h1>
       <p className={duration ? "mb-1 text-sm text-neutral-500 dark:text-neutral-400" : "mb-6 text-sm text-neutral-500 dark:text-neutral-400"}>
-        {moduleLabel} · status: <span className="font-medium">{requestStatus}</span>
+        {moduleLabel} · status: <span className="font-medium">{humanizeStatus(requestStatus)}</span>
       </p>
       {duration && (
         <p className="mb-6 text-xs text-neutral-500 dark:text-neutral-400">
