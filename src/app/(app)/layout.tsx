@@ -67,6 +67,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link href="/dashboard" className="hover:text-neutral-50 hover:underline">
               Dashboard
             </Link>
+            {/* Real nav link added 2026-08-26 (navigation audit) — Evidence
+                Intake previously had no persistent nav entry at all; the
+                only path was one small, narrowly-worded inline link on
+                Dashboard ("Want to pursue a different goal? Submit new
+                evidence...") that undersold what the page does the rest of
+                the time (adding evidence to strengthen the same goal's
+                audit, not just switching goals). Placed as a plain flat
+                link, matching every other nav item's visual treatment,
+                right after Dashboard since it's the natural next action. */}
+            <Link href="/evidence-intake" className="hover:text-neutral-50 hover:underline">
+              Submit Evidence
+            </Link>
             {/* Real nav link added 2026-08-16 (final Dashboard redesign,
                 item 1) — Signals is a genuinely new, standalone page (a
                 unified filterable finding list), not a duplicate of any

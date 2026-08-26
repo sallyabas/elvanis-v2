@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { findSimilarPatterns } from "@/lib/synthesis/case-library";
@@ -88,27 +89,45 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
     : { data: null };
 
   return (
-    <ReviewWorkspaceClient
-      reportId={report.id}
-      companyName={company?.name ?? "Unknown company"}
-      companyUserId={company?.user_id ?? null}
-      planTier={ownerUsersRow?.plan_tier ?? "free"}
-      reportStatus={report.status}
-      top3FindingIds={(report.top_3_finding_ids as string[]) ?? []}
-      canRerun={report.source_evidence_snapshot !== null}
-      rerunOfReportId={report.rerun_of_report_id as string | null}
-      similarPatterns={similarPatterns.map((p) => ({ ...p, companyName: patternCompanyNames.get(p.companyId) ?? "Unknown company" }))}
-      findings={findings}
-      conflicts={conflicts ?? []}
-      recommendationLibrary={recommendationLibrary}
-      conciergeNotesByFindingId={Object.fromEntries(conciergeNotes)}
-      currentReviewerName={(currentReviewerProfile?.name as string | null) ?? ""}
-      timing={{
-        createdAt: report.created_at,
-        submittedAt: report.submitted_at,
-        editWindowClosesAt: report.edit_window_closes_at,
-        approvedAt: report.approved_at,
-      }}
-    />
+    <>
+      {/* Real navigation-audit fix (confirmed 2026-08-26) — the three
+          review workspace pages had zero link back to the company's own
+          context page, even though every one of them already loads
+          company_id. A reviewer mid-review had no one-click way to see
+          "what else does this company have going on." Own mx-auto/px-6
+          wrapper (not a shared parent around ReviewWorkspaceClient below)
+          since that component already wraps itself the same way — nesting
+          would double the horizontal padding.  */}
+      <div className="mx-auto max-w-3xl px-6 pt-6">
+        <Link
+          href={`/company/${report.company_id}`}
+          className="inline-block text-sm text-neutral-500 underline hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+        >
+          ← {company?.name ?? "Unknown company"}
+        </Link>
+      </div>
+      <ReviewWorkspaceClient
+        reportId={report.id}
+        companyName={company?.name ?? "Unknown company"}
+        companyUserId={company?.user_id ?? null}
+        planTier={ownerUsersRow?.plan_tier ?? "free"}
+        reportStatus={report.status}
+        top3FindingIds={(report.top_3_finding_ids as string[]) ?? []}
+        canRerun={report.source_evidence_snapshot !== null}
+        rerunOfReportId={report.rerun_of_report_id as string | null}
+        similarPatterns={similarPatterns.map((p) => ({ ...p, companyName: patternCompanyNames.get(p.companyId) ?? "Unknown company" }))}
+        findings={findings}
+        conflicts={conflicts ?? []}
+        recommendationLibrary={recommendationLibrary}
+        conciergeNotesByFindingId={Object.fromEntries(conciergeNotes)}
+        currentReviewerName={(currentReviewerProfile?.name as string | null) ?? ""}
+        timing={{
+          createdAt: report.created_at,
+          submittedAt: report.submitted_at,
+          editWindowClosesAt: report.edit_window_closes_at,
+          approvedAt: report.approved_at,
+        }}
+      />
+    </>
   );
 }

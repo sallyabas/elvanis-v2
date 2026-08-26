@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SprintReviewWorkspaceClient } from "./SprintReviewWorkspaceClient";
 import type { LensFinding } from "@/lib/lenses/types";
@@ -8,7 +9,7 @@ export default async function SprintReviewWorkspacePage({ params }: { params: Pr
 
   const { data: sprint, error: sprintError } = await supabase
     .from("execution_sprints")
-    .select("id, status, signed_off_at, reviewer_commentary, selected_finding_id, companies(name)")
+    .select("id, status, signed_off_at, reviewer_commentary, selected_finding_id, company_id, companies(name)")
     .eq("id", sprintId)
     .single();
 
@@ -36,14 +37,28 @@ export default async function SprintReviewWorkspacePage({ params }: { params: Pr
   const company = sprint.companies as unknown as { name: string } | null;
 
   return (
-    <SprintReviewWorkspaceClient
-      sprintId={sprint.id}
-      companyName={company?.name ?? "Unknown company"}
-      findingTitle={findingContent?.title ?? "Unknown finding"}
-      sprintStatus={sprint.status}
-      signedOffAt={sprint.signed_off_at}
-      reviewerCommentary={sprint.reviewer_commentary}
-      tasks={tasks ?? []}
-    />
+    <>
+      {/* Real navigation-audit fix (confirmed 2026-08-26) — see the
+          equivalent fix's docblock in review/[reportId]/page.tsx. Own
+          mx-auto/px-6 wrapper, not shared with SprintReviewWorkspaceClient
+          below (which already wraps itself the same way). */}
+      <div className="mx-auto max-w-3xl px-6 pt-6">
+        <Link
+          href={`/company/${sprint.company_id}`}
+          className="inline-block text-sm text-neutral-500 underline hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+        >
+          ← {company?.name ?? "Unknown company"}
+        </Link>
+      </div>
+      <SprintReviewWorkspaceClient
+        sprintId={sprint.id}
+        companyName={company?.name ?? "Unknown company"}
+        findingTitle={findingContent?.title ?? "Unknown finding"}
+        sprintStatus={sprint.status}
+        signedOffAt={sprint.signed_off_at}
+        reviewerCommentary={sprint.reviewer_commentary}
+        tasks={tasks ?? []}
+      />
+    </>
   );
 }

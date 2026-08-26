@@ -29,6 +29,12 @@ export default async function ServicesPage() {
   // Whether a report exists yet — Delivery Session and F2F Workshop only
   // make sense once findings actually exist to discuss (same reasoning
   // already applied on the report page and evidence-intake page).
+  //
+  // Real fix (confirmed 2026-08-26, navigation audit): this comment was
+  // previously the ONLY mention of evidence-intake on this whole page —
+  // read on its own, it could be misread as claiming a link to it existed
+  // here. It never did (grepped for the literal href). The Core Audit
+  // card below now carries a real "Submit new evidence" link.
   const { data: latestReport } = await supabase
     .from("reports")
     .select("id")
@@ -58,9 +64,14 @@ export default async function ServicesPage() {
             <p className="text-sm text-neutral-600 dark:text-neutral-400">Your goal-driven diagnosis and 30/60/90 roadmap. First audit free; re-audits are paid.</p>
             <span className="shrink-0 text-sm font-medium text-accent">{formatPrice(pricingByKey.get("standard_core_audit") ?? { priceAmount: 0, currency: "GBP" })}</span>
           </div>
-          <Link href="/dashboard" className="mt-3 inline-block text-sm underline">
-            View your dashboard
-          </Link>
+          <div className="mt-3 flex gap-4 text-sm">
+            <Link href="/dashboard" className="underline">
+              View your dashboard
+            </Link>
+            <Link href="/evidence-intake" className="underline">
+              Submit new evidence
+            </Link>
+          </div>
         </Card>
 
         {/* "Contact Sales," not a price/buy flow (confirmed 2026-08-24,

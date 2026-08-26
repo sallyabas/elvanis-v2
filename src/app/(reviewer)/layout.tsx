@@ -59,6 +59,12 @@ export default async function ReviewerLayout({ children }: { children: React.Rea
           <Link href="/requests" className="hover:text-neutral-50">
             All requests
           </Link>
+          {/* Real nav link added 2026-08-26 (navigation audit) — reverses
+              the earlier "hold, queue-only" decision on a company
+              directory; see companies/page.tsx's own docblock. */}
+          <Link href="/companies" className="hover:text-neutral-50">
+            Companies
+          </Link>
           <Link href="/ideas" className="hover:text-neutral-50">
             Ideas
           </Link>

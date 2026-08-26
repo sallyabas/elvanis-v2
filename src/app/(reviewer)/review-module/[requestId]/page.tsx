@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ModuleReviewWorkspaceClient } from "./ModuleReviewWorkspaceClient";
 
@@ -13,7 +14,7 @@ export default async function ModuleReviewWorkspacePage({ params }: { params: Pr
 
   const { data: request, error: requestError } = await supabase
     .from("module_requests")
-    .select("id, module_type, status, created_at, approved_at, intake_data, companies(name)")
+    .select("id, module_type, status, created_at, approved_at, intake_data, company_id, companies(name)")
     .eq("id", requestId)
     .single();
 
@@ -68,16 +69,30 @@ export default async function ModuleReviewWorkspacePage({ params }: { params: Pr
     Object.values(applicability).every((v) => v === false);
 
   return (
-    <ModuleReviewWorkspaceClient
-      requestId={request.id}
-      companyName={company?.name ?? "Unknown company"}
-      moduleLabel={MODULE_LABELS[request.module_type as string] ?? (request.module_type as string)}
-      requestStatus={request.status}
-      moduleType={request.module_type as string}
-      findings={findings}
-      procurementAnswers={procurementAnswers ?? []}
-      timing={{ createdAt: request.created_at, approvedAt: request.approved_at }}
-      hasNoApplicableJurisdiction={hasNoApplicableJurisdiction}
-    />
+    <>
+      {/* Real navigation-audit fix (confirmed 2026-08-26) — see the
+          equivalent fix's docblock in review/[reportId]/page.tsx. Own
+          mx-auto/px-6 wrapper, not shared with ModuleReviewWorkspaceClient
+          below (which already wraps itself the same way). */}
+      <div className="mx-auto max-w-3xl px-6 pt-6">
+        <Link
+          href={`/company/${request.company_id}`}
+          className="inline-block text-sm text-neutral-500 underline hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+        >
+          ← {company?.name ?? "Unknown company"}
+        </Link>
+      </div>
+      <ModuleReviewWorkspaceClient
+        requestId={request.id}
+        companyName={company?.name ?? "Unknown company"}
+        moduleLabel={MODULE_LABELS[request.module_type as string] ?? (request.module_type as string)}
+        requestStatus={request.status}
+        moduleType={request.module_type as string}
+        findings={findings}
+        procurementAnswers={procurementAnswers ?? []}
+        timing={{ createdAt: request.created_at, approvedAt: request.approved_at }}
+        hasNoApplicableJurisdiction={hasNoApplicableJurisdiction}
+      />
+    </>
   );
 }
