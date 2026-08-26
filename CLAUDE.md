@@ -1697,7 +1697,7 @@ Direct follow-up to the Reports & History redesign: a full pass over every clien
 
 **Follow-up, same day**: item 1's banner fix (above) built and live-verified in a second pass — `tsc --noEmit`/`eslint src/ --quiet`/`npm run build` re-confirmed clean after it. One real, unrelated environment snag hit and resolved during this follow-up, not an app bug: the running dev server's `.next` directory had been wiped out from under it by the prior pass's own `rm -rf .next && npm run build` (a production build, not dev mode) — its Turbopack dev-mode artifacts were gone, producing 500s on every route. Fixed by stopping and restarting the dev server cleanly after clearing `.next` again; unrelated to the actual code change, confirmed by the fix working immediately once the server had a fresh dev build to run against. Temporary `/api/debug-set-session` route and `scratch-mint.ts` recreated for this verification pass and deleted again afterward, never committed.
 
-Committed and pushed, per explicit go-ahead.
+Committed and pushed (commit `35cab22`), per explicit go-ahead.
 
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
