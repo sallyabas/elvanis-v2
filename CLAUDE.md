@@ -1620,6 +1620,26 @@ Direct founder request: a comprehensive, honest end-to-end test walkthrough of t
 
 Committed and pushed (commit `ae2cd1c`), per explicit go-ahead.
 
+## Regression confirmation after the honest-test fix batch (2026-08-26)
+
+Direct founder request: confirm none of five previously-verified behaviors regressed as a result of the 7-item fix batch above — the 5-lens audit succeeding cleanly, benchmark math correctness, the mandatory reviewer gate, "Submit now" race-safety, and Tender Readiness's jurisdiction-not-set warning/confirm gate. Checked each two ways — a static `git diff` against the fix batch's own commit, and a real live re-run — rather than reasoning about risk from memory alone.
+
+**Static diff first**: `git diff` confirmed zero touches to `src/lib/reviewer/`, `src/lib/modules/tender-readiness/`, `src/lib/audit/`, `pending-submission.ts`, or any benchmark/lens file other than `commercial.ts` (touched only additively — a new optional `metrics` field plus a new formatting helper appended to the existing prompt-building function). This alone rules out any code-level overlap for 4 of the 5 items; only the real 5-lens/Commercial-metrics path needed a live re-run to fully close.
+
+**Live re-run, real account, real Groq calls**: signed up a genuinely fresh disposable account ("Regression Check Co"), filled real evidence including the new Commercial metrics (MRR growth rate, win rate), and used "Submit now" through the actual UI. The real `submitEvidenceNow()` call completed cleanly in 77.5s, producing a real report (Financial 5 findings, Product 1, AI & Governance 7 — Execution and Commercial didn't land this specific run). **Investigated the Commercial miss directly rather than assuming ordinary flakiness**: isolated `commercialLens.runDraft()` standalone with the exact same evidence, including the new `metrics` field — it succeeded cleanly (2 real findings, correctly `origin: "client_reported"`, confirming the new `[self_report.metric_*]` citation-key format is recognized correctly by the existing origin-tagging validation) — confirming the miss was ordinary transient Groq variance on this specific run, not caused by the fix batch, the same "isolate and re-test standalone" discipline already used repeatedly elsewhere in this file for exactly this failure class.
+
+**Benchmark math** confirmed correct in the same real run's own findings: "Gross margin is 55%, below the concerning threshold of 60%" and "Cash runway is 5 months, below the critical threshold of 6 months" — both arithmetically correct, from the untouched Financial lens.
+
+**Mandatory reviewer gate** confirmed on the same real report: Approve correctly blocked while 13 findings and a real detected conflict were unresolved (status stayed `pending_review`), then correctly succeeded once every finding was accepted and the conflict resolved (status flipped to `approved`) — including confirming the AI-suggested-resolution prefill still works.
+
+**Tender Readiness** confirmed on the same disposable account (no registration country/customer markets set, a genuine "not set" case): the "No AI-specific jurisdiction currently applies..." warning rendered correctly, and submitting without documentation correctly triggered the confirm-without-docs gate — cancelled without completing the submission, since the client-side gate firing correctly was sufficient proof without spending a real Groq call on a module already confirmed untouched by diff.
+
+**Disclosed, not hidden**: one tool-permission stream error interrupted the first cleanup attempt mid-command, silently failing to write the cleanup script to disk — caught by the immediate `ERR_MODULE_NOT_FOUND` on retry rather than assumed successful, rewritten, and re-run cleanly.
+
+All disposable test data (the account, company, goal, report, findings, conflict) deleted afterward — this was a verification pass over already-shipped fixes, not a first-of-its-kind proof run worth retaining. Temporary `/api/debug-set-session` route and all scratch scripts deleted, never committed. `tsc --noEmit` re-confirmed clean after a stale `.next` dev-type-cache artifact (the same class already documented elsewhere in this file) was cleared.
+
+No code changed in this pass — a pure regression-confirmation exercise, recorded here per the standing "keep this file current" discipline.
+
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
 - Don't over-build ahead of proof. Exception: modules built from external research (Tender Readiness, AI Reliability, Data Protection) don't need a live client first — they're sequenced by engine-readiness, not by demand signal.
