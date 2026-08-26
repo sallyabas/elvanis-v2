@@ -1618,7 +1618,7 @@ Direct founder request: a comprehensive, honest end-to-end test walkthrough of t
 
 `tsc --noEmit`, `eslint src/ --quiet`, and `npm run build` all clean throughout, re-checked after every item and once more after final cleanup (including a `.next` cache clear). Temporary `/api/debug-set-session` route and all scratch verification scripts deleted afterward, never committed — confirmed via `git status` before this writeup.
 
-**Not yet committed/pushed** — held for explicit go-ahead, same standing pattern as every other change this session.
+Committed and pushed (commit `ae2cd1c`), per explicit go-ahead.
 
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
