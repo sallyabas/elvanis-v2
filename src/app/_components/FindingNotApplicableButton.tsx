@@ -58,7 +58,7 @@ export function FindingNotApplicableButton({
         type="button"
         onClick={handleClick}
         disabled={status === "sending"}
-        className="text-xs text-neutral-400 underline hover:text-neutral-600 disabled:opacity-40 dark:text-neutral-500 dark:hover:text-neutral-300"
+        className="text-xs text-neutral-400 hover:text-neutral-600 hover:underline disabled:opacity-40 dark:text-neutral-500 dark:hover:text-neutral-300"
       >
         {status === "sending" ? "Saving…" : "Doesn't apply to us?"}
       </button>

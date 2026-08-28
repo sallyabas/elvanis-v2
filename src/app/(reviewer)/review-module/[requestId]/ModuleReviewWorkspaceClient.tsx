@@ -13,6 +13,7 @@ import {
 } from "./actions";
 import { PROCUREMENT_QUESTIONS, type ProcurementCategory } from "@/lib/modules/tender-readiness/procurement-categories";
 import { humanizeStatus } from "@/lib/format";
+import { SEVERITY_STYLES } from "@/lib/severity-badge";
 import { Card } from "@/app/_components/ui/Card";
 import { Input } from "@/app/_components/ui/Input";
 import { Textarea } from "@/app/_components/ui/Textarea";
@@ -141,19 +142,16 @@ function hoursBetween(fromIso: string | null, toIso: string | null): number | nu
   return ms / (60 * 60 * 1000);
 }
 
+// Softened 2026-08-28 (premium B2B redesign) — same restrained, no-border
+// treatment as the shared SEVERITY_STYLES (@/lib/severity-badge).
 const STATUS_BADGE: Record<FindingRow["reviewer_status"], string> = {
-  draft: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  approved: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
-  edited: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  rejected: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+  draft: "bg-yellow-50 text-yellow-700 dark:bg-amber-950 dark:text-amber-300",
+  approved: "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-300",
+  edited: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  rejected: "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300",
 };
 
-const SEVERITY_BADGE: Record<string, string> = {
-  critical: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-  high: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
-  medium: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300",
-  low: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
-};
+// SEVERITY_BADGE replaced by the shared SEVERITY_STYLES (@/lib/severity-badge).
 
 export function ModuleReviewWorkspaceClient({
   requestId,
@@ -337,7 +335,7 @@ export function ModuleReviewWorkspaceClient({
       )}
 
       {draftCount > 0 && (
-        <section className="mb-6 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+        <section className="mb-6 rounded-lg bg-red-50 p-4 text-sm text-red-700 shadow-card-1 dark:bg-red-950 dark:text-red-300">
           <p className="font-medium">Mandatory before this request can be approved:</p>
           <p className="mt-1">{draftCount} finding(s) still need a decision — Accept, Edit, or Reject each one below.</p>
         </section>
@@ -473,7 +471,7 @@ function ProcurementAnswerCard({ a }: { a: ProcurementAnswerRow }) {
   const displayedAnswer = a.reviewer_edited_answer ?? a.ai_draft_answer;
   return (
     <div
-      className={`rounded-md border bg-white p-3 shadow-sm dark:bg-neutral-900 ${isDraft ? "border-amber-300 dark:border-amber-800" : "border-neutral-300 dark:border-neutral-700"}`}
+      className={`rounded-md border bg-white p-3 shadow-card-1 dark:bg-neutral-900 ${isDraft ? "border-amber-300 dark:border-amber-800" : "border-neutral-200 dark:border-neutral-700"}`}
     >
       <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
         <span className="font-medium text-neutral-700 dark:text-neutral-300">{label}</span>
@@ -502,7 +500,7 @@ function ProcurementAnswerEditForm({
   const [notes, setNotes] = useState("");
 
   return (
-    <div className="mt-2 space-y-3 rounded-md border border-blue-300 bg-white p-3 shadow-sm dark:border-blue-800 dark:bg-neutral-900">
+    <div className="mt-2 space-y-3 rounded-md border-l-2 border-blue-400 bg-white p-3 shadow-card-1 dark:border-blue-700 dark:bg-neutral-900">
       <Textarea label="Answer" value={answer} onChange={(e) => setAnswer(e.target.value)} rows={4} />
       <Input placeholder="Reviewer notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} className="text-xs" />
       <div className="flex gap-2">
@@ -522,10 +520,10 @@ function FindingCard({ f }: { f: FindingRow }) {
   const isDraft = f.reviewer_status === "draft";
   return (
     <div
-      className={`rounded-md border bg-white p-3 shadow-sm dark:bg-neutral-900 ${isDraft ? "border-amber-300 dark:border-amber-800" : "border-neutral-300 dark:border-neutral-700"}`}
+      className={`rounded-md border bg-white p-3 shadow-card-1 dark:bg-neutral-900 ${isDraft ? "border-amber-300 dark:border-amber-800" : "border-neutral-200 dark:border-neutral-700"}`}
     >
       <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
-        <span className={`rounded-full px-2 py-0.5 ${SEVERITY_BADGE[content.severity] ?? ""}`}>{content.severity}</span>
+        <span className={`rounded-full px-2 py-0.5 ${SEVERITY_STYLES[content.severity] ?? ""}`}>{content.severity}</span>
         {content.category && <span>· {content.category}</span>}
         <span>· confidence: {content.confidenceLevel}</span>
         <span className={`rounded-full px-2 py-0.5 ${STATUS_BADGE[f.reviewer_status]}`}>{isDraft ? "needs decision" : f.reviewer_status}</span>
@@ -566,7 +564,7 @@ function EditForm({
   const [notes, setNotes] = useState("");
 
   return (
-    <div className="mt-2 space-y-3 rounded-md border border-blue-300 bg-white p-3 shadow-sm dark:border-blue-800 dark:bg-neutral-900">
+    <div className="mt-2 space-y-3 rounded-md border-l-2 border-blue-400 bg-white p-3 shadow-card-1 dark:border-blue-700 dark:bg-neutral-900">
       <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
       <Textarea label="Diagnosis" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} rows={2} />
       <Textarea label="Root cause" value={rootCause} onChange={(e) => setRootCause(e.target.value)} rows={2} />

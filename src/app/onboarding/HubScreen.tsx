@@ -20,8 +20,8 @@ export function HubScreen({ onChoose }: { onChoose: (path: "diagnosis" | "ai_aud
         <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">You can always change this later.</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-lg border border-neutral-300 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900">
-          <h2 className="mb-2 font-medium text-neutral-900 dark:text-neutral-50">Business Diagnosis</h2>
+        <div className="rounded-lg border border-neutral-200 bg-white p-5 shadow-card-1 dark:border-neutral-700 dark:bg-neutral-900">
+          <h2 className="mb-2 text-base font-semibold text-neutral-900 dark:text-neutral-50">Business Diagnosis</h2>
           <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
             For founders who know their business should be growing faster but can&apos;t pinpoint why. You&apos;ll get a
             diagnosis across five dimensions, a financial impact estimate, and a prioritised 90-day roadmap.
@@ -29,13 +29,13 @@ export function HubScreen({ onChoose }: { onChoose: (path: "diagnosis" | "ai_aud
           <button
             type="button"
             onClick={() => onChoose("diagnosis")}
-            className="w-full rounded bg-accent px-3 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+            className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover"
           >
             Start with this one
           </button>
         </div>
-        <div className="rounded-lg border border-neutral-300 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900">
-          <h2 className="mb-2 font-medium text-neutral-900 dark:text-neutral-50">AI Compliance Audit</h2>
+        <div className="rounded-lg border border-neutral-200 bg-white p-5 shadow-card-1 dark:border-neutral-700 dark:bg-neutral-900">
+          <h2 className="mb-2 text-base font-semibold text-neutral-900 dark:text-neutral-50">AI Compliance Audit</h2>
           <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
             For founders whose AI is already in production, or who&apos;ve received a compliance or procurement request.
             You&apos;ll get an assessment of your AI&apos;s governance gaps, reliability risks, and documentation readiness.
@@ -43,7 +43,7 @@ export function HubScreen({ onChoose }: { onChoose: (path: "diagnosis" | "ai_aud
           <button
             type="button"
             onClick={() => onChoose("ai_audit")}
-            className="w-full rounded bg-accent px-3 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+            className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover"
           >
             Start with this one
           </button>

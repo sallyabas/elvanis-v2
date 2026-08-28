@@ -52,7 +52,7 @@ export default async function ServicesPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="mb-1 text-2xl font-semibold">Services</h1>
+      <h1 className="mb-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">Services</h1>
       <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">
         Everything Elvanis offers, in one place — your Core Audit, standalone modules, implementation help, and time with your
         reviewer.
@@ -65,10 +65,10 @@ export default async function ServicesPage() {
             <span className="shrink-0 text-sm font-medium text-accent">{formatPrice(pricingByKey.get("standard_core_audit") ?? { priceAmount: 0, currency: "GBP" })}</span>
           </div>
           <div className="mt-3 flex gap-4 text-sm">
-            <Link href="/dashboard" className="underline">
+            <Link href="/dashboard" className="font-medium text-accent hover:underline">
               View your dashboard
             </Link>
-            <Link href="/evidence-intake" className="underline">
+            <Link href="/evidence-intake" className="font-medium text-accent hover:underline">
               Submit new evidence
             </Link>
           </div>
@@ -85,7 +85,7 @@ export default async function ServicesPage() {
         </Card>
 
         <section>
-          <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Standalone audit modules</h2>
+          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">Standalone audit modules</h2>
           <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">Sold separately from your Core Audit — each has its own findings and reviewer pass.</p>
           <div className="space-y-4">
             {MODULE_ORDER.map((mt) => {
@@ -102,7 +102,7 @@ export default async function ServicesPage() {
                   </div>
                   <Link
                     href={meta.routePath}
-                    className="mt-3 inline-block rounded bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+                    className="mt-3 inline-block rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
                   >
                     Request this
                   </Link>
@@ -121,7 +121,7 @@ export default async function ServicesPage() {
             <span className="shrink-0 text-sm font-medium text-accent">{formatPrice(pricingByKey.get("execution_sprint") ?? { priceAmount: 3000, currency: "GBP" })}</span>
           </div>
           {latestReport ? (
-            <Link href={`/reports/${latestReport.id}`} className="mt-3 inline-block text-sm underline">
+            <Link href={`/reports/${latestReport.id}`} className="mt-3 inline-block text-sm font-medium text-accent hover:underline">
               View your report to express interest
             </Link>
           ) : (
@@ -130,7 +130,7 @@ export default async function ServicesPage() {
         </Card>
 
         <section>
-          <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Sessions with your reviewer</h2>
+          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">Sessions with your reviewer</h2>
           <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
             No calendar integration exists yet — every request here is a real signal to your reviewer, who follows up directly
             to schedule it.

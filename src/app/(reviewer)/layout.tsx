@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "./sign-out-button";
+import { NavLink } from "@/app/_components/ui/NavLink";
 
 // Internal-only reviewer area (Reviewer Queue + Reviewer Workspace) —
 // confirmed 2026-08-01, a fifth internal area alongside the four
@@ -43,33 +43,26 @@ export default async function ReviewerLayout({ children }: { children: React.Rea
 
   return (
     <div>
-      {/* Charcoal nav (confirmed brand identity 2026-08-06) — same treatment
-          as the client (app) layout, so the internal reviewer tooling reads
-          as the same product, not a visually separate admin panel. */}
-      <div className="flex flex-wrap items-center justify-between gap-2 bg-neutral-900 px-6 py-2 text-sm text-neutral-300">
-        <div className="flex flex-wrap items-center gap-4">
-          <span className="font-semibold tracking-tight text-neutral-50">Elvanis</span>
+      {/* Premium B2B redesign (confirmed 2026-08-28, spec point 5) — same
+          white-bar/bottom-border/active-underline treatment as the client
+          (app) layout, so the internal reviewer tooling reads as the same
+          product, not a visually separate admin panel. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 bg-white px-6 py-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="flex flex-wrap items-center gap-5">
+          <span className="font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Elvanis</span>
           {/* Real nav links (confirmed 2026-08-25) — the first time this
               layout has needed one, now that there's more than one
               reviewer-only page reachable from /queue's own internal
               links alone. */}
-          <Link href="/queue" className="hover:text-neutral-50">
-            Queue
-          </Link>
-          <Link href="/requests" className="hover:text-neutral-50">
-            All requests
-          </Link>
+          <NavLink href="/queue">Queue</NavLink>
+          <NavLink href="/requests">All requests</NavLink>
           {/* Real nav link added 2026-08-26 (navigation audit) — reverses
               the earlier "hold, queue-only" decision on a company
               directory; see companies/page.tsx's own docblock. */}
-          <Link href="/companies" className="hover:text-neutral-50">
-            Companies
-          </Link>
-          <Link href="/ideas" className="hover:text-neutral-50">
-            Ideas
-          </Link>
+          <NavLink href="/companies">Companies</NavLink>
+          <NavLink href="/ideas">Ideas</NavLink>
         </div>
-        <span className="flex items-center gap-3">
+        <span className="flex items-center gap-3 text-neutral-600 dark:text-neutral-400">
           <span>signed in as {user.email}</span>
           <SignOutButton />
         </span>

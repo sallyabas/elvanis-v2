@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { UnifiedRequestRow, UnifiedRequestType } from "@/lib/reviewer/unified-requests";
 import { TypeBadge } from "@/lib/item-type-badge";
 import { humanizeStatus } from "@/lib/format";
+import { SEVERITY_STYLES } from "@/lib/severity-badge";
 import { Select } from "@/app/_components/ui/Select";
 import { Input } from "@/app/_components/ui/Input";
 
@@ -13,13 +14,6 @@ import { Input } from "@/app/_components/ui/Input";
 // its own local copy rather than a new shared extraction, matching this
 // codebase's existing convention (every one of those other files already
 // keeps its own local copy too, not a prior inconsistency introduced here).
-const SEVERITY_STYLES: Record<string, string> = {
-  critical: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-  high: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
-  medium: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  low: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
-};
-
 /**
  * Client-side filtering over an already-fetched, already-normalized row
  * set (confirmed 2026-08-25) — no re-fetch per filter change, since real
@@ -106,7 +100,7 @@ export function RequestsFilterClient({ rows }: { rows: UnifiedRequestRow[] }) {
       {filtered.length === 0 ? (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">No requests match these filters.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
+        <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
           <table className="w-full text-left text-sm">
             <thead className="bg-neutral-50 text-xs uppercase text-neutral-500 dark:bg-neutral-900 dark:text-neutral-400">
               <tr>
@@ -122,7 +116,7 @@ export function RequestsFilterClient({ rows }: { rows: UnifiedRequestRow[] }) {
               {filtered.map((r) => (
                 <tr key={`${r.type}-${r.id}`} className="border-t border-neutral-100 dark:border-neutral-800">
                   <td className="px-3 py-2">
-                    <Link href={`/company/${r.companyId}`} className="underline">
+                    <Link href={`/company/${r.companyId}`} className="font-medium text-accent hover:underline">
                       {r.companyName}
                     </Link>
                   </td>
@@ -141,7 +135,7 @@ export function RequestsFilterClient({ rows }: { rows: UnifiedRequestRow[] }) {
                     )}
                   </td>
                   <td className="px-3 py-2">
-                    <Link href={r.link} className="text-xs underline">
+                    <Link href={r.link} className="text-xs font-medium text-accent hover:underline">
                       Open
                     </Link>
                   </td>

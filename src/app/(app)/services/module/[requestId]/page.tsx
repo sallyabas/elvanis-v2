@@ -5,6 +5,7 @@ import { MODULE_META, type ModuleType } from "@/lib/modules/module-meta";
 import { PROCUREMENT_QUESTIONS, type ProcurementCategory } from "@/lib/modules/tender-readiness/procurement-categories";
 import { Card } from "@/app/_components/ui/Card";
 import { Alert } from "@/app/_components/ui/Alert";
+import { SEVERITY_STYLES } from "@/lib/severity-badge";
 import { DeliveryFeedbackPrompt } from "@/app/_components/DeliveryFeedbackPrompt";
 import { hasSubmittedFeedbackFor } from "@/lib/reviewer/delivery-feedback";
 
@@ -39,13 +40,6 @@ interface GenericModuleFinding {
   isMissingDataFinding?: boolean;
   [key: string]: unknown;
 }
-
-const SEVERITY_STYLES: Record<string, string> = {
-  critical: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-  high: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
-  medium: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  low: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
-};
 
 function isValidEditedContent(v: unknown): v is GenericModuleFinding {
   return !!v && typeof v === "object" && typeof (v as Record<string, unknown>).title === "string" && typeof (v as Record<string, unknown>).diagnosis === "string";

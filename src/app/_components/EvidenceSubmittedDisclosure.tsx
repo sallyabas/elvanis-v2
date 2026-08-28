@@ -46,8 +46,13 @@ export function EvidenceSubmittedDisclosure({
   defaultOpen?: boolean;
 }) {
   return (
-    <details className="rounded-lg border border-neutral-200 dark:border-neutral-800" open={defaultOpen}>
-      <summary className="cursor-pointer px-5 py-3 text-lg font-medium">{title}</summary>
+    // Premium B2B redesign (confirmed 2026-08-28) — a UI pattern the
+    // spec's 10 points don't name directly (a collapsible disclosure), so
+    // the same principles were applied by extension: card elevation +
+    // white surface + the section-header typography level, matching every
+    // other bordered content block on this page.
+    <details className="rounded-lg border border-neutral-200 bg-white shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900" open={defaultOpen}>
+      <summary className="cursor-pointer px-5 py-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">{title}</summary>
       <div className="space-y-6 border-t border-neutral-200 p-5 dark:border-neutral-800">
         {EVIDENCE_FIELD_SETS.map((set) => {
           const submitted = evidenceSnapshot[set.lens].evidenceFields;

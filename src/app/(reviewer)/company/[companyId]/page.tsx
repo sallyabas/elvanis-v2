@@ -121,7 +121,7 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <Link href="/queue" className="mb-4 inline-block text-sm text-neutral-500 underline hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+      <Link href="/queue" className="mb-4 inline-block text-sm text-neutral-500 hover:text-neutral-700 hover:underline dark:text-neutral-400 dark:hover:text-neutral-200">
         ← Back to queue
       </Link>
       <h1 className="mb-6 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">{company.name}</h1>
@@ -217,7 +217,7 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
                         {r.delivered_at && <> · delivered {new Date(r.delivered_at).toLocaleDateString()}</>}
                         {isPaidReAudit && <span className="text-xs text-neutral-500 dark:text-neutral-400">(paid re-audit)</span>}
                       </span>
-                      <Link href={`/review/${r.id}`} className="text-xs underline">
+                      <Link href={`/review/${r.id}`} className="text-xs font-medium text-accent hover:underline">
                         Open
                       </Link>
                     </div>
@@ -245,7 +245,7 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
                       <TypeBadge type={moduleTypeToItemType(m.module_type as string)} />
                       {humanizeStatus(m.status as string)} · {m.created_at ? new Date(m.created_at).toLocaleDateString() : "—"}
                     </span>
-                    <Link href={`/review-module/${m.id}`} className="text-xs underline">
+                    <Link href={`/review-module/${m.id}`} className="text-xs font-medium text-accent hover:underline">
                       Open
                     </Link>
                   </div>
@@ -296,7 +296,7 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
                       {s.start_date && <> · started {s.start_date}</>}
                       {s.target_end_date && <> · target end {s.target_end_date}</>}
                     </span>
-                    <Link href={`/review-sprint/${s.id}`} className="text-xs underline">
+                    <Link href={`/review-sprint/${s.id}`} className="text-xs font-medium text-accent hover:underline">
                       Open
                     </Link>
                   </div>

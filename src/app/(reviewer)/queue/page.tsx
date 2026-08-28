@@ -257,7 +257,7 @@ export default async function ReviewerQueuePage() {
               {sessionRequests.map((r) => (
                 <li key={r.id} className="rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
                   <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <Link href={`/company/${r.company_id}`} className="font-medium underline">
+                    <Link href={`/company/${r.company_id}`} className="font-medium text-accent hover:underline">
                       {r.companyName}
                     </Link>
                     <TypeBadge type={sessionTypeToItemType(r.session_type)} />
@@ -330,7 +330,7 @@ export default async function ReviewerQueuePage() {
           ) : (
             <ul className="space-y-3">
               {deliveryFeedback.map((f) => (
-                <li key={f.id} className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+                <li key={f.id} className="rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
                   <div className="mb-1 flex items-center justify-between">
                     <span className="font-medium text-neutral-900 dark:text-neutral-50">{f.companyName}</span>
                     <span className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -383,10 +383,10 @@ export default async function ReviewerQueuePage() {
           ) : (
             <ul className="space-y-3">
               {sprintQueueItems.map((item) => (
-                <li key={item.id} className="rounded-md border border-neutral-300 bg-white p-3 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+                <li key={item.id} className="rounded-md border border-neutral-200 bg-white p-3 text-sm shadow-card-1 dark:border-neutral-700 dark:bg-neutral-900">
                   <div className="mb-1 flex items-center justify-between text-neutral-900 dark:text-neutral-50">
                     <span className="font-medium">{item.companyName}</span>
-                    <Link href={`/review-sprint/${item.sprintId}`} className="text-xs underline">
+                    <Link href={`/review-sprint/${item.sprintId}`} className="text-xs font-medium text-accent hover:underline">
                       View sprint
                     </Link>
                   </div>
@@ -503,7 +503,7 @@ export default async function ReviewerQueuePage() {
         </Card>
       </div>
 
-      <h2 className="mb-3 mt-8 text-lg font-medium text-neutral-900 dark:text-neutral-50">Ready for review</h2>
+      <h2 className="mb-3 mt-8 text-base font-semibold text-neutral-900 dark:text-neutral-50">Ready for review</h2>
       <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
         Grouped by company (confirmed 2026-08-10, real bug list from live testing) — each item still links to its own
         full workspace (findings, actions, everything), grouping just makes it obvious at a glance when the same
@@ -515,7 +515,7 @@ export default async function ReviewerQueuePage() {
       ) : (
         <div className="space-y-5">
           {groupedItems.map(([companyName, companyItems]) => (
-            <div key={companyName} className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+            <div key={companyName} className="rounded-lg border border-neutral-200 bg-white p-4 shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
               <h3 className="mb-3 font-semibold text-neutral-900 dark:text-neutral-50">{companyName}</h3>
               <ul className="space-y-2">
                 {companyItems.map((item) => (
@@ -525,12 +525,12 @@ export default async function ReviewerQueuePage() {
                         <TypeBadge type={item.badgeType} />
                         {item.badgeType === "execution_sprint" && <span className="text-xs font-normal text-neutral-500 dark:text-neutral-400">(task review)</span>}
                         {item.overdue && (
-                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-800 dark:bg-red-950 dark:text-red-300">
+                          <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-950 dark:text-red-300">
                             Overdue
                           </span>
                         )}
                         {item.urgent && (
-                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-800 dark:bg-red-950 dark:text-red-300">
+                          <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-950 dark:text-red-300">
                             Urgent
                           </span>
                         )}
@@ -562,7 +562,7 @@ export default async function ReviewerQueuePage() {
           submission moment here). */}
       {(awaitingDeliveryModules ?? []).length > 0 && (
         <div className="mt-8">
-          <h2 className="mb-3 text-lg font-medium text-neutral-900 dark:text-neutral-50">Awaiting delivery</h2>
+          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">Awaiting delivery</h2>
           <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
             Reviewed and approved, not yet delivered to the client.
           </p>
@@ -572,12 +572,12 @@ export default async function ReviewerQueuePage() {
               const overdue = deliveryDeadline < new Date();
               const companyName = (r.companies as unknown as { name: string } | null)?.name ?? "Unknown company";
               return (
-                <li key={r.id as string} className="flex items-center justify-between rounded-md border border-neutral-200 bg-white p-3 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                <li key={r.id as string} className="flex items-center justify-between rounded-md border border-neutral-200 bg-white p-3 shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
                   <div>
                     <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">
                       {companyName} — <TypeBadge type={moduleTypeToItemType(r.module_type as string)} />
                       {overdue && (
-                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-800 dark:bg-red-950 dark:text-red-300">
+                        <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-950 dark:text-red-300">
                           Overdue
                         </span>
                       )}
@@ -606,7 +606,7 @@ export default async function ReviewerQueuePage() {
           "still with client" label was misleading for the second case. */}
       {stillEditing.length > 0 && (
         <div className="mt-8">
-          <h2 className="mb-3 text-lg font-medium text-neutral-900 dark:text-neutral-50">Still with client</h2>
+          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">Still with client</h2>
           <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
             The client is still editing — their edit window hasn&apos;t closed yet. Nothing to do here yet.
           </p>
@@ -629,7 +629,7 @@ export default async function ReviewerQueuePage() {
 
       {queuedOrProcessing.length > 0 && (
         <div className="mt-8">
-          <h2 className="mb-3 text-lg font-medium text-neutral-900 dark:text-neutral-50">Queued, not yet processed</h2>
+          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">Queued, not yet processed</h2>
           <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
             The client&apos;s edit window has closed — waiting on the next scheduled run to generate the report. Not with
             the client anymore, but no action needed from you yet either.

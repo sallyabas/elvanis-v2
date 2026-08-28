@@ -45,7 +45,7 @@ export default async function SprintReviewWorkspacePage({ params }: { params: Pr
       <div className="mx-auto max-w-3xl px-6 pt-6">
         <Link
           href={`/company/${sprint.company_id}`}
-          className="inline-block text-sm text-neutral-500 underline hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+          className="inline-block text-sm text-neutral-500 hover:text-neutral-700 hover:underline dark:text-neutral-400 dark:hover:text-neutral-200"
         >
           ← {company?.name ?? "Unknown company"}
         </Link>

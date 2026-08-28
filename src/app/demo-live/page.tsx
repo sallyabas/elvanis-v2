@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { EvidenceFieldInput, LensFinding, LensType, Severity } from "@/lib/lenses/types";
+import type { EvidenceFieldInput, LensFinding, LensType } from "@/lib/lenses/types";
 import type { CommercialSelfReport } from "@/lib/lenses/commercial";
 import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
 import type { MetricInput } from "@/lib/lenses/metrics";
@@ -11,6 +11,7 @@ import { EVIDENCE_FIELD_SETS } from "@/lib/evidence/field-sets";
 import { loadGovernanceDimensions } from "@/lib/lenses/benchmarks-repository";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEMO_LIVE_COMPANY_ID, DEMO_LIVE_REPORT_ID } from "@/lib/demo-live/config";
+import { SEVERITY_STYLES } from "@/lib/severity-badge";
 import { Alert } from "@/app/_components/ui/Alert";
 
 /**
@@ -40,13 +41,6 @@ import { Alert } from "@/app/_components/ui/Alert";
  *     test data, and it keeps this from hitting the DB on every visitor.
  */
 export const revalidate = 300;
-
-const SEVERITY_STYLES: Record<Severity, string> = {
-  critical: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-  high: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
-  medium: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  low: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
-};
 
 const LENS_ORDER: LensType[] = ["financial", "execution", "product", "commercial", "ai_governance"];
 const LENS_LABELS: Record<LensType, string> = {

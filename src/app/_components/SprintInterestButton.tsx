@@ -64,21 +64,21 @@ export function SprintInterestButton({
           onChange={(e) => setOtherNote(e.target.value)}
           rows={2}
           placeholder="What would help — e.g. a question first, a different priority…"
-          className="w-full rounded border border-neutral-300 bg-white px-2 py-1.5 text-xs text-neutral-900 placeholder:text-neutral-400 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+          className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs text-neutral-900 placeholder:text-neutral-400 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
         />
         <div className="flex gap-2">
           <button
             type="button"
             onClick={() => handleRespond("other", otherNote.trim() || null)}
             disabled={status !== "choosing_other" || otherNote.trim().length === 0}
-            className="rounded border border-accent bg-accent px-2 py-1 text-xs font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
+            className="rounded-md border border-accent bg-accent px-2 py-1 text-xs font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
           >
             Send
           </button>
           <button
             type="button"
             onClick={() => setStatus("idle")}
-            className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            className="rounded-md border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
           >
             Cancel
           </button>
@@ -100,7 +100,7 @@ export function SprintInterestButton({
           type="button"
           onClick={() => handleRespond("interested", null)}
           disabled={status === "sending"}
-          className="rounded border border-accent bg-accent px-2 py-1 text-xs font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
+          className="rounded-md border border-accent bg-accent px-2 py-1 text-xs font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
         >
           Yes
         </button>
@@ -108,7 +108,7 @@ export function SprintInterestButton({
           type="button"
           onClick={() => handleRespond("not_now", null)}
           disabled={status === "sending"}
-          className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-50 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          className="rounded-md border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-50 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
         >
           Not now
         </button>
@@ -116,7 +116,7 @@ export function SprintInterestButton({
           type="button"
           onClick={() => setStatus("choosing_other")}
           disabled={status === "sending"}
-          className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-50 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          className="rounded-md border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-50 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
         >
           Something else
         </button>

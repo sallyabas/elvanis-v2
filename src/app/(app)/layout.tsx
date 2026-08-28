@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ensureClientUserRow } from "../client-login/actions";
 import { SignOutButton } from "./sign-out-button";
+import { NavLink } from "@/app/_components/ui/NavLink";
 
 // Authenticated app shell — shared nav/session-check across the four IA
 // pages (Dashboard, Business Profile, Reports & History, Account
@@ -55,18 +55,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div>
-      {/* Charcoal nav — confirmed brand identity 2026-08-06 ("headers/nav/
-          dark surfaces" is the charcoal color's stated role). This one
-          shared layout renders on every client-facing page, so this single
-          change is the highest-leverage piece of "consistent branding
-          across the internal app." */}
-      <div className="flex items-center justify-between bg-neutral-900 px-6 py-2 text-sm text-neutral-300">
+      {/* Premium B2B redesign (confirmed 2026-08-28, spec point 5) —
+          replaces the previous charcoal nav with a white bar + bottom
+          border, real active-route indicator (copper 2px underline, not a
+          background fill — see NavLink.tsx) instead of the old uniform
+          hover-only styling. Dark mode keeps a dark surface (unaffected by
+          this pass, which is explicitly light-mode-only). */}
+      <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
         <div className="flex items-center gap-6">
-          <span className="font-semibold tracking-tight text-neutral-50">Elvanis</span>
-          <nav className="flex gap-4">
-            <Link href="/dashboard" className="hover:text-neutral-50 hover:underline">
-              Dashboard
-            </Link>
+          <span className="font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Elvanis</span>
+          <nav className="flex gap-5">
+            <NavLink href="/dashboard">Dashboard</NavLink>
             {/* Real nav link added 2026-08-26 (navigation audit) — Evidence
                 Intake previously had no persistent nav entry at all; the
                 only path was one small, narrowly-worded inline link on
@@ -76,35 +75,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 audit, not just switching goals). Placed as a plain flat
                 link, matching every other nav item's visual treatment,
                 right after Dashboard since it's the natural next action. */}
-            <Link href="/evidence-intake" className="hover:text-neutral-50 hover:underline">
-              Submit Evidence
-            </Link>
+            <NavLink href="/evidence-intake">Submit Evidence</NavLink>
             {/* Real nav link added 2026-08-16 (final Dashboard redesign,
                 item 1) — Signals is a genuinely new, standalone page (a
                 unified filterable finding list), not a duplicate of any
                 existing page, so it gets its own top-level nav entry same
                 as Services did. */}
-            <Link href="/signals" className="hover:text-neutral-50 hover:underline">
-              Signals
-            </Link>
-            <Link href="/business-profile" className="hover:text-neutral-50 hover:underline">
-              Business Profile
-            </Link>
-            <Link href="/reports" className="hover:text-neutral-50 hover:underline">
-              Reports &amp; History
-            </Link>
+            <NavLink href="/signals">Signals</NavLink>
+            <NavLink href="/business-profile">Business Profile</NavLink>
+            <NavLink href="/reports">Reports &amp; History</NavLink>
             {/* Real nav link added 2026-08-12, Dashboard rebuild — /services
                 is now a real standalone page, not just linked from
                 Dashboard; reachable from anywhere in the authenticated app. */}
-            <Link href="/services" className="hover:text-neutral-50 hover:underline">
-              Services
-            </Link>
-            <Link href="/account-settings" className="hover:text-neutral-50 hover:underline">
-              Account Settings
-            </Link>
+            <NavLink href="/services">Services</NavLink>
+            <NavLink href="/account-settings">Account Settings</NavLink>
           </nav>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 text-neutral-600 dark:text-neutral-400">
           <span>{user.email}</span>
           <SignOutButton />
         </div>

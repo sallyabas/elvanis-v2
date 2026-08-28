@@ -13,14 +13,22 @@ import type { ReactNode } from "react";
  * pattern into one real component so every message in the app gets the
  * same icon + colored background + border + rounded-corner treatment,
  * not just the ones someone happened to style by hand.
+ *
+ * Softened 2026-08-28 (premium B2B redesign) — this is a UI pattern the
+ * spec's 10 points don't name directly, so the same principles were
+ * applied by extension, per the founder's own explicit instruction to
+ * flag any such interpretation: no border, soft-tone background wash,
+ * same hue family as the new severity badges (error≈critical=red-50/600,
+ * warning≈medium=yellow-50/700, success≈low=green-50/600) rather than the
+ * previous saturated border+bg-50 combination.
  */
 type AlertVariant = "error" | "success" | "warning" | "info";
 
 const VARIANT_STYLES: Record<AlertVariant, string> = {
-  error: "border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300",
-  success: "border-green-300 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300",
-  warning: "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  info: "border-neutral-300 bg-neutral-50 text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300",
+  error: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
+  success: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300",
+  warning: "bg-yellow-50 text-yellow-800 dark:bg-amber-950 dark:text-amber-300",
+  info: "bg-neutral-100 text-neutral-700 dark:bg-neutral-900 dark:text-neutral-300",
 };
 
 const VARIANT_ICONS: Record<AlertVariant, string> = {
@@ -31,9 +39,9 @@ const VARIANT_ICONS: Record<AlertVariant, string> = {
 };
 
 const ICON_STYLES: Record<AlertVariant, string> = {
-  error: "bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-300",
-  success: "bg-green-200 text-green-800 dark:bg-green-900 dark:text-green-300",
-  warning: "bg-amber-200 text-amber-800 dark:bg-amber-900 dark:text-amber-300",
+  error: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  success: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+  warning: "bg-yellow-100 text-yellow-800 dark:bg-amber-900 dark:text-amber-300",
   info: "bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300",
 };
 
@@ -49,7 +57,7 @@ export function Alert({
   return (
     <div
       role={variant === "error" ? "alert" : "status"}
-      className={`flex items-start gap-2.5 rounded-md border p-3 text-sm ${VARIANT_STYLES[variant]} ${className ?? ""}`}
+      className={`flex items-start gap-2.5 rounded-md p-3 text-sm ${VARIANT_STYLES[variant]} ${className ?? ""}`}
     >
       <span
         aria-hidden="true"

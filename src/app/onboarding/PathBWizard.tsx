@@ -190,7 +190,7 @@ export function PathBWizard({ mode = "create", existingCompanyId, existingCompan
         <div>
           <h1 className="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Here&apos;s what we&apos;d recommend</h1>
         </div>
-        <div className="rounded-lg border border-neutral-300 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+        <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-card-2 border-l-4 border-l-accent dark:border-neutral-700 dark:bg-neutral-900">
           <p className="font-medium text-neutral-900 dark:text-neutral-50">
             {routing.primary.kind === "module"
               ? MODULE_META[routing.primary.module].label
@@ -198,7 +198,7 @@ export function PathBWizard({ mode = "create", existingCompanyId, existingCompan
                 ? "A conversation with your reviewer"
                 : "A full business diagnosis"}
             {"urgent" in routing.primary && routing.primary.urgent && (
-              <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-800 dark:bg-red-950 dark:text-red-300">
+              <span className="ml-2 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-950 dark:text-red-300">
                 Urgent
               </span>
             )}
@@ -237,7 +237,7 @@ export function PathBWizard({ mode = "create", existingCompanyId, existingCompan
           <p className="text-sm font-medium text-neutral-800 dark:text-neutral-200">Are you currently using AI in any production or customer-facing workflow?</p>
           <div className="space-y-1.5">
             {AI_USAGE_OPTIONS.map((opt) => (
-              <label key={opt.value} className="flex cursor-pointer items-center gap-2 rounded border border-neutral-200 px-3 py-2 text-sm dark:border-neutral-800">
+              <label key={opt.value} className="flex cursor-pointer items-center gap-2 rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm shadow-card-1 transition-all has-[:checked]:border-accent has-[:checked]:bg-[#fffbf0] has-[:checked]:shadow-card-2 dark:border-neutral-800 dark:bg-neutral-900 dark:has-[:checked]:border-accent dark:has-[:checked]:bg-accent/10">
                 <input type="radio" name="aiUsage" checked={aiUsage === opt.value} onChange={() => setAiUsage(opt.value)} className="accent-accent" />
                 {opt.label}
               </label>
@@ -250,7 +250,7 @@ export function PathBWizard({ mode = "create", existingCompanyId, existingCompan
           </p>
           <div className="space-y-1.5">
             {COMPLIANCE_REQUEST_OPTIONS.map((opt) => (
-              <label key={opt.value} className="flex cursor-pointer items-center gap-2 rounded border border-neutral-200 px-3 py-2 text-sm dark:border-neutral-800">
+              <label key={opt.value} className="flex cursor-pointer items-center gap-2 rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm shadow-card-1 transition-all has-[:checked]:border-accent has-[:checked]:bg-[#fffbf0] has-[:checked]:shadow-card-2 dark:border-neutral-800 dark:bg-neutral-900 dark:has-[:checked]:border-accent dark:has-[:checked]:bg-accent/10">
                 <input
                   type="radio"
                   name="complianceRequest"
@@ -269,7 +269,7 @@ export function PathBWizard({ mode = "create", existingCompanyId, existingCompan
           </p>
           <div className="space-y-1.5">
             {PERSONAL_DATA_OPTIONS.map((opt) => (
-              <label key={opt.value} className="flex cursor-pointer items-center gap-2 rounded border border-neutral-200 px-3 py-2 text-sm dark:border-neutral-800">
+              <label key={opt.value} className="flex cursor-pointer items-center gap-2 rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm shadow-card-1 transition-all has-[:checked]:border-accent has-[:checked]:bg-[#fffbf0] has-[:checked]:shadow-card-2 dark:border-neutral-800 dark:bg-neutral-900 dark:has-[:checked]:border-accent dark:has-[:checked]:bg-accent/10">
                 <input type="radio" name="personalData" checked={personalData === opt.value} onChange={() => setPersonalData(opt.value)} className="accent-accent" />
                 {opt.label}
               </label>

@@ -200,7 +200,7 @@ export default async function ReportsHistoryPage() {
     return (
       <li
         key={item.id}
-        className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900"
+        className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-4 shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900"
       >
         <div>
           <div className="mb-1 flex items-center gap-2">
@@ -212,7 +212,7 @@ export default async function ReportsHistoryPage() {
           </div>
         </div>
         {item.href && (
-          <Link href={item.href} className="text-sm underline">
+          <Link href={item.href} className="text-sm font-medium text-accent hover:underline">
             View
           </Link>
         )}
@@ -223,7 +223,7 @@ export default async function ReportsHistoryPage() {
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
       <ProgressStepper journeyStatus={journeyStatus} />
-      <h1 className="mb-1 text-2xl font-semibold">Reports &amp; History</h1>
+      <h1 className="mb-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">Reports &amp; History</h1>
       <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">
         Every report, module result, and completed sprint you&apos;ve received, plus your session history — grouped
         so real deliverables and calls with your reviewer don&apos;t blur together.

@@ -73,7 +73,7 @@ export function OnboardingFlow() {
     return (
       <div className="space-y-4">
         <div>
-          <h2 className="text-lg font-medium">What&apos;s your company called?</h2>
+          <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-50">What&apos;s your company called?</h2>
           <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Just this for now — we&apos;ll show you both options next.</p>
         </div>
         <Input label="Company name" required autoFocus value={minimalName} onChange={(e) => setMinimalName(e.target.value)} placeholder="Acme Ltd" />

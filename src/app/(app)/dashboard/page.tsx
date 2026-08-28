@@ -18,15 +18,9 @@ import { humanizeStatus, SESSION_STATUS_LABELS } from "@/lib/format";
 import { hasCompletedPathBSetup } from "@/lib/onboarding/path-b-completion";
 import { NextStepBanner } from "@/app/_components/NextStepBanner";
 import { HubResume } from "@/app/onboarding/HubResume";
+import { SEVERITY_STYLES } from "@/lib/severity-badge";
 import { Card } from "@/app/_components/ui/Card";
 import { LinkButton } from "@/app/_components/ui/LinkButton";
-
-const SEVERITY_STYLES: Record<string, string> = {
-  critical: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-  high: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
-  medium: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  low: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
-};
 
 /**
  * Dashboard, final consolidated redesign (confirmed 2026-08-16, direct
@@ -538,7 +532,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
-      <h1 className="mb-1 text-2xl font-semibold">Dashboard</h1>
+      <h1 className="mb-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">Dashboard</h1>
 
       {/* AI Audit Status — the real lead section for entry_path='ai_audit'
           (confirmed 2026-08-27, Onboarding Architecture & Path Routing
@@ -549,7 +543,7 @@ export default async function DashboardPage() {
           the "available as next step — soft discovery, not forced" framing
           this brief asks for, reused rather than duplicated. */}
       {company.entry_path === "ai_audit" && (
-        <section className="mb-8 rounded-lg border border-neutral-300 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900">
+        <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-5 shadow-card-1 dark:border-neutral-700 dark:bg-neutral-900">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">AI Audit Status</p>
           {mostRecentModuleRequest ? (
             <>
@@ -618,7 +612,7 @@ export default async function DashboardPage() {
           </p>
           <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
             Want to pursue a different goal?{" "}
-            <Link href="/evidence-intake" className="font-medium text-accent underline hover:text-accent-hover">
+            <Link href="/evidence-intake" className="font-medium text-accent hover:underline">
               Submit new evidence to start a fresh audit reflecting it
             </Link>
             .
@@ -633,7 +627,7 @@ export default async function DashboardPage() {
           genuine "look at this first" signal, same weight as the action
           banner itself. */}
       {showAiStatusCardCopy && (
-        <section className="mb-8 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+        <section className="mb-8 rounded-lg bg-yellow-50 p-4 text-sm text-yellow-800 shadow-card-1 dark:bg-amber-950/40 dark:text-amber-200">
           You&apos;ve told us you have AI in production. This typically means real governance exposure — EU AI Act
           requirements are active and most founders haven&apos;t documented their risk yet. Your audit will tell you
           exactly where you stand.
@@ -647,14 +641,19 @@ export default async function DashboardPage() {
           when there's no report yet — NextStepBanner below is the right
           "what to do" answer for that case instead. */}
       {topPriority && (
-        <section className="mb-8 rounded-lg border-2 border-accent bg-accent/5 p-5 dark:bg-accent/10">
+        // Premium B2B redesign (confirmed 2026-08-28, spec point 8) — the
+        // border-left treatment is kept as the urgency signal, but the
+        // previous filled `bg-accent/5` wash is replaced with the spec's
+        // exact very-light-amber-wash hex (#fffbf0), reading as a real
+        // finding to act on rather than an alarm.
+        <section className="mb-8 rounded-lg border-l-4 border-accent bg-[#fffbf0] p-5 shadow-card-2 dark:border-accent dark:bg-accent/10">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-accent">Highest priority right now</p>
           <p className="mb-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">{topPriority.finding.title}</p>
           <div className="mb-3 space-y-1 text-sm text-neutral-700 dark:text-neutral-300">
             {isUsableFinancialImpact(topPriority.finding.financialImpact) && (
               <p>
                 Estimated cost if left unaddressed:{" "}
-                <span className="font-semibold">
+                <span className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
                   {formatCurrencyRange(
                     topPriority.finding.financialImpact.impactBandLow,
                     topPriority.finding.financialImpact.impactBandHigh,
@@ -692,7 +691,7 @@ export default async function DashboardPage() {
             {top3FinancialExposure && (
               <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">
                 Together, these represent an estimated{" "}
-                <span className="font-semibold text-neutral-900 dark:text-neutral-50">
+                <span className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
                   {formatCurrencyRange(top3FinancialExposure.low, top3FinancialExposure.high, top3FinancialExposure.currency)}
                 </span>{" "}
                 in cost/risk exposure
@@ -714,7 +713,10 @@ export default async function DashboardPage() {
                         <span className={`rounded px-2 py-0.5 font-semibold uppercase tracking-wide ${SEVERITY_STYLES[f.severity] ?? ""}`}>{f.severity}</span>
                         {isUsableFinancialImpact(f.financialImpact) && (
                           <span className="text-neutral-500 dark:text-neutral-400">
-                            Estimated impact: {formatCurrencyRange(f.financialImpact.impactBandLow, f.financialImpact.impactBandHigh, f.financialImpact.currency)}
+                            Estimated impact:{" "}
+                            <span className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
+                              {formatCurrencyRange(f.financialImpact.impactBandLow, f.financialImpact.impactBandHigh, f.financialImpact.currency)}
+                            </span>
                           </span>
                         )}
                       </div>
@@ -723,7 +725,7 @@ export default async function DashboardPage() {
                 })}
               </ol>
             )}
-            <Link href={`/reports/${latestReport.id}`} className="mt-3 inline-block text-sm underline">
+            <Link href={`/reports/${latestReport.id}`} className="mt-3 inline-block text-sm font-medium text-accent hover:underline">
               View full report
             </Link>
           </Card>
@@ -732,7 +734,7 @@ export default async function DashboardPage() {
             {urgentFinancialExposure && (
               <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">
                 Together, these represent an estimated{" "}
-                <span className="font-semibold text-neutral-900 dark:text-neutral-50">
+                <span className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
                   {formatCurrencyRange(urgentFinancialExposure.low, urgentFinancialExposure.high, urgentFinancialExposure.currency)}
                 </span>{" "}
                 in cost/risk exposure
@@ -756,7 +758,10 @@ export default async function DashboardPage() {
                         <span className={`rounded px-2 py-0.5 font-semibold uppercase tracking-wide ${SEVERITY_STYLES[f.severity] ?? ""}`}>{f.severity}</span>
                         {isUsableFinancialImpact(f.financialImpact) && (
                           <span className="text-neutral-500 dark:text-neutral-400">
-                            Estimated impact: {formatCurrencyRange(f.financialImpact.impactBandLow, f.financialImpact.impactBandHigh, f.financialImpact.currency)}
+                            Estimated impact:{" "}
+                            <span className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
+                              {formatCurrencyRange(f.financialImpact.impactBandLow, f.financialImpact.impactBandHigh, f.financialImpact.currency)}
+                            </span>
                           </span>
                         )}
                       </div>
@@ -765,7 +770,7 @@ export default async function DashboardPage() {
                 })}
               </ol>
             )}
-            <Link href={`/reports/${latestReport.id}`} className="mt-3 inline-block text-sm underline">
+            <Link href={`/reports/${latestReport.id}`} className="mt-3 inline-block text-sm font-medium text-accent hover:underline">
               View full report
             </Link>
           </Card>
@@ -822,8 +827,8 @@ export default async function DashboardPage() {
                           <span
                             className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                               o.readinessStatus === "do_now"
-                                ? "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
-                                : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                ? "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-300"
+                                : "bg-yellow-50 text-yellow-700 dark:bg-amber-950 dark:text-amber-300"
                             }`}
                           >
                             {o.readinessStatus === "do_now" ? "Ready now" : "Fix groundwork first"}
@@ -842,7 +847,7 @@ export default async function DashboardPage() {
             <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Roadmap status</h2>
             <div className="grid gap-4 sm:grid-cols-3">
               {(["day30", "day60", "day90"] as const).map((bucket, i) => (
-                <div key={bucket} className="rounded-md border border-neutral-300 bg-white p-3 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+                <div key={bucket} className="rounded-md border border-neutral-200 bg-white p-3 text-sm shadow-card-1 dark:border-neutral-700 dark:bg-neutral-900">
                   <h3 className="mb-2 font-medium text-neutral-900 dark:text-neutral-50">{[30, 60, 90][i]} days</h3>
                   {roadmap[bucket].length === 0 ? (
                     <p className="text-neutral-400 dark:text-neutral-500">Nothing at this horizon</p>
@@ -868,7 +873,7 @@ export default async function DashboardPage() {
           {metricTrend && (
             <section>
               <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Goal metric trend</h2>
-              <div className="rounded-md border border-neutral-300 bg-white p-4 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+              <div className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-card-1 dark:border-neutral-700 dark:bg-neutral-900">
                 <p className="font-medium text-neutral-900 dark:text-neutral-50">
                   {metricTrend.label}
                   {metricTrend.direction === "higher_is_better" ? " (higher is better)" : " (lower is better)"}
@@ -908,7 +913,7 @@ export default async function DashboardPage() {
       {deliveredCount > 0 && (
         <p className="mt-8 text-sm text-neutral-500 dark:text-neutral-400">
           {deliveredCount} service{deliveredCount === 1 ? "" : "s"} delivered, {inProgressCount} in progress —{" "}
-          <Link href="/reports" className="font-medium text-accent underline hover:text-accent-hover">
+          <Link href="/reports" className="font-medium text-accent hover:underline">
             View all in Reports &amp; History
           </Link>
           .
@@ -924,7 +929,7 @@ export default async function DashboardPage() {
         <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
           Execution Sprint: {sprintSummaryCount > 0 && `${sprintSummaryCount} complete${activeSprint ? ", " : ""}`}
           {activeSprint && "1 in progress"} —{" "}
-          <Link href="/reports" className="font-medium text-accent underline hover:text-accent-hover">
+          <Link href="/reports" className="font-medium text-accent hover:underline">
             View in Reports &amp; History
           </Link>
           .
@@ -949,7 +954,7 @@ export default async function DashboardPage() {
           )}
           <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {activeSprint && (
-              <div className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
                 <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">Execution Sprint</h3>
                 <p className="mb-1 text-neutral-600 dark:text-neutral-400">{sprintFindingTitle ?? "In progress"}</p>
                 <p className="mb-1 text-accent">{SPRINT_STATUS_LABELS[activeSprint.status] ?? activeSprint.status}</p>
@@ -959,7 +964,7 @@ export default async function DashboardPage() {
                     {sprintTaskCounts.done} of {sprintTaskCounts.total} tasks done
                   </p>
                 )}
-                <Link href={`/execution-sprint/${activeSprint.id}`} className="mt-1 inline-block underline">
+                <Link href={`/execution-sprint/${activeSprint.id}`} className="mt-1 inline-block font-medium text-accent hover:underline">
                   View sprint
                 </Link>
                 {/* Real gap closed (confirmed 2026-08-19, direct founder
@@ -974,7 +979,7 @@ export default async function DashboardPage() {
                     "want something else" link here would be redundant. */}
                 {activeSprint.status !== "proposed" && (
                   <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-                    <Link href={`/reports/${activeSprint.report_id}`} className="underline">
+                    <Link href={`/reports/${activeSprint.report_id}`} className="font-medium text-accent hover:underline">
                       Want to work on a different priority instead?
                     </Link>{" "}
                     Mark another finding &quot;Interested in help&quot; on your full report — your reviewer will follow up.
@@ -986,7 +991,7 @@ export default async function DashboardPage() {
             {(activeModuleRequestRows ?? []).map((r) => {
               const meta = MODULE_META[r.module_type as ModuleType];
               return (
-                <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
                   <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{meta?.label ?? r.module_type}</h3>
                   <p className="mb-1 text-accent">{MODULE_STATUS_LABELS[r.status as string] ?? r.status}</p>
                   <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">{MODULE_EXPLANATION[r.status as string] ?? ""}</p>
@@ -1010,7 +1015,7 @@ export default async function DashboardPage() {
             })}
 
             {(activeSessionRequestRows ?? []).map((r) => (
-              <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+              <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
                 <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{TYPE_LABELS[sessionTypeToItemType(r.session_type as string)]}</h3>
                 <p className="mb-1 text-accent">{SESSION_STATUS_LABELS[r.status as string] ?? humanizeStatus(r.status as string)}</p>
                 <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">{SESSION_EXPLANATION[r.status as string] ?? ""}</p>

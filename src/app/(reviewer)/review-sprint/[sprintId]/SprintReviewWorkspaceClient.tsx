@@ -167,7 +167,7 @@ export function SprintReviewWorkspaceClient({ sprintId, companyName, findingTitl
       )}
 
       {draftCount > 0 && (
-        <section className="mb-6 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+        <section className="mb-6 rounded-lg bg-red-50 p-4 text-sm text-red-700 shadow-card-1 dark:bg-red-950 dark:text-red-300">
           {sprintStatus === "scoped" ? (
             <>
               <p className="font-medium">Mandatory before this sprint can start:</p>
@@ -261,7 +261,7 @@ function TaskCard({ t }: { t: SprintTaskRow }) {
   const isDraft = t.reviewer_status === "draft";
   return (
     <div
-      className={`rounded-md border bg-white p-3 shadow-sm dark:bg-neutral-900 ${isDraft ? "border-amber-300 dark:border-amber-800" : "border-neutral-300 dark:border-neutral-700"}`}
+      className={`rounded-md border bg-white p-3 shadow-card-1 dark:bg-neutral-900 ${isDraft ? "border-amber-300 dark:border-amber-800" : "border-neutral-200 dark:border-neutral-700"}`}
     >
       <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
         <span className={`rounded-full px-2 py-0.5 ${STATUS_BADGE[t.reviewer_status]}`}>{isDraft ? "needs decision" : t.reviewer_status}</span>
@@ -303,7 +303,7 @@ function EditForm({
   const [kpiDirection, setKpiDirection] = useState<"higher_is_better" | "lower_is_better">(initial.kpi_direction ?? "higher_is_better");
 
   return (
-    <div className="mt-2 space-y-3 rounded-md border border-blue-300 bg-white p-3 shadow-sm dark:border-blue-800 dark:bg-neutral-900">
+    <div className="mt-2 space-y-3 rounded-md border-l-2 border-blue-400 bg-white p-3 shadow-card-1 dark:border-blue-700 dark:bg-neutral-900">
       <Textarea label="Task description" value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} rows={2} />
       <Input label="Owner (role label)" value={owner} onChange={(e) => setOwner(e.target.value)} />
       <Input label="KPI description" value={kpiDescription} onChange={(e) => setKpiDescription(e.target.value)} />

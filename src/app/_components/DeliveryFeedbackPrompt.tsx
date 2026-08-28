@@ -90,7 +90,7 @@ export function DeliveryFeedbackPrompt({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-sm text-neutral-500 underline hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+        className="text-sm text-neutral-500 hover:text-neutral-700 hover:underline dark:text-neutral-400 dark:hover:text-neutral-200"
       >
         {copy.prompt}
       </button>
@@ -98,7 +98,7 @@ export function DeliveryFeedbackPrompt({
   }
 
   return (
-    <div className="rounded border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
       <p className="mb-2 text-sm font-medium text-neutral-900 dark:text-neutral-50">{copy.title}</p>
       <div className="space-y-2">
         <Textarea label={copy.textLabel} rows={3} value={responseText} onChange={(e) => setResponseText(e.target.value)} placeholder={copy.textPlaceholder} />

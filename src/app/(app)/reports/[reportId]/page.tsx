@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { LensFinding, LensType, Severity } from "@/lib/lenses/types";
+import type { LensFinding, LensType } from "@/lib/lenses/types";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import { deriveRoadmap } from "@/lib/reports/roadmap";
 import { resolveTop3FindingsInOrder } from "@/lib/reports/top3";
@@ -20,6 +20,7 @@ import { getTotalTurnaroundHours } from "@/lib/reports/sla";
 import { listPricing, formatPrice } from "@/lib/pricing";
 import { Card } from "@/app/_components/ui/Card";
 import { Alert } from "@/app/_components/ui/Alert";
+import { SEVERITY_STYLES } from "@/lib/severity-badge";
 
 // SourceEvidenceSnapshot renamed to the shared EvidenceSnapshotShape
 // (confirmed 2026-08-12, real bug list item #4) — this type/rendering was
@@ -33,13 +34,6 @@ type SourceEvidenceSnapshot = EvidenceSnapshotShape;
 // previously all four severities rendered as identical small gray
 // uppercase text, so a report with findings across all 5 lenses had
 // nothing to visually triage; every badge had to be read in full.
-const SEVERITY_STYLES: Record<Severity, string> = {
-  critical: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-  high: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
-  medium: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  low: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
-};
-
 const LENS_ORDER: LensType[] = ["financial", "execution", "product", "commercial", "ai_governance"];
 const LENS_LABELS: Record<LensType, string> = {
   financial: "Financial",
@@ -272,12 +266,12 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="mb-1 text-2xl font-semibold">{company.name}&apos;s Execution Audit</h1>
+      <h1 className="mb-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">{company.name}&apos;s Execution Audit</h1>
       {goal && <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">Goal: {GOAL_LABELS[goal.primary_goal as keyof typeof GOAL_LABELS]}</p>}
 
       {top3.length > 0 && (
-        <section className="mb-10 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-          <h2 className="mb-3 text-lg font-medium">Top 3 priorities</h2>
+        <section className="mb-10 rounded-lg border border-neutral-200 bg-white p-5 shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
+          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">Top 3 priorities</h2>
           {/* Shows the diagnosis (what was found), not the recommendedAction
               — confirmed 2026-08-06, honest UX review. Previously showed
               recommendedAction here, then the by-lens section below
@@ -297,11 +291,11 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
 
       {top3.length > 0 && (
         <section className="mb-10">
-          <h2 className="mb-3 text-lg font-medium">30 / 60 / 90 day roadmap</h2>
+          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">30 / 60 / 90 day roadmap</h2>
           <div className="grid gap-4 sm:grid-cols-3">
             {(["day30", "day60", "day90"] as const).map((bucket, i) => (
-              <div key={bucket} className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
-                <h3 className="mb-2 font-medium">{[30, 60, 90][i]} days</h3>
+              <div key={bucket} className="rounded-md border border-neutral-200 bg-white p-3 text-sm shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
+                <h3 className="mb-2 font-medium text-neutral-900 dark:text-neutral-50">{[30, 60, 90][i]} days</h3>
                 {roadmap[bucket].length === 0 ? (
                   <p className="text-neutral-400">Nothing at this horizon</p>
                 ) : (
@@ -325,8 +319,8 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
       )}
 
       {byLens.size > 0 && (
-        <section className="mb-10 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-          <h2 className="mb-1 text-lg font-medium">Strengths by lens</h2>
+        <section className="mb-10 rounded-lg border border-neutral-200 bg-white p-5 shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
+          <h2 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Strengths by lens</h2>
           <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
             This report also looks for what&apos;s genuinely working, not just what needs fixing — a lens with no bar segment here didn&apos;t identify a
             finding directly and healthily supporting your stated goal this time, not that nothing about it works.
@@ -374,7 +368,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
 
       {LENS_ORDER.filter((lens) => byLens.has(lens)).map((lens) => (
         <section key={lens} className="mb-8">
-          <h2 className="mb-3 text-lg font-medium">{LENS_LABELS[lens]}</h2>
+          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">{LENS_LABELS[lens]}</h2>
           {/* Fixed callout when AI-in-production is confirmed (item 8,
               confirmed 2026-08-20) — deliberately different from the
               "do not build" instruction elsewhere in this same request:
@@ -410,8 +404,8 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
                   key={row.id}
                   className={
                     f.isMissingDataFinding
-                      ? "rounded border border-dashed border-neutral-300 bg-neutral-50 p-4 text-sm dark:border-neutral-700 dark:bg-neutral-900/50"
-                      : "rounded border border-neutral-200 p-4 text-sm dark:border-neutral-800"
+                      ? "rounded-lg border border-dashed border-neutral-300 bg-neutral-50 p-4 text-sm dark:border-neutral-700 dark:bg-neutral-900/50"
+                      : "rounded-lg border border-neutral-200 bg-white p-4 text-sm shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900"
                   }
                 >
                   <div className="mb-1 flex items-center justify-between">
@@ -442,7 +436,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
                       context from an actual Discovery/Delivery call,
                       clearly labeled as coming from the reviewer directly. */}
                   {conciergeNotesByFindingId.has(row.id) && (
-                    <div className="mt-2 rounded border border-accent/40 bg-accent/10 p-2 dark:border-accent/30">
+                    <div className="mt-2 rounded border-l-2 border-accent bg-[#fffbf0] p-2 dark:border-accent dark:bg-accent/10">
                       <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
                         Note from your Concierge session with {conciergeNotesByFindingId.get(row.id)!.authorName}
                       </p>
@@ -457,7 +451,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
                       the reader is looking at exactly the gap right here. */}
                   {f.isMissingDataFinding && (
                     <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-                      <Link href="/evidence-intake" className="font-medium text-accent underline hover:text-accent-hover">
+                      <Link href="/evidence-intake" className="font-medium text-accent hover:underline">
                         Add this evidence
                       </Link>{" "}
                       — starts a new, paid re-audit cycle (your free audit has already been used).
@@ -465,7 +459,10 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
                   )}
                   {isUsableFinancialImpact(f.financialImpact) && (
                     <p className="mt-1 text-xs text-neutral-500">
-                      Estimated impact: {formatCurrencyRange(f.financialImpact.impactBandLow, f.financialImpact.impactBandHigh, f.financialImpact.currency)}
+                      Estimated impact:{" "}
+                      <span className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
+                        {formatCurrencyRange(f.financialImpact.impactBandLow, f.financialImpact.impactBandHigh, f.financialImpact.currency)}
+                      </span>
                     </p>
                   )}
                   {/* Client-facing Execution Sprint interest (confirmed
@@ -534,7 +531,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
        * own cautionary line, not a bordered button of equal weight.
        */}
       <section className="mt-10 space-y-4">
-        <h2 className="text-lg font-medium">Next steps</h2>
+        <h2 className="text-base font-semibold text-neutral-900 dark:text-neutral-50">Next steps</h2>
         {/* Automated post-delivery feedback + pilot testimonial ask
             (confirmed 2026-08-24, direct founder request) — general
             feedback for every client; the testimonial/referral ask
@@ -551,14 +548,14 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
             request to expand "Next steps" beyond the original 2 options)
             — see the modulePricing() docblock above. Each links using the
             same interim `?companyId=` pattern those pages already expect. */}
-        <div className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
           <h3 className="mb-1 text-sm font-medium text-neutral-800 dark:text-neutral-200">Other audits available</h3>
           <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
             Standalone, sold separately from this Core Audit — each has its own findings and reviewer pass.
           </p>
           <ul className="space-y-2 text-sm">
             <li>
-              <Link href="/tender-readiness" className="font-medium text-accent underline hover:text-accent-hover">
+              <Link href="/tender-readiness" className="font-medium text-accent hover:underline">
                 Tender Readiness
               </Link>
               {modulePricing("tender_readiness") && (
@@ -570,7 +567,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
               )}
             </li>
             <li>
-              <Link href="/ai-reliability-audit" className="font-medium text-accent underline hover:text-accent-hover">
+              <Link href="/ai-reliability-audit" className="font-medium text-accent hover:underline">
                 AI Reliability Audit
               </Link>
               {modulePricing("ai_reliability_audit") && (
@@ -582,7 +579,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
               )}
             </li>
             <li>
-              <Link href="/data-protection-compliance" className="font-medium text-accent underline hover:text-accent-hover">
+              <Link href="/data-protection-compliance" className="font-medium text-accent hover:underline">
                 Data Protection Compliance
               </Link>
               {modulePricing("data_protection_compliance") && (
@@ -598,7 +595,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
 
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
           Have new evidence to add?{" "}
-          <Link href="/evidence-intake" className="underline">
+          <Link href="/evidence-intake" className="text-neutral-700 hover:underline dark:text-neutral-300">
             Submit new evidence
           </Link>{" "}
           — note this starts a new, paid re-audit cycle (your free audit has already been used).

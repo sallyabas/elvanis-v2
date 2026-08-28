@@ -24,6 +24,7 @@ import { computeCascadeSignals } from "@/lib/recommendations/cascade";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import type { PrimaryGoal } from "@/lib/lenses/types";
 import { humanizeStatus } from "@/lib/format";
+import { SEVERITY_STYLES } from "@/lib/severity-badge";
 import { Card } from "@/app/_components/ui/Card";
 import { Input } from "@/app/_components/ui/Input";
 import { Textarea } from "@/app/_components/ui/Textarea";
@@ -109,19 +110,20 @@ function displayedContent(f: FindingRow): LensFinding {
   return f.reviewer_edited_content ?? f.ai_draft;
 }
 
+// Softened 2026-08-28 (premium B2B redesign) — same restrained, no-border
+// treatment as the shared SEVERITY_STYLES (@/lib/severity-badge), applied
+// by extension since this workspace's own status/severity badges are the
+// same conceptual pattern.
 const STATUS_BADGE: Record<FindingRow["reviewer_status"], string> = {
-  draft: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  approved: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
-  edited: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  rejected: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+  draft: "bg-yellow-50 text-yellow-700 dark:bg-amber-950 dark:text-amber-300",
+  approved: "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-300",
+  edited: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  rejected: "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300",
 };
 
-const SEVERITY_BADGE: Record<Severity, string> = {
-  critical: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-  high: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
-  medium: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300",
-  low: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
-};
+// SEVERITY_BADGE replaced by the shared SEVERITY_STYLES (@/lib/severity-badge)
+// — this file previously kept its own local copy with the old saturated
+// tones; now reads from the single source of truth like every other page.
 
 const LENS_LABELS: Record<LensType, string> = {
   financial: "Financial",
@@ -485,7 +487,7 @@ export function ReviewWorkspaceClient({
       )}
 
       {(draftFindings.length > 0 || unresolvedConflicts.length > 0) && (
-        <section className="mb-6 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+        <section className="mb-6 rounded-lg bg-red-50 p-4 text-sm text-red-700 shadow-card-1 dark:bg-red-950 dark:text-red-300">
           <p className="font-medium">Mandatory before this report can be approved:</p>
           <ul className="mt-1 list-inside list-disc">
             {draftFindings.length > 0 && (
@@ -530,8 +532,8 @@ export function ReviewWorkspaceClient({
       )}
 
       {fixFirstCandidates.length > 0 && (
-        <section className="mb-8 rounded-lg border border-neutral-300 bg-neutral-50 p-5 dark:border-neutral-700 dark:bg-neutral-900/50">
-          <h2 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">Suggested fix-first (not yet in top 3)</h2>
+        <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-5 shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
+          <h2 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Suggested fix-first (not yet in top 3)</h2>
           <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
             Deterministically flagged: critical severity, high severity directly tied to the client&apos;s stated goal, or upstream of 2+ other findings
             on this report (see below). A suggestion only — promote manually if it belongs in the top 3.
@@ -542,7 +544,7 @@ export function ReviewWorkspaceClient({
               return (
                 <li key={f.id} className="flex items-center justify-between text-sm text-neutral-800 dark:text-neutral-200">
                   <span>
-                    <span className={`mr-2 rounded-full px-2 py-0.5 text-xs ${SEVERITY_BADGE[displayedContent(f).severity]}`}>
+                    <span className={`mr-2 rounded-full px-2 py-0.5 text-xs ${SEVERITY_STYLES[displayedContent(f).severity]}`}>
                       {displayedContent(f).severity}
                     </span>
                     {displayedContent(f).title}
@@ -567,8 +569,8 @@ export function ReviewWorkspaceClient({
       )}
 
       {conflicts.length > 0 && (
-        <section className="mb-8 rounded-lg border border-orange-300 bg-orange-50 p-5 dark:border-orange-800 dark:bg-orange-950">
-          <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Flagged conflicts</h2>
+        <section className="mb-8 rounded-lg bg-orange-50 p-5 shadow-card-1 dark:bg-orange-950">
+          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">Flagged conflicts</h2>
           <ul className="space-y-4">
             {conflicts.map((c) => {
               const a = findingById.get(c.finding_a_id);
@@ -591,7 +593,7 @@ export function ReviewWorkspaceClient({
                    * resolve anything by itself.
                    */}
                   {c.ai_suggested_resolution && c.resolution_status === "unresolved" && (
-                    <p className="mb-2 rounded border border-orange-200 bg-white px-2 py-1.5 text-xs text-neutral-700 dark:border-orange-900 dark:bg-neutral-900 dark:text-neutral-300">
+                    <p className="mb-2 rounded-md border-l-2 border-orange-400 bg-white px-2 py-1.5 text-xs text-neutral-700 shadow-card-1 dark:border-orange-700 dark:bg-neutral-900 dark:text-neutral-300">
                       <span className="font-semibold text-orange-700 dark:text-orange-400">Suggested resolution: </span>
                       {c.ai_suggested_resolution}
                     </p>
@@ -617,8 +619,8 @@ export function ReviewWorkspaceClient({
       )}
 
       {disputedFindings.length > 0 && (
-        <section className="mb-8 rounded-lg border border-purple-300 bg-purple-50 p-5 dark:border-purple-800 dark:bg-purple-950">
-          <h2 className="mb-3 font-medium text-neutral-900 dark:text-neutral-50">Disputed findings (client marked not confident)</h2>
+        <section className="mb-8 rounded-lg bg-purple-50 p-5 shadow-card-1 dark:bg-purple-950">
+          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">Disputed findings (client marked not confident)</h2>
           <ul className="space-y-4">
             {disputedFindings.map((f) => (
               <li key={f.id}>
@@ -764,7 +766,7 @@ export function ReviewWorkspaceClient({
         {rerunOfReportId && (
           <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">
             This report is itself a re-run of{" "}
-            <a href={`/review/${rerunOfReportId}`} className="underline">
+            <a href={`/review/${rerunOfReportId}`} className="font-medium text-accent hover:underline">
               an earlier report
             </a>
             .
@@ -783,7 +785,7 @@ export function ReviewWorkspaceClient({
             {rerunResultId ? (
               <p className="text-sm text-green-700 dark:text-green-400">
                 New report created —{" "}
-                <a href={`/review/${rerunResultId}`} className="underline">
+                <a href={`/review/${rerunResultId}`} className="font-medium text-accent hover:underline">
                   open it
                 </a>
                 .
@@ -830,10 +832,10 @@ function FindingCard({ f }: { f: FindingRow }) {
   const isDraft = f.reviewer_status === "draft";
   return (
     <div
-      className={`rounded-md border bg-white p-3 shadow-sm dark:bg-neutral-900 ${isDraft ? "border-amber-300 dark:border-amber-800" : "border-neutral-300 dark:border-neutral-700"}`}
+      className={`rounded-md border bg-white p-3 shadow-card-1 dark:bg-neutral-900 ${isDraft ? "border-amber-300 dark:border-amber-800" : "border-neutral-200 dark:border-neutral-700"}`}
     >
       <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
-        <span className={`rounded-full px-2 py-0.5 ${SEVERITY_BADGE[content.severity]}`}>{content.severity}</span>
+        <span className={`rounded-full px-2 py-0.5 ${SEVERITY_STYLES[content.severity]}`}>{content.severity}</span>
         {f.origin && <span>· {f.origin}</span>}
         <span>· confidence: {content.confidenceLevel}</span>
         <span className={`rounded-full px-2 py-0.5 ${STATUS_BADGE[f.reviewer_status]}`}>{isDraft ? "needs decision" : f.reviewer_status}</span>
@@ -908,10 +910,10 @@ function ConciergeNoteEditor({
 
   if (!editing) {
     return existingNote ? (
-      <div className="mt-2 rounded-md border border-accent/40 bg-accent/10 p-3 text-sm dark:border-accent/30 dark:bg-accent/10">
+      <div className="mt-2 rounded-md border-l-2 border-accent bg-[#fffbf0] p-3 text-sm dark:border-accent dark:bg-accent/10">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-accent">Concierge note — {existingNote.authorName}</p>
         <p className="whitespace-pre-wrap text-neutral-800 dark:text-neutral-200">{existingNote.note}</p>
-        <button type="button" onClick={() => setEditing(true)} className="mt-2 text-xs text-neutral-500 underline hover:text-neutral-700 dark:text-neutral-400">
+        <button type="button" onClick={() => setEditing(true)} className="mt-2 text-xs text-neutral-500 hover:text-neutral-700 hover:underline dark:text-neutral-400">
           Edit note
         </button>
       </div>
@@ -919,7 +921,7 @@ function ConciergeNoteEditor({
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className="mt-2 text-xs text-neutral-500 underline hover:text-neutral-700 dark:text-neutral-400"
+        className="mt-2 text-xs text-neutral-500 hover:text-neutral-700 hover:underline dark:text-neutral-400"
       >
         + Add Concierge note
       </button>
@@ -927,7 +929,7 @@ function ConciergeNoteEditor({
   }
 
   return (
-    <div className="mt-2 space-y-2 rounded-md border border-accent/40 bg-accent/5 p-3 dark:border-accent/30">
+    <div className="mt-2 space-y-2 rounded-md border-l-2 border-accent bg-[#fffbf0] p-3 dark:border-accent dark:bg-accent/10">
       <Input label="Your name" value={authorName} onChange={(e) => setAuthorName(e.target.value)} />
       <Textarea
         label="Note"
@@ -994,7 +996,7 @@ function EditForm({
   const suggestions = matchRecommendationLibraryEntries(recommendationLibrary, lens, title, diagnosis);
 
   return (
-    <div className="mt-2 space-y-3 rounded-md border border-blue-300 bg-white p-3 shadow-sm dark:border-blue-800 dark:bg-neutral-900">
+    <div className="mt-2 space-y-3 rounded-md border-l-2 border-blue-400 bg-white p-3 shadow-card-1 dark:border-blue-700 dark:bg-neutral-900">
       <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
       <Textarea label="Diagnosis" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} rows={2} />
       <Textarea label="Root cause" value={rootCause} onChange={(e) => setRootCause(e.target.value)} rows={2} />
@@ -1066,7 +1068,7 @@ function DisputeResolutionForm({
   const [severity, setSeverity] = useState<Severity>(initial.severity);
 
   return (
-    <div className="mt-2 space-y-3 rounded-md border border-purple-400 bg-white p-3 shadow-sm dark:border-purple-700 dark:bg-neutral-900">
+    <div className="mt-2 space-y-3 rounded-md border-l-2 border-purple-400 bg-white p-3 shadow-card-1 dark:border-purple-700 dark:bg-neutral-900">
       <div className="flex gap-3 text-xs text-neutral-800 dark:text-neutral-200">
         {(["keep_ai_version", "side_with_client", "edit"] as const).map((r) => (
           <label key={r} className="flex items-center gap-1">

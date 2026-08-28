@@ -76,7 +76,11 @@ export function NextStepBanner({ journeyStatus }: { journeyStatus: JourneyStatus
   // the actual edit_window_closes_at value.
   const showCountdown = journeyStatus.stage === "editing" && journeyStatus.editWindowClosesAt;
   return (
-    <div className="mb-6 rounded-lg border border-accent/40 bg-accent/10 p-5 dark:border-accent/30 dark:bg-accent/10">
+    // Premium B2B redesign (confirmed 2026-08-28) — same border-left/
+    // light-amber-wash treatment as Dashboard's "Highest priority right
+    // now" banner (spec point 8), applied by extension for visual
+    // consistency between the app's two "one action to take" callouts.
+    <div className="mb-6 rounded-lg border-l-4 border-accent bg-[#fffbf0] p-5 shadow-card-1 dark:border-accent dark:bg-accent/10">
       <h2 className="font-medium text-neutral-900 dark:text-neutral-50">{copy.title}</h2>
       {showCountdown ? (
         // Explicit, not a bare number (confirmed 2026-08-11, direct

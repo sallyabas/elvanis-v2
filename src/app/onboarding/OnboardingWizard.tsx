@@ -185,7 +185,7 @@ export function OnboardingWizard({ mode = "create", existingCompanyId, existingC
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
           <div
-            className="h-full rounded-full bg-neutral-900 transition-all dark:bg-white"
+            className="h-full rounded-full bg-accent transition-all"
             style={{ width: `${((stepIndex + 1) / stepKeys.length) * 100}%` }}
           />
         </div>
@@ -194,7 +194,7 @@ export function OnboardingWizard({ mode = "create", existingCompanyId, existingC
       {currentStep === "company" && (
         <div className="space-y-4">
           <div>
-            <h2 className="text-lg font-medium">Tell us about your business</h2>
+            <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Tell us about your business</h2>
             <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Just enough to get started — everything else can wait.</p>
           </div>
           {mode === "attach" ? (
@@ -212,7 +212,7 @@ export function OnboardingWizard({ mode = "create", existingCompanyId, existingC
       {currentStep === "goal" && (
         <div className="space-y-4">
           <div>
-            <h2 className="text-lg font-medium">What are you trying to achieve?</h2>
+            <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-50">What are you trying to achieve?</h2>
             <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
               Pick the goal that matters most right now — every lens weighs its findings against this.
             </p>
@@ -221,10 +221,10 @@ export function OnboardingWizard({ mode = "create", existingCompanyId, existingC
             {GOAL_KEYS.map((key) => (
               <label
                 key={key}
-                className={`flex cursor-pointer flex-col gap-0.5 rounded border px-3 py-2.5 text-sm transition-colors ${
+                className={`flex cursor-pointer flex-col gap-0.5 rounded-md border bg-white px-3 py-2.5 text-sm transition-all dark:bg-neutral-900 ${
                   primaryGoal === key
-                    ? "border-neutral-900 bg-neutral-50 dark:border-white dark:bg-neutral-900"
-                    : "border-neutral-200 hover:border-neutral-400 dark:border-neutral-800 dark:hover:border-neutral-600"
+                    ? "border-accent bg-[#fffbf0] shadow-card-2 dark:border-accent dark:bg-accent/10"
+                    : "border-neutral-200 shadow-card-1 hover:border-neutral-400 dark:border-neutral-800 dark:hover:border-neutral-600"
                 }`}
               >
                 <span className="flex items-center gap-2 font-medium">
@@ -233,7 +233,7 @@ export function OnboardingWizard({ mode = "create", existingCompanyId, existingC
                     name="primaryGoal"
                     checked={primaryGoal === key}
                     onChange={() => setPrimaryGoal(key)}
-                    className="accent-neutral-900 dark:accent-white"
+                    className="accent-accent"
                   />
                   {GOAL_LABELS[key]}
                 </span>
@@ -247,7 +247,7 @@ export function OnboardingWizard({ mode = "create", existingCompanyId, existingC
       {currentStep === "refine" && primaryGoal && (
         <div className="space-y-4">
           <div>
-            <h2 className="text-lg font-medium">Refine your goal (optional)</h2>
+            <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Refine your goal (optional)</h2>
             <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
               The more specific you are, the more targeted your findings will be — but none of this is required to continue.
             </p>
@@ -307,7 +307,7 @@ export function OnboardingWizard({ mode = "create", existingCompanyId, existingC
       {currentStep === "details" && primaryGoal && (
         <div className="space-y-4">
           <div>
-            <h2 className="text-lg font-medium">A couple more details (optional)</h2>
+            <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-50">A couple more details (optional)</h2>
           </div>
           <Select label="Is there a secondary goal?" value={secondaryGoal} onChange={(e) => setSecondaryGoal(e.target.value as PrimaryGoal | "")}>
             <option value="">None</option>
@@ -330,10 +330,10 @@ export function OnboardingWizard({ mode = "create", existingCompanyId, existingC
       {currentStep === "review" && primaryGoal && (
         <div className="space-y-4">
           <div>
-            <h2 className="text-lg font-medium">Review</h2>
+            <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Review</h2>
             <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Everything here can be changed later from Business Profile.</p>
           </div>
-          <dl className="space-y-3 rounded-md border border-neutral-300 bg-white p-4 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+          <dl className="space-y-3 rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-card-1 dark:border-neutral-700 dark:bg-neutral-900">
             <div>
               <dt className="text-xs font-medium uppercase text-neutral-400">Company</dt>
               <dd>{companyName || existingCompanyName}</dd>

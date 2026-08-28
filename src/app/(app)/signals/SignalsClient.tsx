@@ -7,6 +7,7 @@ import { formatCurrencyRange, isUsableFinancialImpact } from "@/lib/reports/fina
 import { FindingNotApplicableButton } from "@/app/_components/FindingNotApplicableButton";
 import { SprintInterestButton } from "@/app/_components/SprintInterestButton";
 import { TYPE_BADGE_STYLES, moduleTypeToItemType } from "@/lib/item-type-badge";
+import { SEVERITY_STYLES } from "@/lib/severity-badge";
 import { Card } from "@/app/_components/ui/Card";
 
 export interface SignalItem {
@@ -37,13 +38,6 @@ export interface SignalItem {
 }
 
 const SEVERITY_ORDER: Severity[] = ["critical", "high", "medium", "low"];
-const SEVERITY_STYLES: Record<Severity, string> = {
-  critical: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-  high: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
-  medium: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  low: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
-};
-
 /**
  * Source-badge colors (confirmed 2026-08-26, navigation-audit fix batch,
  * item 3) — a genuinely different dimension from the item-type badges used
@@ -57,11 +51,11 @@ const SEVERITY_STYLES: Record<Severity, string> = {
  * SEVERITY_STYLES above, so a source badge is never mistaken for either.
  */
 const LENS_BADGE_STYLES: Record<string, string> = {
-  financial: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
-  execution: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300",
-  product: "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300",
-  commercial: "bg-pink-100 text-pink-800 dark:bg-pink-950 dark:text-pink-300",
-  ai_governance: "bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300",
+  financial: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300",
+  execution: "bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300",
+  product: "bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
+  commercial: "bg-pink-50 text-pink-700 dark:bg-pink-950 dark:text-pink-300",
+  ai_governance: "bg-cyan-50 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300",
 };
 
 // Lens and module sourceKeys are disjoint sets (financial/execution/
@@ -122,7 +116,7 @@ export function SignalsClient({
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="mb-1 text-2xl font-semibold">Signals</h1>
+      <h1 className="mb-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">Signals</h1>
       <p className="mb-6 text-sm text-neutral-500 dark:text-neutral-400">
         Every finding across {companyName}&apos;s delivered Core Audit and any delivered modules, in one place —
         filter by where it came from or by severity.
@@ -183,7 +177,7 @@ export function SignalsClient({
               className={
                 item.isMissingDataFinding
                   ? "rounded-lg border border-dashed border-neutral-300 bg-neutral-50 p-4 text-sm dark:border-neutral-700 dark:bg-neutral-900/50"
-                  : "rounded-lg border border-neutral-200 bg-white p-4 text-sm shadow-sm dark:border-neutral-800 dark:bg-neutral-900"
+                  : "rounded-lg border border-neutral-200 bg-white p-4 text-sm shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900"
               }
             >
               <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
@@ -209,11 +203,13 @@ export function SignalsClient({
               {isUsableFinancialImpact(item.financialImpact) && (
                 <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                   Estimated impact:{" "}
-                  {formatCurrencyRange(item.financialImpact.impactBandLow, item.financialImpact.impactBandHigh, item.financialImpact.currency)}
+                  <span className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
+                    {formatCurrencyRange(item.financialImpact.impactBandLow, item.financialImpact.impactBandHigh, item.financialImpact.currency)}
+                  </span>
                 </p>
               )}
               <div className="mt-2 flex items-center justify-between">
-                <Link href={item.detailHref} className="text-xs font-medium text-accent underline hover:text-accent-hover">
+                <Link href={item.detailHref} className="text-xs font-medium text-accent hover:underline">
                   View full detail
                 </Link>
               </div>

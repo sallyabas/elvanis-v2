@@ -87,13 +87,13 @@ export function SessionRequestButton({ companyId, sessionType }: { companyId: st
   // surrounding paragraph (or, as on the report page before this fix,
   // not writing one at all).
   return (
-    <div className="rounded border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
       <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">{LABELS[sessionType].description}</p>
       <button
         type="button"
         onClick={handleRequest}
         disabled={status === "sending"}
-        className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
+        className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
       >
         {status === "sending" ? "Requesting…" : LABELS[sessionType].cta}
       </button>

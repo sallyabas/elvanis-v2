@@ -42,7 +42,7 @@ export default async function AccountSettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
-      <h1 className="mb-1 text-2xl font-semibold">Account Settings</h1>
+      <h1 className="mb-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">Account Settings</h1>
       <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">Your personal account, not the business.</p>
 
       <div className="space-y-6">

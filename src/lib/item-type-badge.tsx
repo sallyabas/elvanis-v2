@@ -48,27 +48,33 @@ export const TYPE_LABELS: Record<ItemType, string> = {
 // One distinct color per type, so a reviewer or client can tell items
 // apart by glancing at the badge alone, not just by reading the label.
 // Core Audit gets the real brand accent token (this app's own established
-// "primary/flagship" signal) — deliberately NOT the same raw amber-100/800
-// pairing Signals/Dashboard use for "medium severity", so the two
-// unrelated meanings never read as the same color. Every other type gets
-// a genuinely distinct hue, avoiding red/orange (reserved for severity
-// elsewhere in this app).
+// "primary/flagship" signal) — deliberately NOT the same tone Signals/
+// Dashboard use for "medium severity", so the two unrelated meanings never
+// read as the same color. Every other type gets a genuinely distinct hue,
+// avoiding red/orange (reserved for severity elsewhere in this app).
+//
+// Softened 2026-08-28 (premium B2B redesign) — a UI pattern the spec's 10
+// points don't name directly (severity badges specifically), so the same
+// "soft-tone wash reads as professional, not alarming" principle was
+// applied by extension: every -100/-800 pairing became -50/-700, matching
+// the new severity badges' restrained tone instead of the previous
+// saturated look.
 export const TYPE_BADGE_STYLES: Record<ItemType, string> = {
   core_audit: "bg-accent text-accent-ink",
-  tender_readiness: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
-  ai_reliability: "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300",
-  data_protection: "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300",
-  execution_sprint: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-  discovery: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-  delivery: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300",
-  f2f_workshop: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300",
-  concierge: "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-950 dark:text-fuchsia-300",
+  tender_readiness: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  ai_reliability: "bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300",
+  data_protection: "bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300",
+  execution_sprint: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+  discovery: "bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+  delivery: "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300",
+  f2f_workshop: "bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
+  concierge: "bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-950 dark:text-fuchsia-300",
   // Deliberate exception to the "avoid red, reserved for severity" rule
   // above — every compliance_consultation request is, by construction,
   // created only from an active/urgent triage answer (see
   // path-b-routing.ts), so red here is the same "genuinely urgent" signal
   // as the OVERDUE badge elsewhere, not a collision with severity.
-  compliance_consultation: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+  compliance_consultation: "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300",
 };
 
 export function TypeBadge({ type, className = "" }: { type: ItemType; className?: string }) {
