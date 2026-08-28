@@ -72,6 +72,66 @@ export interface RunPendingAuditsResult {
  * share this exact code path instead of a second, drifting copy.
  */
 export async function runAuditForClaimedSubmission(supabase: SupabaseClient, row: ClaimedPendingRow): Promise<{ reportId: string } | { failed: true }> {
+  // Real, confirmed bug fix (2026-08-29, honest onboarding test) —
+  // self-healing pre-check, run BEFORE anything else, for both real
+  // callers (the "Submit now" fast-track AND the cron's stale-retry).
+  // Root cause: runAudit() itself could throw AFTER the report and its
+  // findings were already fully persisted (originally: an unguarded
+  // conflict-detection failure, now fixed in run-audit.ts itself) but
+  // BEFORE this row got marked 'completed' below. Without this check,
+  // the stale-retry safety net (runPendingAudits' own 10-minute re-pickup
+  // of any still-'audit_in_progress' row) would blindly re-run the ENTIRE
+  // 5-lens audit a second time against the same evidence — a genuine
+  // duplicate report and a doubled real Groq bill for one submission,
+  // the exact class of bug this whole delayed-execution architecture was
+  // built to prevent, reintroduced through a different gap. Matched on
+  // (company_id, submitted_at), never resulting_report_id — that's
+  // precisely the field left null by the bug this guards against.
+  // reports.submitted_at is always stamped from this exact row's own
+  // submitted_at (see run-audit.ts's submittedAt override), never "now",
+  // so the match is exact and reliable.
+  const { data: existingReport, error: existingReportError } = await supabase
+    .from("reports")
+    .select("id, status, reviewer_notified_at")
+    .eq("company_id", row.company_id)
+    .eq("submitted_at", row.submitted_at)
+    .maybeSingle();
+
+  if (existingReportError) {
+    console.error(
+      `runAuditForClaimedSubmission: failed to check for an existing report for pending_evidence_submissions row ${row.id} (company ${row.company_id})`,
+      existingReportError,
+    );
+    return { failed: true };
+  }
+
+  if (existingReport) {
+    const reportId = existingReport.id as string;
+    console.error(
+      `runAuditForClaimedSubmission: found an existing report ${reportId} for pending_evidence_submissions row ${row.id} that was never marked completed — self-healing instead of re-running the audit`,
+    );
+    const { error: completeError } = await supabase
+      .from("pending_evidence_submissions")
+      .update({ status: "completed", resulting_report_id: reportId })
+      .eq("id", row.id);
+    if (completeError) {
+      console.error(`runAuditForClaimedSubmission: found existing report ${reportId} but failed to mark row ${row.id} completed`, completeError);
+      return { failed: true };
+    }
+    if (!existingReport.reviewer_notified_at) {
+      try {
+        await notifyReviewersOfNewSubmission(supabase, reportId);
+      } catch (err) {
+        // Not fatal — checkAndNotifyClosedEditWindows() already exists as
+        // an idempotent backstop for exactly this ("reviewer_notified_at
+        // still null on a pending_review report"), so this is a real,
+        // logged miss but not one that permanently loses the notification.
+        console.error(`runAuditForClaimedSubmission: found existing report ${reportId} but failed to notify reviewers`, err);
+      }
+    }
+    return { reportId };
+  }
+
   try {
     if (!row.goal_id) throw new Error("pending evidence submission has no goal_id");
 
@@ -137,12 +197,26 @@ export async function runAuditForClaimedSubmission(supabase: SupabaseClient, row
     await notifyReviewersOfNewSubmission(supabase, result.reportId);
 
     return { reportId: result.reportId };
-  } catch {
+  } catch (err) {
+    // Real, confirmed bug fix (2026-08-29, honest onboarding test) — this
+    // catch previously swallowed the exception with zero logging, making
+    // a genuine failure diagnosable only by reading DB state directly
+    // (confirmed live: reconstructing what happened here required a
+    // direct DB query, not server logs, which showed nothing at all).
+    // Logged now with enough context (which row/company, and the real
+    // error) to actually diagnose a recurrence from server logs.
+    console.error(
+      `runAuditForClaimedSubmission: audit failed for pending_evidence_submissions row ${row.id} (company ${row.company_id}) — leaving status at 'audit_in_progress' for stale-retry`,
+      err,
+    );
     // Leave status at 'audit_in_progress' — a later tick re-picks this up
     // once last_attempted_at passes the stale threshold. Deliberately no
-    // error detail persisted/surfaced beyond that for now (no dead-letter
-    // table, no max-retry cap) — a real, scoped simplification, not an
-    // oversight; flagged in the migration's own docblock.
+    // dead-letter table, no max-retry cap — a real, scoped simplification,
+    // not an oversight; flagged in the migration's own docblock. The
+    // self-healing pre-check above now means a re-pickup that finds a
+    // report already exists (e.g. this exact exception happened AFTER
+    // runAudit() itself already succeeded) links to it instead of
+    // blindly re-running the whole audit a second time.
     return { failed: true };
   }
 }

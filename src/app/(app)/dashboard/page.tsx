@@ -187,28 +187,44 @@ export default async function DashboardPage() {
 
   // Conditional "AI Status" card (confirmed 2026-08-27, Onboarding
   // Architecture & Path Routing brief, Part 5) — shown only when at least
-  // one of the four specified conditions is true. `triage_ai_usage`/
+  // one of four specified conditions is true. `triage_ai_usage`/
   // `triage_compliance_request` only exist for Path B companies, but the
   // condition is deliberately evaluated for every entry_path (a Path A
   // company that later requests an AI module, or whose delivered report
   // happens to surface an AI & Governance finding, should still see this).
+  //
+  // Real, confirmed bug fix (2026-08-29, honest onboarding test) — the
+  // original single sentence only made sense for 2 of these 4 conditions
+  // (real AI-in-production usage). A real account with `active_request`
+  // but no AI in production yet (`triage_ai_usage` still `exploring`/
+  // `not_sure`) saw "You've told us you have AI in production" — false
+  // for that account, confirmed live. Each real condition now gets its
+  // own honest copy instead of one sentence stretched to cover all of
+  // them; precedence follows the condition's own specificity (a
+  // confirmed real AI-usage answer is the most specific signal, then an
+  // active request, then a module already in motion with neither of the
+  // above yet answered).
   const hasAiGovernanceFinding = allReportFindings.some((f) => f.lens === "ai_governance");
-  const showAiStatusCard =
-    company.triage_ai_usage === "customer_facing" ||
-    company.triage_ai_usage === "internal_only" ||
-    company.triage_compliance_request === "active_request" ||
-    hasAiGovernanceFinding ||
-    hasAnyModuleRequest;
-  // Real, deliberate scope decision: the brief's own exact copy is
-  // explicitly labelled "(pre-audit)" and no post-audit copy was
+  // Real, deliberate scope decision, unchanged: the brief's own exact
+  // copy is explicitly labelled "(pre-audit)" and no post-audit copy was
   // specified. Once a real AI & Governance finding exists, this card
   // would either have to restate what Top 3/Signals/AI Opportunity &
   // Readiness already show in detail elsewhere on this page, or invent
   // new copy the brief never authorized — given the hard "no invented £
   // figures before real findings exist" rule, this card only ever renders
-  // its one specified sentence, and stops rendering once real findings
+  // one of the sentences below, and stops rendering once real findings
   // supersede it, rather than guessing at unspecified post-audit wording.
-  const showAiStatusCardCopy = showAiStatusCard && !hasAiGovernanceFinding;
+  const aiStatusCardCopy: string | null = hasAiGovernanceFinding
+    ? null
+    : company.triage_ai_usage === "customer_facing"
+      ? "You've told us you have AI in production, customer-facing. This typically means real governance exposure — EU AI Act requirements are active and most founders haven't documented their risk yet. Your audit will tell you exactly where you stand."
+      : company.triage_ai_usage === "internal_only"
+        ? "You've told us you have AI in production for internal use. Even internal-only AI carries real governance exposure — EU AI Act requirements don't distinguish by audience, and most founders haven't documented their risk yet. Your audit will tell you exactly where you stand."
+        : company.triage_compliance_request === "active_request"
+          ? "You've told us you have an active compliance or procurement request to respond to. Whether or not AI is already in production, that request needs a real answer — your audit (or a conversation with your reviewer) will help you get there."
+          : hasAnyModuleRequest
+            ? "You've already got an AI-specific module in motion. Your audit will tell you where the rest of your governance stands too."
+            : null;
 
   // Real, state-dependent subtitle — 5 states, exact copy (confirmed
   // 2026-08-20, direct founder request). Was previously a single static
@@ -626,11 +642,9 @@ export default async function DashboardPage() {
           placed above the action banner: real governance exposure is a
           genuine "look at this first" signal, same weight as the action
           banner itself. */}
-      {showAiStatusCardCopy && (
+      {aiStatusCardCopy && (
         <section className="mb-8 rounded-lg bg-yellow-50 p-4 text-sm text-yellow-800 shadow-card-1 dark:bg-amber-950/40 dark:text-amber-200">
-          You&apos;ve told us you have AI in production. This typically means real governance exposure — EU AI Act
-          requirements are active and most founders haven&apos;t documented their risk yet. Your audit will tell you
-          exactly where you stand.
+          {aiStatusCardCopy}
         </section>
       )}
 

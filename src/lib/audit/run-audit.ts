@@ -7,7 +7,7 @@ import { commercialLens, type CommercialSelfReport } from "@/lib/lenses/commerci
 import { aiGovernanceLens, type AiGovernanceDraftInput, type AiGovernanceMode } from "@/lib/lenses/ai-governance";
 import type { OverallMaturityTier } from "@/lib/lenses/ai-governance-framework";
 import type { IndependentResearchFinding } from "@/lib/lenses/commercial-research";
-import { detectConflicts, type LensFindingWithSource } from "@/lib/synthesis/conflict-detection";
+import { detectConflicts, type DetectedConflict, type LensFindingWithSource } from "@/lib/synthesis/conflict-detection";
 import type {
   CompanyProfileForLens,
   EvidenceFieldInput,
@@ -259,7 +259,29 @@ export async function runAudit(input: RunAuditInput): Promise<RunAuditResult> {
     }
   }
 
-  const conflicts = await detectConflicts(persistedFindings);
+  // Real, confirmed bug fix (2026-08-29, honest onboarding test) —
+  // conflict detection is a 6th real LLM call with no resilience of its
+  // own, unlike the 5 lenses above (deliberately wrapped in
+  // Promise.allSettled specifically so "one piece failing must never
+  // block the rest," spec §2.1). Before this fix, a transient
+  // conflict-detection failure (the same class of intermittent Groq
+  // issue this codebase has hit repeatedly elsewhere) threw straight out
+  // of runAudit() AFTER the report and all persisted findings already
+  // existed in the DB, but BEFORE top_3_finding_ids ever got set —
+  // leaving runAuditForClaimedSubmission's own catch block to silently
+  // report the whole audit as "failed" even though it had substantially
+  // succeeded. Root-caused live: a real 119-second "Submit now" run
+  // produced a genuine 16-finding report that was reported to the client
+  // as a failure, purely because conflict detection itself threw with no
+  // logging anywhere to explain why. Same "never let one piece take down
+  // an otherwise-successful run" principle now extended here — a
+  // conflict-detection failure is logged and skipped, not fatal.
+  let conflicts: DetectedConflict[] = [];
+  try {
+    conflicts = await detectConflicts(persistedFindings);
+  } catch (err) {
+    console.error(`runAudit: conflict detection failed for report ${reportId} (company ${input.companyId}) — continuing without conflicts`, err);
+  }
 
   if (conflicts.length > 0) {
     const { error } = await supabase.from("finding_conflicts").insert(
