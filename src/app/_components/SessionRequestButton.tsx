@@ -35,6 +35,18 @@ const LABELS: Record<SessionType, { cta: string; sentLabel: string; description:
     description:
       "Deeper reviewer attention on your audit, plus your Discovery and Delivery Sessions bundled in — scoped with you personally, not a checkout.",
   },
+  // "compliance_consultation" (added 2026-08-27, Onboarding Architecture &
+  // Path Routing brief, Part 3) is never actually requested through THIS
+  // generic button — it's created directly by the Path B onboarding flow
+  // (an active compliance/procurement request routes there automatically,
+  // not via a client-initiated "request a session" click). This entry
+  // exists only to satisfy SessionType's exhaustiveness; if it's ever
+  // wired to this button, this copy is the real, ready-to-use text.
+  compliance_consultation: {
+    cta: "Request a compliance consultation",
+    sentLabel: "Compliance consultation requested",
+    description: "A direct conversation with your reviewer about an active compliance, procurement, or investor request.",
+  },
 };
 
 /**

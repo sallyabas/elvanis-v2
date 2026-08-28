@@ -66,6 +66,15 @@ interface QueueItem {
    * rather than silently guessed at.
    */
   overdue: boolean;
+  /**
+   * Urgency flag (confirmed 2026-08-27, Onboarding Architecture & Path
+   * Routing brief, Part 3/8f) — stamped at creation from the company's own
+   * triage_compliance_request answer at that moment. Currently only ever
+   * true for Tender Readiness module requests (see path-b-routing.ts);
+   * every other item type is always `false` here, same "never silently
+   * guessed at" discipline as `overdue` above.
+   */
+  urgent: boolean;
 }
 
 export default async function ReviewerQueuePage() {
@@ -104,7 +113,7 @@ export default async function ReviewerQueuePage() {
 
   const { data: moduleRequests, error: moduleError } = await supabase
     .from("module_requests")
-    .select("id, module_type, status, created_at, reviewer_notified_at, companies(name)")
+    .select("id, module_type, status, created_at, reviewer_notified_at, is_urgent, companies(name)")
     .eq("status", "pending_review");
 
   if (moduleError) {
@@ -153,6 +162,7 @@ export default async function ReviewerQueuePage() {
       notified: Boolean(r.reviewer_notified_at),
       href: `/review/${r.id}`,
       overdue: r.review_due_at ? new Date(r.review_due_at as string) < new Date() : false,
+      urgent: false,
     })),
     ...(scopedSprints ?? []).map((s) => ({
       id: s.id as string,
@@ -163,6 +173,7 @@ export default async function ReviewerQueuePage() {
       notified: true,
       href: `/review-sprint/${s.id}`,
       overdue: false,
+      urgent: false,
     })),
     ...moduleRequests.map((r) => ({
       id: r.id as string,
@@ -173,6 +184,7 @@ export default async function ReviewerQueuePage() {
       notified: Boolean(r.reviewer_notified_at),
       href: `/review-module/${r.id}`,
       overdue: false,
+      urgent: Boolean(r.is_urgent),
     })),
   ].sort((a, b) => new Date(a.readyAt ?? 0).getTime() - new Date(b.readyAt ?? 0).getTime());
 
@@ -515,6 +527,11 @@ export default async function ReviewerQueuePage() {
                         {item.overdue && (
                           <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-800 dark:bg-red-950 dark:text-red-300">
                             Overdue
+                          </span>
+                        )}
+                        {item.urgent && (
+                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-800 dark:bg-red-950 dark:text-red-300">
+                            Urgent
                           </span>
                         )}
                       </div>

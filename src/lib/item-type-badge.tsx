@@ -27,7 +27,8 @@ export type ItemType =
   | "discovery"
   | "delivery"
   | "f2f_workshop"
-  | "concierge";
+  | "concierge"
+  | "compliance_consultation";
 
 export const TYPE_LABELS: Record<ItemType, string> = {
   core_audit: "Core Audit",
@@ -39,6 +40,9 @@ export const TYPE_LABELS: Record<ItemType, string> = {
   delivery: "Delivery Session",
   f2f_workshop: "F2F Workshop",
   concierge: "Concierge Inquiry",
+  // Added 2026-08-27, Onboarding Architecture & Path Routing brief, Part 3
+  // refinement — the "route to human consultation" session type.
+  compliance_consultation: "Compliance Consultation",
 };
 
 // One distinct color per type, so a reviewer or client can tell items
@@ -59,6 +63,12 @@ export const TYPE_BADGE_STYLES: Record<ItemType, string> = {
   delivery: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300",
   f2f_workshop: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300",
   concierge: "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-950 dark:text-fuchsia-300",
+  // Deliberate exception to the "avoid red, reserved for severity" rule
+  // above — every compliance_consultation request is, by construction,
+  // created only from an active/urgent triage answer (see
+  // path-b-routing.ts), so red here is the same "genuinely urgent" signal
+  // as the OVERDUE badge elsewhere, not a collision with severity.
+  compliance_consultation: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
 };
 
 export function TypeBadge({ type, className = "" }: { type: ItemType; className?: string }) {
@@ -77,5 +87,6 @@ export function sessionTypeToItemType(sessionType: string): ItemType {
   if (sessionType === "discovery") return "discovery";
   if (sessionType === "delivery") return "delivery";
   if (sessionType === "concierge_inquiry") return "concierge";
+  if (sessionType === "compliance_consultation") return "compliance_consultation";
   return "f2f_workshop";
 }

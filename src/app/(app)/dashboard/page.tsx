@@ -15,7 +15,9 @@ import { MODULE_META, MODULE_ORDER, MODULE_STATUS_LABELS, type ModuleType } from
 import { getTotalTurnaroundHours } from "@/lib/reports/sla";
 import { TYPE_LABELS, sessionTypeToItemType } from "@/lib/item-type-badge";
 import { humanizeStatus, SESSION_STATUS_LABELS } from "@/lib/format";
+import { hasCompletedPathBSetup } from "@/lib/onboarding/path-b-completion";
 import { NextStepBanner } from "@/app/_components/NextStepBanner";
+import { HubResume } from "@/app/onboarding/HubResume";
 import { Card } from "@/app/_components/ui/Card";
 import { LinkButton } from "@/app/_components/ui/LinkButton";
 
@@ -68,9 +70,32 @@ export default async function DashboardPage() {
     redirect("/client-login");
   }
 
-  const { data: company } = await supabase.from("companies").select("id, name").eq("user_id", user.id).maybeSingle();
+  const { data: company } = await supabase
+    .from("companies")
+    .select("id, name, entry_path, triage_ai_usage, triage_compliance_request")
+    .eq("user_id", user.id)
+    .maybeSingle();
   if (!company) {
     redirect("/onboarding");
+  }
+
+  // Dynamic lead section by entry_path (confirmed 2026-08-27, Onboarding
+  // Architecture & Path Routing brief, Part 5) — a company that picked
+  // "I'm not sure yet" and never resolved it from the Hub (or deliberately
+  // switched back to 'undecided' from Account Settings) sees the Hub
+  // content inline here rather than the rest of this page, exactly as
+  // specified: "show hub page content inline until they choose a path."
+  // Reuses the same HubResume component `/onboarding` itself uses when
+  // resuming server-side — the founder's own confirmed decision (Part 3
+  // refinement discussion) was that switching entry_path never
+  // retroactively alters delivered reports, so this early return is safe
+  // even for a company with real history on a DIFFERENT path.
+  if (company.entry_path === "undecided") {
+    return (
+      <div className="mx-auto max-w-2xl px-6 py-10">
+        <HubResume companyId={company.id as string} companyName={company.name as string} />
+      </div>
+    );
   }
 
   const { data: latestReport } = await supabase
@@ -83,6 +108,39 @@ export default async function DashboardPage() {
     .maybeSingle();
 
   const journeyStatus = await computeJourneyStatus(createAdminClient(), company.id as string);
+
+  // Part 5's "AI Audit Status" lead section (entry_path='ai_audit') and
+  // the conditional "AI Status" card (entry_path='diagnosis') both need to
+  // know about this company's module requests — one small, targeted query
+  // covering both rather than reusing/reordering the existing
+  // activeModuleRequestRows query further below, which is scoped
+  // specifically to non-terminal statuses for the "Your active requests"
+  // section and shouldn't be disturbed for this unrelated purpose.
+  //
+  // Real bug found and fixed 2026-08-28 while building the Path B
+  // stranded-dead-end fix below: this query used the session-scoped
+  // `supabase` client, but module_requests' own RLS only lets a client
+  // SELECT `sent` rows (20260806090000_module_requests_rls_fix.sql) — a
+  // company with a real pending_review/approved module request would have
+  // silently shown zero rows here, mis-reporting hasAnyModuleRequest as
+  // false and (before this fix) re-triggering the "no AI audit submitted
+  // yet" fallback for a client who had already submitted one. Switched to
+  // the admin client, same reasoning as computeJourneyStatus() above.
+  const { data: allModuleRequestsForAiStatus } = await createAdminClient()
+    .from("module_requests")
+    .select("id, module_type, status, created_at, delivered_at")
+    .eq("company_id", company.id)
+    .order("created_at", { ascending: false });
+  const mostRecentModuleRequest = (allModuleRequestsForAiStatus ?? [])[0] ?? null;
+  const hasAnyModuleRequest = (allModuleRequestsForAiStatus ?? []).length > 0;
+
+  // Real, confirmed dead-end fix (2026-08-28) — "no completed triage/module
+  // yet" per the founder's own decision is a superset of hasAnyModuleRequest
+  // above: a client who was routed to human consultation instead of a
+  // module (a real, valid Path B outcome) has also finished setup and
+  // shouldn't keep seeing the "finish setting up" nag. See
+  // hasCompletedPathBSetup()'s own docblock for the full reasoning.
+  const pathBSetupDone = company.entry_path === "ai_audit" ? await hasCompletedPathBSetup(createAdminClient(), company.id as string) : true;
 
   let top3: LensFinding[] = [];
   let allReportFindings: FindingForCascade[] = [];
@@ -132,6 +190,31 @@ export default async function DashboardPage() {
       .filter((f) => f.finding.severity === "critical" || f.finding.severity === "high");
     allFindingsFinancialExposure = aggregateFinancialImpact(visible.map((f) => (f.reviewer_edited_content ?? f.ai_draft) as LensFinding));
   }
+
+  // Conditional "AI Status" card (confirmed 2026-08-27, Onboarding
+  // Architecture & Path Routing brief, Part 5) — shown only when at least
+  // one of the four specified conditions is true. `triage_ai_usage`/
+  // `triage_compliance_request` only exist for Path B companies, but the
+  // condition is deliberately evaluated for every entry_path (a Path A
+  // company that later requests an AI module, or whose delivered report
+  // happens to surface an AI & Governance finding, should still see this).
+  const hasAiGovernanceFinding = allReportFindings.some((f) => f.lens === "ai_governance");
+  const showAiStatusCard =
+    company.triage_ai_usage === "customer_facing" ||
+    company.triage_ai_usage === "internal_only" ||
+    company.triage_compliance_request === "active_request" ||
+    hasAiGovernanceFinding ||
+    hasAnyModuleRequest;
+  // Real, deliberate scope decision: the brief's own exact copy is
+  // explicitly labelled "(pre-audit)" and no post-audit copy was
+  // specified. Once a real AI & Governance finding exists, this card
+  // would either have to restate what Top 3/Signals/AI Opportunity &
+  // Readiness already show in detail elsewhere on this page, or invent
+  // new copy the brief never authorized — given the hard "no invented £
+  // figures before real findings exist" rule, this card only ever renders
+  // its one specified sentence, and stops rendering once real findings
+  // supersede it, rather than guessing at unspecified post-audit wording.
+  const showAiStatusCardCopy = showAiStatusCard && !hasAiGovernanceFinding;
 
   // Real, state-dependent subtitle — 5 states, exact copy (confirmed
   // 2026-08-20, direct founder request). Was previously a single static
@@ -456,6 +539,57 @@ export default async function DashboardPage() {
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold">Dashboard</h1>
+
+      {/* AI Audit Status — the real lead section for entry_path='ai_audit'
+          (confirmed 2026-08-27, Onboarding Architecture & Path Routing
+          brief, Part 5). Everything below this (Business Health) stays
+          exactly as it already renders for a company with no Core Audit
+          evidence yet — that existing "no_evidence" NextStepBanner/subtitle
+          content already reads as an invitation, not a demand, which is
+          the "available as next step — soft discovery, not forced" framing
+          this brief asks for, reused rather than duplicated. */}
+      {company.entry_path === "ai_audit" && (
+        <section className="mb-8 rounded-lg border border-neutral-300 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">AI Audit Status</p>
+          {mostRecentModuleRequest ? (
+            <>
+              <p className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{MODULE_META[mostRecentModuleRequest.module_type as ModuleType].label}</p>
+              <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">
+                {MODULE_STATUS_LABELS[mostRecentModuleRequest.status as string] ?? humanizeStatus(mostRecentModuleRequest.status as string)}
+              </p>
+              {mostRecentModuleRequest.status === "sent" ? (
+                <LinkButton href={`/services/module/${mostRecentModuleRequest.id}`}>View your findings</LinkButton>
+              ) : (
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">You&apos;ll get an email the moment this is ready to view.</p>
+              )}
+            </>
+          ) : pathBSetupDone ? (
+            // A real, valid Path B outcome that isn't a module request at
+            // all — the client was routed to human consultation instead.
+            <>
+              <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">
+                You requested a conversation with your reviewer instead of a module — they&apos;ll be in touch.
+              </p>
+              <LinkButton href="/services">Browse AI audit modules</LinkButton>
+            </>
+          ) : (
+            // Real, confirmed dead-end fix (2026-08-28) — a client whose
+            // 5-field profile is saved (entry_path already committed to
+            // 'ai_audit') but who never finished the triage/recommendation
+            // steps was previously left with no visible way back into that
+            // flow at all. /onboarding now resumes them straight at the
+            // triage screen instead of redirecting away — see
+            // hasCompletedPathBSetup()'s own docblock.
+            <>
+              <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">
+                You haven&apos;t finished setting up your AI Audit yet — a couple of quick questions decide which one applies to you.
+              </p>
+              <LinkButton href="/onboarding">Finish setting up your AI Audit →</LinkButton>
+            </>
+          )}
+        </section>
+      )}
+
       <p className={`text-sm text-neutral-500 dark:text-neutral-400 ${subtitleLine2 ? "mb-1" : "mb-3"}`}>{subtitleLine1}</p>
       {subtitleLine2 && <p className="mb-3 text-sm text-neutral-500 dark:text-neutral-400">{subtitleLine2}</p>}
 
@@ -490,6 +624,20 @@ export default async function DashboardPage() {
             .
           </p>
         </div>
+      )}
+
+      {/* Conditional "AI Status" card (confirmed 2026-08-27, Onboarding
+          Architecture & Path Routing brief, Part 5) — real, computed
+          conditions above; exact copy, no invented figures. Deliberately
+          placed above the action banner: real governance exposure is a
+          genuine "look at this first" signal, same weight as the action
+          banner itself. */}
+      {showAiStatusCardCopy && (
+        <section className="mb-8 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          You&apos;ve told us you have AI in production. This typically means real governance exposure — EU AI Act
+          requirements are active and most founders haven&apos;t documented their risk yet. Your audit will tell you
+          exactly where you stand.
+        </section>
       )}
 
       {/* (5) Single action banner — the one thing a founder should see
@@ -880,6 +1028,20 @@ export default async function DashboardPage() {
             Beyond your Core Audit: {MODULE_ORDER.map((mt) => MODULE_META[mt].label).join(", ")}, a paid implementation sprint for
             your top priority, and calls with your reviewer.
           </p>
+          {/* Cross-discovery, AI Audit client -> business diagnosis
+              (confirmed 2026-08-27, Onboarding Architecture & Path Routing
+              brief, Part 6) — a single soft prompt, shown once a module
+              has genuinely been delivered, never a gate or blocker. The
+              opposite direction (diagnosis client discovering AI audit)
+              needs no new mechanism at all — the existing "Interested in
+              help implementing this?" button on each AI & Governance
+              finding already handles it. */}
+          {company.entry_path === "ai_audit" && mostRecentModuleRequest?.status === "sent" && (
+            <p className="mb-3 rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-3 text-sm text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900/50 dark:text-neutral-400">
+              Want to go deeper? A business diagnosis looks at what&apos;s blocking your growth across all five
+              dimensions — not just AI governance.
+            </p>
+          )}
           <LinkButton href="/services">View all services</LinkButton>
         </Card>
       </section>

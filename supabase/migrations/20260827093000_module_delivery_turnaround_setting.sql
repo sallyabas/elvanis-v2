@@ -1,0 +1,11 @@
+-- Module delivery-turnaround target (confirmed 2026-08-27, Onboarding
+-- Architecture & Path Routing brief, Part 8f) — "time from evidence
+-- submission to report delivered" tracked from day one, target under 48
+-- hours. Deliberately its own setting, not reused from
+-- edit_window_hours/review_period_hours (the core audit's own SLA
+-- numbers) — modules have no client-facing edit window at all
+-- (module_requests are created directly in pending_review), so a
+-- module's real turnaround target is a genuinely separate number, same
+-- "admin-adjustable, not a constant" principle as every other benchmark
+-- in this codebase.
+insert into app_settings (key, value) values ('module_delivery_turnaround_target_hours', '48');

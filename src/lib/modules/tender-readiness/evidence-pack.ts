@@ -101,8 +101,13 @@ export async function buildTenderReadinessEvidencePack(requestId: string): Promi
   lines.push(`Generated: ${new Date().toISOString()}`);
   lines.push(`Request status: ${request.status}`);
   lines.push("");
+  // Exact, non-negotiable disclaimer text (confirmed 2026-08-27,
+  // Onboarding Architecture & Path Routing brief, Part 8e) — a liability
+  // protection requirement, not copy polish. This is the single most
+  // important place for it: the literal document a client could submit
+  // into a real procurement process.
   lines.push(
-    "This pack contains only reviewer-approved content. AI-drafted material is clearly a starting point for a real procurement submission, not a final legal representation — verify against your own current practices before submitting.",
+    "**This report is a readiness assessment and starting point. It is not legal certification, formal compliance confirmation, or a guarantee of regulatory compliance. Elvanis identifies gaps and drafts responses based on current regulatory frameworks — review and adapt all outputs with qualified legal or compliance counsel before submitting to any authority or procurement body.**",
   );
   lines.push("");
 

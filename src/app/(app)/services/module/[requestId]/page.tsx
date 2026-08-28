@@ -123,9 +123,22 @@ export default async function ClientModuleDetailPage({ params }: { params: Promi
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold">{meta?.label ?? moduleType}</h1>
-      <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">
+      <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
         Delivered {request.delivered_at ? new Date(request.delivered_at as string).toLocaleDateString() : "recently"}.
       </p>
+
+      {/* Non-negotiable legal disclaimer (confirmed 2026-08-27, Onboarding
+          Architecture & Path Routing brief, Part 8e) — visible, not
+          buried in a footer, on the real client-facing surface for every
+          Tender Readiness result. Exact copy, no paraphrasing. */}
+      {moduleType === "tender_readiness" && (
+        <Alert variant="warning" className="mb-8">
+          This report is a readiness assessment and starting point. It is not legal certification, formal compliance
+          confirmation, or a guarantee of regulatory compliance. Elvanis identifies gaps and drafts responses based on
+          current regulatory frameworks — review and adapt all outputs with qualified legal or compliance counsel
+          before submitting to any authority or procurement body.
+        </Alert>
+      )}
 
       <Card title="Findings" className="mb-8">
         {findings.length === 0 ? (

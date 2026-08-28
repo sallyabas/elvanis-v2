@@ -35,7 +35,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * same as Execution Sprint's own real-world payment handling (a Stripe
  * payment link, sent by the reviewer after the scope is agreed).
  */
-export type SessionType = "discovery" | "delivery" | "f2f_workshop" | "concierge_inquiry";
+// "compliance_consultation" added 2026-08-27 (Onboarding Architecture &
+// Path Routing brief, Part 3 refinement, confirmed decision) — the
+// founder's own confirmed reuse of this exact mechanism for "route to
+// human consultation" (an active compliance/procurement request with no
+// AI in production yet), same pattern as concierge_inquiry.
+export type SessionType = "discovery" | "delivery" | "f2f_workshop" | "concierge_inquiry" | "compliance_consultation";
 
 export interface RequestSessionResult {
   success: boolean;
@@ -47,7 +52,12 @@ export interface RequestSessionResult {
  * the company before writing (same discipline as every other client-owned
  * write in this codebase).
  */
-export async function requestSession(companyId: string, sessionType: SessionType, clientNotes: string | null): Promise<RequestSessionResult> {
+export async function requestSession(
+  companyId: string,
+  sessionType: SessionType,
+  clientNotes: string | null,
+  urgent: boolean = false,
+): Promise<RequestSessionResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -73,6 +83,7 @@ export async function requestSession(companyId: string, sessionType: SessionType
     company_id: companyId,
     session_type: sessionType,
     client_notes: clientNotes,
+    is_urgent: urgent,
   });
   if (insertError) return { success: false, error: `Couldn't submit request: ${insertError.message}` };
 
@@ -104,6 +115,7 @@ export interface SessionRequestRow {
   requested_at: string;
   scheduled_at: string | null;
   completed_at: string | null;
+  is_urgent: boolean;
 }
 
 /** Reviewer-facing — lists pending (requested/scheduled) session requests across all companies. */

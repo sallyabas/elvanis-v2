@@ -8,9 +8,12 @@ import { BusinessProfileForm } from "./BusinessProfileForm";
 import { DigitalPresenceCheck } from "./DigitalPresenceCheck";
 import type { CompanyProfileFields } from "./actions";
 import { Card } from "@/app/_components/ui/Card";
+import { LinkButton } from "@/app/_components/ui/LinkButton";
+import { Alert } from "@/app/_components/ui/Alert";
 import { NextStepBanner } from "@/app/_components/NextStepBanner";
 import { ProgressStepper } from "@/app/_components/ProgressStepper";
 import { computeJourneyStatus } from "@/lib/reports/journey-status";
+import { hasCompletedPathBSetup } from "@/lib/onboarding/path-b-completion";
 
 // Business Profile — the living record every lens prompt reads from at
 // generation time. Confirmed 2026-08-04 (Priority 3): now fully
@@ -31,7 +34,7 @@ export default async function BusinessProfilePage() {
   const { data: company, error: companyError } = await supabase
     .from("companies")
     .select(
-      "id, name, industry, business_model, employee_count, stage, website_url, social_links, revenue_range_band, customer_type, main_tools_stack, team_structure_summary, registration_country, uae_free_zone, customer_market_countries, has_ai_in_production",
+      "id, name, industry, business_model, employee_count, stage, website_url, social_links, revenue_range_band, customer_type, main_tools_stack, team_structure_summary, registration_country, uae_free_zone, customer_market_countries, has_ai_in_production, entry_path",
     )
     .eq("user_id", user.id)
     .single();
@@ -54,6 +57,15 @@ export default async function BusinessProfilePage() {
   // misreport an in-review company as having submitted nothing. companyId
   // is already ownership-verified above via the session client.
   const journeyStatus = await computeJourneyStatus(createAdminClient(), company.id as string);
+
+  // Real, confirmed dead-end fix (2026-08-28, Onboarding Architecture &
+  // Path Routing brief, item 1) — Business Profile is the LITERAL page a
+  // Path B ('ai_audit') client gets redirected to the instant their
+  // 5-field profile is saved, before triage/recommendation ever finishes.
+  // Live testing confirmed this left them stranded here with zero trace
+  // back into the flow on refresh, back-navigation, or a browser restart.
+  // See hasCompletedPathBSetup()'s own docblock for what "done" means.
+  const pathBSetupDone = company.entry_path === "ai_audit" ? await hasCompletedPathBSetup(createAdminClient(), company.id as string) : true;
 
   const socialLinks = (company.social_links as { links?: string[] } | null)?.links ?? [];
   const mainToolsStack = (company.main_tools_stack as { tools?: string[] } | null)?.tools ?? [];
@@ -82,6 +94,18 @@ export default async function BusinessProfilePage() {
       <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">
         The living record every lens prompt reads from — changes are logged and tracked over time.
       </p>
+
+      {company.entry_path === "ai_audit" && !pathBSetupDone && (
+        <div className="mb-6">
+          <Alert variant="warning">
+            <span className="font-medium">You haven&apos;t finished setting up your AI Audit yet.</span> A couple of quick
+            questions decide which one applies to you — your profile is already saved, so this only takes a moment.{" "}
+            <LinkButton href="/onboarding" className="mt-2 inline-block">
+              Finish setting up your AI Audit →
+            </LinkButton>
+          </Alert>
+        </div>
+      )}
 
       <ProgressStepper journeyStatus={journeyStatus} />
       <NextStepBanner journeyStatus={journeyStatus} />

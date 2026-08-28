@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyReviewersOfNewModuleRequest } from "@/lib/reviewer/notifications";
+import { isCompanyRequestUrgent } from "@/lib/onboarding/compute-request-urgency";
 import { runTenderReadinessAudit } from "./index";
 import type { TenderReadinessDraftInput } from "./types";
 
@@ -18,6 +19,13 @@ export async function runAndPersistTenderReadinessAudit(input: TenderReadinessDr
   const result = await runTenderReadinessAudit(input);
   const supabase = createAdminClient();
 
+  // Urgency flag (confirmed 2026-08-27, Onboarding Architecture & Path
+  // Routing brief, Part 3/8f) — computed once, at creation, from the
+  // company's own current triage answer. See isCompanyRequestUrgent's own
+  // docblock for why this is a live read rather than a value threaded
+  // through the onboarding UI.
+  const isUrgent = await isCompanyRequestUrgent(supabase, input.companyId);
+
   const { data: request, error: requestError } = await supabase
     .from("module_requests")
     .insert({
@@ -25,6 +33,7 @@ export async function runAndPersistTenderReadinessAudit(input: TenderReadinessDr
       company_id: input.companyId,
       status: "pending_review",
       intake_data: { ...input, applicability: result.applicability },
+      is_urgent: isUrgent,
     })
     .select("id")
     .single();

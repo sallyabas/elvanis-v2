@@ -29,6 +29,18 @@ export interface TenderReadinessDraftInput {
   company: CompanyJurisdictionInput;
   aiUseCaseInventory: string;
   existingDocumentation: string | null;
+  /**
+   * EU AI Act Article 4 AI-literacy check (confirmed 2026-08-27,
+   * Onboarding Architecture & Path Routing brief, Part 8d) — Article 4
+   * has been enforceable since February 2025 and applies to any
+   * organisation whose staff use AI tools at work, not only those
+   * building AI products, making it a live, near-universal compliance gap
+   * among this module's real buyers today. Nullable so pre-existing
+   * requests submitted before this field existed don't retroactively fail
+   * validation — a null answer simply never triggers the guaranteed
+   * finding below (a real "not asked" state, not a false negative).
+   */
+  aiLiteracyTrainingProvided: boolean | null;
 }
 
 export interface TenderReadinessDraftResult {

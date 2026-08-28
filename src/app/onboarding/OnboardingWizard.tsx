@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { GOAL_LABELS, GOAL_DESCRIPTIONS, GOAL_METRIC_EXAMPLES } from "@/lib/lenses/goals";
 import type { PrimaryGoal } from "@/lib/lenses/types";
 import { ALL_METRIC_DEFINITIONS, findMetricDefinition } from "@/lib/lenses/metric-direction";
-import { createCompanyAndGoal } from "./actions";
+import { createCompanyAndGoal, addGoalToExistingCompany } from "./actions";
 import { Input } from "@/app/_components/ui/Input";
 import { Textarea } from "@/app/_components/ui/Textarea";
 import { Select } from "@/app/_components/ui/Select";
@@ -29,18 +29,29 @@ import { Alert } from "@/app/_components/ui/Alert";
  * has its own dedicated, already-built capture mechanism on the Business
  * Profile page (spec §1.9a: "one capture mechanism only"), not duplicated
  * here.
+ *
+ * Extended 2026-08-27 (Onboarding Architecture & Path Routing brief, Parts
+ * 1-3) — this is now Path A's onboarding, reached two ways:
+ * - `mode="create"` (default): a brand-new pick of "Business Diagnosis" on
+ *   the entry-path routing screen. Step 0 collects the real Part-2 minimal
+ *   profile (company name, industry, employee count) and creates the
+ *   company + goal together via createCompanyAndGoal().
+ * - `mode="attach"`: this wizard is being reached either (a) via the Hub
+ *   screen, where a company already exists with entry_path='undecided'
+ *   (created by createCompanyMinimal() — name already known, just not
+ *   industry/employee count), or (b) via Path B's "No/exploring" AI-usage
+ *   triage fork (founder-confirmed decision: honestly "Path A, entered via
+ *   Path B") — a company already exists with entry_path='ai_audit' and its
+ *   own 5 fields already collected, so industry/employee count are already
+ *   known too and step 0 is skipped entirely. Both attach cases end by
+ *   calling addGoalToExistingCompany() instead of creating a new company.
  */
 
 const GOAL_KEYS = Object.keys(GOAL_LABELS) as PrimaryGoal[];
-const STEP_LABELS = ["Company", "Goal", "Refine", "Details", "Review"] as const;
 
 // Structured goal-metric capture (confirmed 2026-08-13, item 2 of the
 // old-Elvanis-inspired batch) — grouped by lens for the dropdown, same
 // order EVIDENCE_FIELD_SETS/ALL_METRIC_DEFINITIONS already use.
-// "commercial" added 2026-08-25 (real gap fix — see COMMERCIAL_METRICS's
-// own docblock in field-sets.ts): the "Growth / Revenue Efficiency" goal
-// previously had zero matching options here, despite its own free-text
-// example already promising "MRR growth rate, CAC:LTV ratio, win rate".
 const METRIC_LENS_LABELS: Record<"financial" | "execution" | "product" | "commercial", string> = {
   financial: "Financial",
   execution: "Execution / Operating",
@@ -48,11 +59,38 @@ const METRIC_LENS_LABELS: Record<"financial" | "execution" | "product" | "commer
   commercial: "Commercial / Market",
 };
 
-export function OnboardingWizard() {
-  const router = useRouter();
-  const [step, setStep] = useState(0);
+export interface OnboardingWizardProps {
+  mode?: "create" | "attach";
+  /** Required when mode="attach" — the company's own known industry/employee count only need collecting if `skipCompanyDetails` is false (Path B's fork already has them). */
+  existingCompanyId?: string;
+  existingCompanyName?: string;
+  /** True only for Path B's fork, where industry/employee count are already known — skips straight to goal selection. */
+  skipCompanyDetails?: boolean;
+}
 
-  const [companyName, setCompanyName] = useState("");
+// Named step keys, not raw indices (confirmed 2026-08-27, fixing a real
+// bug found live: the original hand-computed step-offset arithmetic for
+// the skipCompanyDetails case was inverted, so the Goal step's render
+// condition could never match and the wizard rendered a progress bar with
+// no content at all). Every render/enable/back-button check keys off
+// `stepKeys[stepIndex]` directly instead of arithmetic on numeric
+// indices — the array itself is the only place "which steps exist, in
+// what order" is decided.
+type StepKey = "company" | "goal" | "refine" | "details" | "review";
+const FULL_STEPS: StepKey[] = ["company", "goal", "refine", "details", "review"];
+const SKIP_COMPANY_STEPS: StepKey[] = ["goal", "refine", "details", "review"];
+const STEP_TITLES: Record<StepKey, string> = { company: "Company", goal: "Goal", refine: "Refine", details: "Details", review: "Review" };
+
+export function OnboardingWizard({ mode = "create", existingCompanyId, existingCompanyName, skipCompanyDetails = false }: OnboardingWizardProps) {
+  const router = useRouter();
+
+  const stepKeys = skipCompanyDetails ? SKIP_COMPANY_STEPS : FULL_STEPS;
+  const [stepIndex, setStepIndex] = useState(0);
+  const currentStep = stepKeys[stepIndex];
+
+  const [companyName, setCompanyName] = useState(existingCompanyName ?? "");
+  const [industry, setIndustry] = useState("");
+  const [employeeCount, setEmployeeCount] = useState("");
   const [primaryGoal, setPrimaryGoal] = useState<PrimaryGoal | null>(null);
   const [secondaryGoal, setSecondaryGoal] = useState<PrimaryGoal | "">("");
   const [urgencyLevel, setUrgencyLevel] = useState("");
@@ -65,24 +103,22 @@ export function OnboardingWizard() {
   const [status, setStatus] = useState<"idle" | "submitting" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
-  const canProceedFromCompany = companyName.trim().length > 0;
+  const canProceedFromCompany =
+    skipCompanyDetails || (industry.trim().length > 0 && employeeCount.trim().length > 0 && (mode === "attach" || companyName.trim().length > 0));
   const canProceedFromGoal = primaryGoal !== null;
 
   function next() {
     setError(null);
-    setStep((s) => Math.min(s + 1, STEP_LABELS.length - 1));
+    setStepIndex((i) => Math.min(i + 1, stepKeys.length - 1));
   }
   function back() {
     setError(null);
-    setStep((s) => Math.max(s - 1, 0));
+    setStepIndex((i) => Math.max(i - 1, 0));
   }
 
   async function handleSubmit() {
     if (!primaryGoal) return;
 
-    // Structured goal-metric capture (confirmed 2026-08-13) — a real
-    // client-side pre-check mirroring the server action's own validation,
-    // so a mismatched key/value pair is caught before the round trip.
     if (targetMetricKey && !targetMetricValue.trim()) {
       setError("Enter a target value for the metric you selected.");
       return;
@@ -100,8 +136,7 @@ export function OnboardingWizard() {
     setStatus("submitting");
     setError(null);
 
-    const result = await createCompanyAndGoal({
-      companyName,
+    const goalFields = {
       primaryGoal,
       secondaryGoal: secondaryGoal || null,
       urgencyLevel: urgencyLevel.trim() || null,
@@ -110,19 +145,28 @@ export function OnboardingWizard() {
       targetMetricValue: parsedTargetMetricValue,
       timeHorizon: timeHorizon.trim() || null,
       successDefinition: successDefinition.trim() || null,
-    });
+    };
+
+    const result =
+      mode === "attach" && existingCompanyId
+        ? await addGoalToExistingCompany({
+            companyId: existingCompanyId,
+            ...(skipCompanyDetails ? {} : { industry: industry.trim() || null, employeeCount: employeeCount.trim() ? Number(employeeCount) : null }),
+            ...goalFields,
+          })
+        : await createCompanyAndGoal({
+            companyName,
+            industry: industry.trim() || null,
+            employeeCount: employeeCount.trim() ? Number(employeeCount) : null,
+            ...goalFields,
+          });
 
     if (result.success) {
       // Real bug found and fixed live 2026-08-07: router.refresh() called
       // immediately after router.push() raced with the push's own
       // navigation and left the wizard stuck on "Creating..." forever —
-      // the company/goal were genuinely created (confirmed via direct DB
-      // read), but the client never committed the navigation to
-      // /evidence-intake. push() alone is sufficient here: every target
-      // page in this app is already fully dynamic (session/cookie-
-      // dependent, confirmed via the build output's own `ƒ` markers), so
-      // there's no stale cached RSC payload for refresh() to bust — it was
-      // pure redundant risk, not a real safeguard.
+      // push() alone is sufficient since every target page is already
+      // fully dynamic.
       router.push("/evidence-intake");
     } else {
       setStatus("error");
@@ -136,36 +180,36 @@ export function OnboardingWizard() {
       <div className="mb-6">
         <div className="mb-1.5 flex justify-between text-xs text-neutral-500 dark:text-neutral-400">
           <span>
-            Step {step + 1} of {STEP_LABELS.length}: {STEP_LABELS[step]}
+            Step {stepIndex + 1} of {stepKeys.length}: {STEP_TITLES[currentStep]}
           </span>
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
           <div
             className="h-full rounded-full bg-neutral-900 transition-all dark:bg-white"
-            style={{ width: `${((step + 1) / STEP_LABELS.length) * 100}%` }}
+            style={{ width: `${((stepIndex + 1) / stepKeys.length) * 100}%` }}
           />
         </div>
       </div>
 
-      {step === 0 && (
+      {currentStep === "company" && (
         <div className="space-y-4">
           <div>
-            <h2 className="text-lg font-medium">What&apos;s your company called?</h2>
-            <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">This is the name we&apos;ll use across your reports and dashboard.</p>
+            <h2 className="text-lg font-medium">Tell us about your business</h2>
+            <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Just enough to get started — everything else can wait.</p>
           </div>
-          <Input
-            label="Company name"
-            type="text"
-            required
-            autoFocus
-            value={companyName}
-            onChange={(e) => setCompanyName(e.target.value)}
-            placeholder="Acme Ltd"
-          />
+          {mode === "attach" ? (
+            <p className="text-sm text-neutral-700 dark:text-neutral-300">
+              Continuing for <span className="font-medium">{existingCompanyName}</span>
+            </p>
+          ) : (
+            <Input label="Company name" type="text" required autoFocus value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Acme Ltd" />
+          )}
+          <Input label="Industry" type="text" required value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="e.g. B2B SaaS — marketing analytics" />
+          <Input label="Employee count" type="number" required value={employeeCount} onChange={(e) => setEmployeeCount(e.target.value)} placeholder="e.g. 45" />
         </div>
       )}
 
-      {step === 1 && (
+      {currentStep === "goal" && (
         <div className="space-y-4">
           <div>
             <h2 className="text-lg font-medium">What are you trying to achieve?</h2>
@@ -200,7 +244,7 @@ export function OnboardingWizard() {
         </div>
       )}
 
-      {step === 2 && primaryGoal && (
+      {currentStep === "refine" && primaryGoal && (
         <div className="space-y-4">
           <div>
             <h2 className="text-lg font-medium">Refine your goal (optional)</h2>
@@ -215,13 +259,6 @@ export function OnboardingWizard() {
             onChange={(e) => setTargetMetric(e.target.value)}
             placeholder={GOAL_METRIC_EXAMPLES[primaryGoal]}
           />
-          {/* Structured goal-metric capture (confirmed 2026-08-13, item 2
-              of the old-Elvanis-inspired batch) — an optional, structured
-              (metric + target number) pairing alongside the free-text
-              answer above, not a replacement for it. Foundational capture
-              only: the achieved/missed comparison this could eventually
-              power stays deferred until real repeat-audit volume exists —
-              see CLAUDE.md. */}
           <div className="grid gap-4 sm:grid-cols-2">
             <Select
               label="Track a specific number for this? (optional)"
@@ -267,16 +304,12 @@ export function OnboardingWizard() {
         </div>
       )}
 
-      {step === 3 && primaryGoal && (
+      {currentStep === "details" && primaryGoal && (
         <div className="space-y-4">
           <div>
             <h2 className="text-lg font-medium">A couple more details (optional)</h2>
           </div>
-          <Select
-            label="Is there a secondary goal?"
-            value={secondaryGoal}
-            onChange={(e) => setSecondaryGoal(e.target.value as PrimaryGoal | "")}
-          >
+          <Select label="Is there a secondary goal?" value={secondaryGoal} onChange={(e) => setSecondaryGoal(e.target.value as PrimaryGoal | "")}>
             <option value="">None</option>
             {GOAL_KEYS.filter((key) => key !== primaryGoal).map((key) => (
               <option key={key} value={key}>
@@ -294,7 +327,7 @@ export function OnboardingWizard() {
         </div>
       )}
 
-      {step === 4 && primaryGoal && (
+      {currentStep === "review" && primaryGoal && (
         <div className="space-y-4">
           <div>
             <h2 className="text-lg font-medium">Review</h2>
@@ -303,7 +336,7 @@ export function OnboardingWizard() {
           <dl className="space-y-3 rounded-md border border-neutral-300 bg-white p-4 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
             <div>
               <dt className="text-xs font-medium uppercase text-neutral-400">Company</dt>
-              <dd>{companyName}</dd>
+              <dd>{companyName || existingCompanyName}</dd>
             </div>
             <div>
               <dt className="text-xs font-medium uppercase text-neutral-400">Primary goal</dt>
@@ -359,16 +392,16 @@ export function OnboardingWizard() {
       )}
 
       <div className="mt-6 flex gap-2">
-        {step > 0 && (
+        {stepIndex > 0 && (
           <Button type="button" variant="secondary" onClick={back} disabled={status === "submitting"}>
             Back
           </Button>
         )}
-        {step < STEP_LABELS.length - 1 ? (
+        {stepIndex < stepKeys.length - 1 ? (
           <Button
             type="button"
             onClick={next}
-            disabled={(step === 0 && !canProceedFromCompany) || (step === 1 && !canProceedFromGoal)}
+            disabled={(currentStep === "company" && !canProceedFromCompany) || (currentStep === "goal" && !canProceedFromGoal)}
             className="flex-1"
           >
             Continue

@@ -70,7 +70,9 @@ interface Props {
   moduleType: string;
   findings: FindingRow[];
   procurementAnswers: ProcurementAnswerRow[];
-  timing: { createdAt: string | null; approvedAt: string | null };
+  timing: { createdAt: string | null; approvedAt: string | null; deliveredAt: string | null; deliveryTargetHours: number };
+  /** Stamped at creation from the company's own triage answer at that moment — confirmed 2026-08-27, Part 3/8f. */
+  isUrgent: boolean;
   /**
    * Real fix, confirmed 2026-08-15 (module intake/service flow review,
    * item 6) — computed server-side from the request's own already-
@@ -123,6 +125,22 @@ function formatDuration(fromIso: string | null, toIso: string | null): string | 
   return `${hours}h ${minutes}m`;
 }
 
+/**
+ * Delivery-turnaround metric (confirmed 2026-08-27, Onboarding
+ * Architecture & Path Routing brief, Part 8f) — "time from evidence
+ * submission to report delivered," tracked and surfaced in the reviewer
+ * workspace. `created_at` is a module request's own real submission
+ * moment (no client-facing edit window exists for modules). Real number
+ * of hours computed here (not just a formatted string) so it can be
+ * compared against the admin-adjustable target.
+ */
+function hoursBetween(fromIso: string | null, toIso: string | null): number | null {
+  if (!fromIso || !toIso) return null;
+  const ms = new Date(toIso).getTime() - new Date(fromIso).getTime();
+  if (ms < 0) return null;
+  return ms / (60 * 60 * 1000);
+}
+
 const STATUS_BADGE: Record<FindingRow["reviewer_status"], string> = {
   draft: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
   approved: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
@@ -146,6 +164,7 @@ export function ModuleReviewWorkspaceClient({
   findings,
   procurementAnswers,
   timing,
+  isUrgent,
   hasNoApplicableJurisdiction,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -163,6 +182,8 @@ export function ModuleReviewWorkspaceClient({
   const [actionError, setActionError] = useState<string | null>(null);
 
   const duration = formatDuration(timing.createdAt, timing.approvedAt);
+  const deliveryHours = hoursBetween(timing.createdAt, timing.deliveredAt);
+  const deliveryOverTarget = deliveryHours !== null && deliveryHours > timing.deliveryTargetHours;
 
   async function handleAccept(findingId: string) {
     setPending(true);
@@ -270,13 +291,43 @@ export function ModuleReviewWorkspaceClient({
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">{companyName}</h1>
-      <p className={duration ? "mb-1 text-sm text-neutral-500 dark:text-neutral-400" : "mb-6 text-sm text-neutral-500 dark:text-neutral-400"}>
+      <p className="mb-1 text-sm text-neutral-500 dark:text-neutral-400">
         {moduleLabel} · status: <span className="font-medium">{humanizeStatus(requestStatus)}</span>
+        {isUrgent && (
+          <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-800 dark:bg-red-950 dark:text-red-300">
+            Urgent
+          </span>
+        )}
       </p>
       {duration && (
-        <p className="mb-6 text-xs text-neutral-500 dark:text-neutral-400">
+        <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">
           Time in review ({timing.approvedAt ? "submitted → approved" : "submitted → now"}): <span className="font-medium">{duration}</span>
         </p>
+      )}
+      {/* Delivery-turnaround metric (confirmed 2026-08-27, Onboarding
+          Architecture & Path Routing brief, Part 8f) — "time from evidence
+          submission to report delivered," target under 48h
+          (app_settings-backed, admin-adjustable). Only shown once actually
+          delivered — this is a real measurement, not a live countdown. */}
+      {deliveryHours !== null && (
+        <p className={`mb-6 text-xs ${deliveryOverTarget ? "font-medium text-red-700 dark:text-red-400" : "text-neutral-500 dark:text-neutral-400"}`}>
+          Submission → delivery: {Math.round(deliveryHours)}h (target: under {timing.deliveryTargetHours}h)
+          {deliveryOverTarget ? " — over target" : ""}
+        </p>
+      )}
+      {deliveryHours === null && <div className="mb-6" />}
+
+      {/* Non-negotiable legal disclaimer (confirmed 2026-08-27, Onboarding
+          Architecture & Path Routing brief, Part 8e) — reviewer-facing
+          copy of the same reminder the client sees, so a reviewer is
+          never approving/delivering content without seeing it too. */}
+      {moduleType === "tender_readiness" && (
+        <Alert variant="warning" className="mb-6">
+          This report is a readiness assessment and starting point. It is not legal certification, formal compliance
+          confirmation, or a guarantee of regulatory compliance. Elvanis identifies gaps and drafts responses based on
+          current regulatory frameworks — review and adapt all outputs with qualified legal or compliance counsel
+          before submitting to any authority or procurement body.
+        </Alert>
       )}
 
       {actionError && (

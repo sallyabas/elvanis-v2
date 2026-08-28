@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Severity } from "@/lib/lenses/types";
-import { type ItemType, moduleTypeToItemType, sessionTypeToItemType } from "@/lib/item-type-badge";
+import { type ItemType, TYPE_LABELS, moduleTypeToItemType, sessionTypeToItemType } from "@/lib/item-type-badge";
 
 /**
  * Unified, filterable request list (confirmed 2026-08-25, direct founder
@@ -55,13 +55,6 @@ const MODULE_LABELS: Record<string, string> = {
   ai_reliability: "AI Reliability Audit",
   tender_readiness: "Tender Readiness",
   data_protection: "Data Protection Compliance",
-};
-
-const SESSION_TYPE_LABELS: Record<string, string> = {
-  discovery: "Discovery Session",
-  delivery: "Delivery Session",
-  f2f_workshop: "F2F Workshop",
-  concierge_inquiry: "Concierge inquiry",
 };
 
 interface FindingLike {
@@ -161,7 +154,7 @@ export async function loadUnifiedRequests(): Promise<UnifiedRequestRow[]> {
     rows.push({
       id: s.id as string,
       type: "session",
-      typeLabel: SESSION_TYPE_LABELS[s.session_type as string] ?? (s.session_type as string),
+      typeLabel: TYPE_LABELS[sessionTypeToItemType(s.session_type as string)],
       badgeType: sessionTypeToItemType(s.session_type as string),
       companyId: s.company_id as string,
       companyName: companyNameOf(s),

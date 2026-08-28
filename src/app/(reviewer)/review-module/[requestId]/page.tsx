@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getSettingNumber } from "@/lib/app-settings";
 import { ModuleReviewWorkspaceClient } from "./ModuleReviewWorkspaceClient";
 
 const MODULE_LABELS: Record<string, string> = {
@@ -14,7 +15,7 @@ export default async function ModuleReviewWorkspacePage({ params }: { params: Pr
 
   const { data: request, error: requestError } = await supabase
     .from("module_requests")
-    .select("id, module_type, status, created_at, approved_at, intake_data, company_id, companies(name)")
+    .select("id, module_type, status, created_at, approved_at, delivered_at, is_urgent, intake_data, company_id, companies(name)")
     .eq("id", requestId)
     .single();
 
@@ -90,7 +91,13 @@ export default async function ModuleReviewWorkspacePage({ params }: { params: Pr
         moduleType={request.module_type as string}
         findings={findings}
         procurementAnswers={procurementAnswers ?? []}
-        timing={{ createdAt: request.created_at, approvedAt: request.approved_at }}
+        timing={{
+          createdAt: request.created_at,
+          approvedAt: request.approved_at,
+          deliveredAt: request.delivered_at,
+          deliveryTargetHours: await getSettingNumber("module_delivery_turnaround_target_hours", 48),
+        }}
+        isUrgent={Boolean(request.is_urgent)}
         hasNoApplicableJurisdiction={hasNoApplicableJurisdiction}
       />
     </>

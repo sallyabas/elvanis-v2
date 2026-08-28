@@ -8,6 +8,7 @@ import { Textarea } from "@/app/_components/ui/Textarea";
 import { TagInput } from "@/app/_components/ui/TagInput";
 import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
+import { EU_COUNTRIES, OTHER_COUNTRY_SENTINEL, KNOWN_COUNTRIES } from "@/lib/onboarding/registration-country-options";
 
 /**
  * Real design pass, confirmed 2026-08-07 — Business Profile treated as
@@ -63,14 +64,6 @@ const REVENUE_BANDS = [
  * exists to prevent AMBIGUITY among the recognized set, not to claim this
  * app understands every country's regulatory regime.
  */
-const EU_COUNTRIES = [
-  "Austria", "Belgium", "Bulgaria", "Croatia", "Cyprus", "Czechia", "Denmark",
-  "Estonia", "Finland", "France", "Germany", "Greece", "Hungary", "Ireland",
-  "Italy", "Latvia", "Lithuania", "Luxembourg", "Malta", "Netherlands",
-  "Poland", "Portugal", "Romania", "Slovakia", "Slovenia", "Spain", "Sweden",
-];
-const OTHER_COUNTRY_SENTINEL = "__other__";
-
 export function BusinessProfileForm({ companyId, initial }: { companyId: string; initial: CompanyProfileFields }) {
   const [fields, setFields] = useState<CompanyProfileFields>(initial);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -101,7 +94,6 @@ export function BusinessProfileForm({ companyId, initial }: { companyId: string;
       ? [fields.revenueRangeBand, ...REVENUE_BANDS]
       : REVENUE_BANDS;
 
-  const KNOWN_COUNTRIES = ["United Kingdom", ...EU_COUNTRIES, "Saudi Arabia", "United Arab Emirates"];
   const isKnownCountry = !fields.registrationCountry || KNOWN_COUNTRIES.includes(fields.registrationCountry);
   const isUae = fields.registrationCountry === "United Arab Emirates";
 

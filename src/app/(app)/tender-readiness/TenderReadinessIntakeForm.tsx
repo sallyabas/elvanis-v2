@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { CompanyJurisdictionInput } from "@/lib/modules/tender-readiness/jurisdiction";
 import { submitTenderReadinessAudit } from "./actions";
 import { Textarea } from "@/app/_components/ui/Textarea";
+import { Select } from "@/app/_components/ui/Select";
 import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
 import { DocumentUploadField } from "@/app/_components/ui/DocumentUploadField";
@@ -43,6 +44,12 @@ export function TenderReadinessIntakeForm({
 }) {
   const [aiUseCaseInventory, setAiUseCaseInventory] = useState("");
   const [existingDocumentation, setExistingDocumentation] = useState("");
+  // EU AI Act Article 4 AI-literacy check (confirmed 2026-08-27,
+  // Onboarding Architecture & Path Routing brief, Part 8d) — "" means not
+  // yet answered, mapped to null (not false) at submit time so an
+  // unanswered question never triggers the guaranteed finding as if it
+  // were a real "no."
+  const [aiLiteracyTrainingProvided, setAiLiteracyTrainingProvided] = useState<"" | "yes" | "no">("");
   const [status, setStatus] = useState<"idle" | "confirming" | "submitting" | "done" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -55,6 +62,7 @@ export function TenderReadinessIntakeForm({
         company: jurisdictionInput,
         aiUseCaseInventory: aiUseCaseInventory.trim(),
         existingDocumentation: existingDocumentation.trim() || null,
+        aiLiteracyTrainingProvided: aiLiteracyTrainingProvided === "" ? null : aiLiteracyTrainingProvided === "yes",
       });
       if (result.success) {
         setStatus("done");
@@ -119,6 +127,19 @@ export function TenderReadinessIntakeForm({
         value={existingDocumentation}
         onChange={(e) => setExistingDocumentation(e.target.value)}
       />
+      {/* EU AI Act Article 4 (confirmed 2026-08-27) — a real, structural
+          compliance question, independent of the AI use-case description
+          above. */}
+      <Select
+        label="Have you provided structured AI literacy training to staff who use AI tools in their work?"
+        hint="Required since February 2025 under EU AI Act Article 4, for any organisation whose staff use AI tools — not only AI product builders."
+        value={aiLiteracyTrainingProvided}
+        onChange={(e) => setAiLiteracyTrainingProvided(e.target.value as "" | "yes" | "no")}
+      >
+        <option value="">Not answered</option>
+        <option value="yes">Yes</option>
+        <option value="no">No</option>
+      </Select>
       {status === "error" && error && <Alert variant="error">{error}</Alert>}
 
       {status === "confirming" && (
