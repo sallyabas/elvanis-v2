@@ -119,6 +119,25 @@ export default async function BusinessProfilePage() {
         </span>
       </div>
 
+      {/* Compact "at a glance" goal summary (confirmed 2026-08-31, direct
+          founder follow-up to item 2) — the full editor cards further down
+          ("Primary goal: X" / "Secondary goal: Y") are real and were
+          already there, but read as section headers for a narrative-field
+          editor, not a status summary — easy to miss as "the goal
+          display." This mirrors Dashboard's own pill (same border/bg/text
+          treatment) so a client sees their stated goals at a glance
+          without reading into the editor sections below, which stay
+          exactly as they are — this is additive, not a replacement. */}
+      {goal && (
+        <div className="mb-6">
+          <p className="inline-flex flex-wrap items-center gap-x-1.5 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/50 dark:text-neutral-400">
+            <span className="font-medium text-neutral-700 dark:text-neutral-300">Your goal:</span>
+            {GOAL_LABELS[goal.primary_goal as PrimaryGoal]}
+            {goal.secondary_goal && <span>· also: {GOAL_LABELS[goal.secondary_goal as PrimaryGoal]}</span>}
+          </p>
+        </div>
+      )}
+
       {company.entry_path === "ai_audit" && !pathBSetupDone && (
         <div className="mb-6">
           <Alert variant="warning">

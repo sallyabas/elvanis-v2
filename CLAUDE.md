@@ -1973,6 +1973,12 @@ Five-item investigation, direct founder request, each reported with real facts b
 
 **Not yet committed/pushed** — held for explicit go-ahead, same standing pattern as every other change this session.
 
+## Business Profile goal display: real "at a glance" summary added (confirmed 2026-08-31)
+
+Direct follow-up to item 2 above — the founder correctly pushed back that "present but structured as an editor card title" wasn't the same as "easy to notice." Added a compact pill directly under the free-tier badge, mirroring Dashboard's own goal pill exactly (same border/background/text treatment), so a client sees both stated goals at a glance without reading into the editor sections. Deliberately additive, not a replacement — the existing "Primary goal: X" / "Secondary goal: Y" editor cards (and the honest weighting-disclosure line already added to the secondary one) stay exactly where they were, untouched. **Verified live** against Sally's real account (both goals set): the new pill renders prominently near the top, and the full editor cards further down the page still render correctly, unchanged — confirmed both surfaces coexist rather than one replacing the other.
+
+`tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean. Temporary `/api/debug-set-session` route and scratch scripts deleted after use, never committed.
+
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
 - Don't over-build ahead of proof. Exception: modules built from external research (Tender Readiness, AI Reliability, Data Protection) don't need a live client first — they're sequenced by engine-readiness, not by demand signal.
