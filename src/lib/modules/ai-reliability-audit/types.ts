@@ -56,6 +56,24 @@ export interface AiReliabilityFinding {
   evidenceCited: string[];
   confidenceLevel: ConfidenceLevel;
   isMissingDataFinding: boolean;
+  /**
+   * Deterministic post-hoc safety net for the conversational-mode "silent
+   * PASS/FAIL classification" prompt rule (confirmed 2026-08-31) — that
+   * rule is genuinely prompt-only (no structural signal like hasTraceLogs'
+   * boolean to filter on), so this is a second, imprecise, additive-only
+   * layer: never suppresses or edits a finding, only flags one for a human
+   * reviewer to double-check when its correlated transcript text reads
+   * like a correct refusal/handling. Never set for category "bias" (no
+   * refusal-language concept applies there — see
+   * misclassification-guard.ts) or for agent/automation-mode findings
+   * (that path already has a real deterministic guard,
+   * dropDuplicateTraceLogFindings, and doesn't need a second one).
+   */
+  possibleMisclassification?: {
+    reason: string;
+    /** How the flagged text was correlated back to a real transcript — see misclassification-guard.ts's tiered correlation. */
+    confidence: "high" | "medium" | "low";
+  };
 }
 
 export interface AiReliabilityDraftInput {

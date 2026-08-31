@@ -85,7 +85,7 @@ export default async function ServicesPage() {
         </Card>
 
         <section>
-          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">Standalone audit modules</h2>
+          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">AI &amp; Compliance Modules</h2>
           <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">Sold separately from your Core Audit — each has its own findings and reviewer pass.</p>
           <div className="space-y-4">
             {MODULE_ORDER.map((mt) => {
@@ -102,9 +102,9 @@ export default async function ServicesPage() {
                   </div>
                   <Link
                     href={meta.routePath}
-                    className="mt-3 inline-block rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+                    className="mt-3 inline-block rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover"
                   >
-                    Request this
+                    {meta.requestButtonLabel}
                   </Link>
                 </Card>
               );

@@ -117,7 +117,7 @@ function displayedContent(f: FindingRow): LensFinding {
 const STATUS_BADGE: Record<FindingRow["reviewer_status"], string> = {
   draft: "bg-yellow-50 text-yellow-700 dark:bg-amber-950 dark:text-amber-300",
   approved: "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-300",
-  edited: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  edited: "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200",
   rejected: "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300",
 };
 
@@ -442,7 +442,7 @@ export function ReviewWorkspaceClient({
         <span
           className={`rounded-full px-2 py-0.5 text-xs font-medium ${
             planTier === "concierge"
-              ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+              ? "bg-[#fdf6ee] text-accent dark:bg-neutral-800 dark:text-accent"
               : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
           }`}
         >
@@ -619,7 +619,7 @@ export function ReviewWorkspaceClient({
       )}
 
       {disputedFindings.length > 0 && (
-        <section className="mb-8 rounded-lg bg-purple-50 p-5 shadow-card-1 dark:bg-purple-950">
+        <section className="mb-8 rounded-lg bg-neutral-100 p-5 shadow-card-1 dark:bg-neutral-800">
           <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">Disputed findings (client marked not confident)</h2>
           <ul className="space-y-4">
             {disputedFindings.map((f) => (
@@ -996,7 +996,7 @@ function EditForm({
   const suggestions = matchRecommendationLibraryEntries(recommendationLibrary, lens, title, diagnosis);
 
   return (
-    <div className="mt-2 space-y-3 rounded-md border-l-2 border-blue-400 bg-white p-3 shadow-card-1 dark:border-blue-700 dark:bg-neutral-900">
+    <div className="mt-2 space-y-3 rounded-md border-l-2 border-neutral-400 bg-white p-3 shadow-card-1 dark:border-neutral-600 dark:bg-neutral-900">
       <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
       <Textarea label="Diagnosis" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} rows={2} />
       <Textarea label="Root cause" value={rootCause} onChange={(e) => setRootCause(e.target.value)} rows={2} />
@@ -1068,7 +1068,7 @@ function DisputeResolutionForm({
   const [severity, setSeverity] = useState<Severity>(initial.severity);
 
   return (
-    <div className="mt-2 space-y-3 rounded-md border-l-2 border-purple-400 bg-white p-3 shadow-card-1 dark:border-purple-700 dark:bg-neutral-900">
+    <div className="mt-2 space-y-3 rounded-md border-l-2 border-neutral-400 bg-white p-3 shadow-card-1 dark:border-neutral-600 dark:bg-neutral-900">
       <div className="flex gap-3 text-xs text-neutral-800 dark:text-neutral-200">
         {(["keep_ai_version", "side_with_client", "edit"] as const).map((r) => (
           <label key={r} className="flex items-center gap-1">
@@ -1099,7 +1099,7 @@ function DisputeResolutionForm({
         </Button>
         <Button
           disabled={!notes.trim()}
-          className="bg-purple-600 px-2 py-1 text-xs text-white hover:bg-purple-700"
+          className="bg-accent px-2 py-1 text-xs text-white hover:bg-accent-hover"
           onClick={() =>
             onSave(
               resolution,

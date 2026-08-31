@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { SECTION_LABELS } from "./index";
 import { PROCUREMENT_QUESTIONS, type ProcurementCategory } from "./procurement-categories";
 import type { TenderReadinessFinding, TenderReadinessSection } from "./types";
+import { MODULE_LEGAL_DISCLAIMER } from "@/lib/modules/legal-disclaimer";
 
 /**
  * Minimal evidence-pack export (confirmed 2026-08-05, Priority 3) — the
@@ -105,10 +106,10 @@ export async function buildTenderReadinessEvidencePack(requestId: string): Promi
   // Onboarding Architecture & Path Routing brief, Part 8e) — a liability
   // protection requirement, not copy polish. This is the single most
   // important place for it: the literal document a client could submit
-  // into a real procurement process.
-  lines.push(
-    "**This report is a readiness assessment and starting point. It is not legal certification, formal compliance confirmation, or a guarantee of regulatory compliance. Elvanis identifies gaps and drafts responses based on current regulatory frameworks — review and adapt all outputs with qualified legal or compliance counsel before submitting to any authority or procurement body.**",
-  );
+  // into a real procurement process. Reads from the same shared constant
+  // as the reviewer/client UI surfaces (extended to all modules 2026-08-31)
+  // so this export can never drift from what's shown on-screen.
+  lines.push(`**${MODULE_LEGAL_DISCLAIMER}**`);
   lines.push("");
 
   lines.push("## Applicable regulatory frameworks");

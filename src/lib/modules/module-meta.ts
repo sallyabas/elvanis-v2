@@ -19,6 +19,14 @@ export interface ModuleMeta {
   routePath: string;
   pricingKey: string;
   description: string;
+  /**
+   * Module-specific request-CTA text (confirmed 2026-08-31, "v2" redesign
+   * bug-fix batch, item 2) — replaces the generic "Request this" on
+   * Services, which read identically across all three cards with no cue
+   * which module a given button actually requested until the reader looked
+   * up at its own card's heading.
+   */
+  requestButtonLabel: string;
 }
 
 export const MODULE_META: Record<ModuleType, ModuleMeta> = {
@@ -28,6 +36,7 @@ export const MODULE_META: Record<ModuleType, ModuleMeta> = {
     routePath: "/tender-readiness",
     pricingKey: "tender_readiness",
     description: "AI-specific regulatory risk classification and procurement-readiness content across EU AI Act, UAE DIFC, and Saudi AI governance.",
+    requestButtonLabel: "Request Tender Readiness Review",
   },
   ai_reliability: {
     moduleType: "ai_reliability",
@@ -35,6 +44,7 @@ export const MODULE_META: Record<ModuleType, ModuleMeta> = {
     routePath: "/ai-reliability-audit",
     pricingKey: "ai_reliability_audit",
     description: "Adversarial testing against documented real-world AI failure patterns — invented policy, data leakage, bias, prompt injection.",
+    requestButtonLabel: "Request AI Reliability Audit",
   },
   data_protection: {
     moduleType: "data_protection",
@@ -42,6 +52,7 @@ export const MODULE_META: Record<ModuleType, ModuleMeta> = {
     routePath: "/data-protection-compliance",
     pricingKey: "data_protection_compliance",
     description: "GDPR/PDPL readiness across consent, data-subject rights, retention, breach response, and cross-border transfer.",
+    requestButtonLabel: "Request Data Protection Review",
   },
 };
 

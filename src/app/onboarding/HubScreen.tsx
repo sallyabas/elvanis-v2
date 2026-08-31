@@ -29,7 +29,7 @@ export function HubScreen({ onChoose }: { onChoose: (path: "diagnosis" | "ai_aud
           <button
             type="button"
             onClick={() => onChoose("diagnosis")}
-            className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+            className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover"
           >
             Start with this one
           </button>
@@ -43,7 +43,7 @@ export function HubScreen({ onChoose }: { onChoose: (path: "diagnosis" | "ai_aud
           <button
             type="button"
             onClick={() => onChoose("ai_audit")}
-            className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+            className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover"
           >
             Start with this one
           </button>

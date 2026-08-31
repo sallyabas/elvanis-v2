@@ -2,7 +2,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ensureClientUserRow } from "../client-login/actions";
 import { SignOutButton } from "./sign-out-button";
-import { NavLink } from "@/app/_components/ui/NavLink";
+import { AppSidebar } from "@/app/_components/AppSidebar";
+import { formatDisplayName } from "@/lib/format-display-name";
+import { countSignalsItems } from "@/lib/reports/count-signals";
 
 // Authenticated app shell — shared nav/session-check across the four IA
 // pages (Dashboard, Business Profile, Reports & History, Account
@@ -53,50 +55,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect("/onboarding");
   }
 
+  // Both real (not decorative) — display name (spec point 1: "if none set,
+  // show first part of email before @; never show the full raw email
+  // address") and the Signals badge count (spec point 1: "●[count if >0]").
+  const { data: userRow } = await supabase.from("users").select("name").eq("id", user.id).maybeSingle();
+  const displayName = formatDisplayName(userRow?.name as string | null, user.email);
+  const signalsCount = await countSignalsItems(supabase, company.id as string);
+
   return (
     <div>
-      {/* Premium B2B redesign (confirmed 2026-08-28, spec point 5) —
-          replaces the previous charcoal nav with a white bar + bottom
-          border, real active-route indicator (copper 2px underline, not a
-          background fill — see NavLink.tsx) instead of the old uniform
-          hover-only styling. Dark mode keeps a dark surface (unaffected by
-          this pass, which is explicitly light-mode-only). */}
-      <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
-        <div className="flex items-center gap-6">
-          <span className="font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Elvanis</span>
-          <nav className="flex gap-5">
-            <NavLink href="/dashboard">Dashboard</NavLink>
-            {/* Real nav link added 2026-08-26 (navigation audit) — Evidence
-                Intake previously had no persistent nav entry at all; the
-                only path was one small, narrowly-worded inline link on
-                Dashboard ("Want to pursue a different goal? Submit new
-                evidence...") that undersold what the page does the rest of
-                the time (adding evidence to strengthen the same goal's
-                audit, not just switching goals). Placed as a plain flat
-                link, matching every other nav item's visual treatment,
-                right after Dashboard since it's the natural next action. */}
-            <NavLink href="/evidence-intake">Submit Evidence</NavLink>
-            {/* Real nav link added 2026-08-16 (final Dashboard redesign,
-                item 1) — Signals is a genuinely new, standalone page (a
-                unified filterable finding list), not a duplicate of any
-                existing page, so it gets its own top-level nav entry same
-                as Services did. */}
-            <NavLink href="/signals">Signals</NavLink>
-            <NavLink href="/business-profile">Business Profile</NavLink>
-            <NavLink href="/reports">Reports &amp; History</NavLink>
-            {/* Real nav link added 2026-08-12, Dashboard rebuild — /services
-                is now a real standalone page, not just linked from
-                Dashboard; reachable from anywhere in the authenticated app. */}
-            <NavLink href="/services">Services</NavLink>
-            <NavLink href="/account-settings">Account Settings</NavLink>
-          </nav>
-        </div>
-        <div className="flex items-center gap-3 text-neutral-600 dark:text-neutral-400">
-          <span>{user.email}</span>
-          <SignOutButton />
-        </div>
-      </div>
-      {children}
+      {/* "v2" briefing-document redesign (confirmed 2026-08-31, spec point
+          1) — replaces the previous top nav bar with a fixed left sidebar.
+          ml-[200px] on the content wrapper below reserves the sidebar's
+          own width so content never renders underneath it. */}
+      <AppSidebar displayName={displayName} signalsCount={signalsCount} />
+      <div className="ml-[200px] min-h-screen bg-[#f9f9f9]">{children}</div>
     </div>
   );
 }

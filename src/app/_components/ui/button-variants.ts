@@ -21,8 +21,14 @@
  * here, so neither environment depends on resolving a named export across
  * a client-component boundary.
  */
+/**
+ * "v2" briefing-document redesign (confirmed 2026-08-31, spec point 6):
+ * "copper only, no purple, no blue anywhere" — primary buttons get white
+ * text on the copper fill (a real, deliberate change from the prior pass's
+ * dark accent-ink text), secondary/outline buttons get a copper border +
+ * copper text on white, replacing the previous neutral-outline treatment.
+ */
 export const VARIANTS: Record<"primary" | "secondary", string> = {
-  primary: "bg-accent text-accent-ink hover:bg-accent-hover",
-  secondary:
-    "border border-neutral-300 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800",
+  primary: "bg-accent text-white hover:bg-accent-hover",
+  secondary: "border border-accent bg-white text-accent hover:bg-[#fdf6ee]",
 };

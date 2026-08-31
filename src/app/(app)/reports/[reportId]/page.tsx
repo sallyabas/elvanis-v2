@@ -15,6 +15,7 @@ import { SprintInterestButton } from "@/app/_components/SprintInterestButton";
 import { FindingNotApplicableButton } from "@/app/_components/FindingNotApplicableButton";
 import { loadFlaggedFindingIds } from "@/lib/reports/finding-feedback";
 import { EvidenceSubmittedDisclosure, type EvidenceSnapshotShape } from "@/app/_components/EvidenceSubmittedDisclosure";
+import { ReportSectionNav } from "@/app/_components/ReportSectionNav";
 import { loadGovernanceDimensions } from "@/lib/lenses/benchmarks-repository";
 import { getTotalTurnaroundHours } from "@/lib/reports/sla";
 import { listPricing, formatPrice } from "@/lib/pricing";
@@ -264,8 +265,17 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
   // acting on a finding rather than flagging it as simply wrong.
   const flaggedFindingIds = await loadFlaggedFindingIds(company.id as string);
 
+  // Real, confirmed section headings (2026-08-31, "v2" redesign bug-fix
+  // batch, item 3) — read directly from LENS_ORDER/LENS_LABELS/byLens
+  // above, exactly the same list and labels the sections themselves
+  // render below, rather than a separately-typed list that could drift.
+  // Only lenses that actually have a rendered section get a nav entry.
+  const sectionsForNav = LENS_ORDER.filter((lens) => byLens.has(lens)).map((lens) => ({ id: lens, label: LENS_LABELS[lens] }));
+
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
+    <div className="mx-auto grid max-w-5xl grid-cols-1 gap-8 px-6 py-10 lg:grid-cols-[180px_1fr]">
+      <ReportSectionNav sections={sectionsForNav} />
+      <div className="max-w-3xl">
       <h1 className="mb-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">{company.name}&apos;s Execution Audit</h1>
       {goal && <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">Goal: {GOAL_LABELS[goal.primary_goal as keyof typeof GOAL_LABELS]}</p>}
 
@@ -367,7 +377,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
       )}
 
       {LENS_ORDER.filter((lens) => byLens.has(lens)).map((lens) => (
-        <section key={lens} className="mb-8">
+        <section key={lens} id={lens} className="mb-8 scroll-mt-24">
           <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">{LENS_LABELS[lens]}</h2>
           {/* Fixed callout when AI-in-production is confirmed (item 8,
               confirmed 2026-08-20) — deliberately different from the
@@ -607,6 +617,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
           <EvidenceSubmittedDisclosure evidenceSnapshot={evidenceSnapshot} governanceDimensions={governanceDimensions} />
         </section>
       )}
+      </div>
     </div>
   );
 }

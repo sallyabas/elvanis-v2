@@ -1,0 +1,40 @@
+import { SidebarLink } from "@/app/_components/ui/SidebarLink";
+import { SignOutButton } from "@/app/(reviewer)/sign-out-button";
+
+/**
+ * "v2" briefing-document redesign (confirmed 2026-08-31) — reviewer-side
+ * counterpart to AppSidebar.tsx, same visual system (spec point 1 doesn't
+ * name the reviewer nav explicitly, but item 14 lists "all reviewer-side
+ * pages" as in scope, so the same left-sidebar treatment is applied here
+ * by extension — flagged). No group labels: the reviewer nav has exactly
+ * four flat, equally-weighted destinations (Queue/All requests/Companies/
+ * Ideas), unlike the client sidebar's three genuinely distinct concept
+ * groups (Intelligence/Diagnose/Execution) — inventing groups for four
+ * items that don't actually cluster would be manufacturing structure the
+ * brief didn't ask for.
+ */
+export function ReviewerSidebar({ email }: { email: string }) {
+  return (
+    <aside className="fixed inset-y-0 left-0 flex w-[200px] flex-col border-r border-neutral-200 bg-white">
+      <div className="px-4 pb-3 pt-5">
+        <p className="text-base font-semibold text-neutral-900">ELVANIS</p>
+        <p className="text-xs text-neutral-500">Reviewer tools</p>
+      </div>
+      <div className="border-t border-neutral-200" />
+
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-4">
+        <SidebarLink href="/queue">Queue</SidebarLink>
+        <SidebarLink href="/requests">All requests</SidebarLink>
+        <SidebarLink href="/companies">Companies</SidebarLink>
+        <SidebarLink href="/ideas">Ideas</SidebarLink>
+      </nav>
+
+      <div className="border-t border-neutral-200 px-3 py-3">
+        <p className="mb-2 truncate text-xs text-neutral-500" title={email}>
+          {email}
+        </p>
+        <SignOutButton />
+      </div>
+    </aside>
+  );
+}

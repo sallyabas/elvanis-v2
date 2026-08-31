@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MODULE_META, type ModuleType } from "@/lib/modules/module-meta";
+import { MODULE_LEGAL_DISCLAIMER } from "@/lib/modules/legal-disclaimer";
 import { PROCUREMENT_QUESTIONS, type ProcurementCategory } from "@/lib/modules/tender-readiness/procurement-categories";
 import { Card } from "@/app/_components/ui/Card";
 import { Alert } from "@/app/_components/ui/Alert";
@@ -121,18 +122,18 @@ export default async function ClientModuleDetailPage({ params }: { params: Promi
         Delivered {request.delivered_at ? new Date(request.delivered_at as string).toLocaleDateString() : "recently"}.
       </p>
 
-      {/* Non-negotiable legal disclaimer (confirmed 2026-08-27, Onboarding
-          Architecture & Path Routing brief, Part 8e) — visible, not
-          buried in a footer, on the real client-facing surface for every
-          Tender Readiness result. Exact copy, no paraphrasing. */}
-      {moduleType === "tender_readiness" && (
-        <Alert variant="warning" className="mb-8">
-          This report is a readiness assessment and starting point. It is not legal certification, formal compliance
-          confirmation, or a guarantee of regulatory compliance. Elvanis identifies gaps and drafts responses based on
-          current regulatory frameworks — review and adapt all outputs with qualified legal or compliance counsel
-          before submitting to any authority or procurement body.
-        </Alert>
-      )}
+      {/* Non-negotiable legal disclaimer (originally confirmed 2026-08-27,
+          Onboarding Architecture & Path Routing brief, Part 8e — Tender
+          Readiness only at the time). Extended 2026-08-31 to every module
+          (direct founder instruction, following a completeness pass that
+          confirmed AI Reliability Audit and Data Protection Compliance
+          both lacked it) — visible, not buried in a footer, on the real
+          client-facing surface for every module result. Exact copy, no
+          paraphrasing, from the one shared constant so all three modules
+          (and Tender Readiness's own evidence-pack export) can't drift. */}
+      <Alert variant="warning" className="mb-8">
+        {MODULE_LEGAL_DISCLAIMER}
+      </Alert>
 
       <Card title="Findings" className="mb-8">
         {findings.length === 0 ? (

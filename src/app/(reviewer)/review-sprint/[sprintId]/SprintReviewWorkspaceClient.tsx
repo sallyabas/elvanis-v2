@@ -43,7 +43,7 @@ interface Props {
 const STATUS_BADGE: Record<SprintTaskRow["reviewer_status"], string> = {
   draft: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
   approved: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
-  edited: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  edited: "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200",
   rejected: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
 };
 
@@ -303,7 +303,7 @@ function EditForm({
   const [kpiDirection, setKpiDirection] = useState<"higher_is_better" | "lower_is_better">(initial.kpi_direction ?? "higher_is_better");
 
   return (
-    <div className="mt-2 space-y-3 rounded-md border-l-2 border-blue-400 bg-white p-3 shadow-card-1 dark:border-blue-700 dark:bg-neutral-900">
+    <div className="mt-2 space-y-3 rounded-md border-l-2 border-neutral-400 bg-white p-3 shadow-card-1 dark:border-neutral-600 dark:bg-neutral-900">
       <Textarea label="Task description" value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} rows={2} />
       <Input label="Owner (role label)" value={owner} onChange={(e) => setOwner(e.target.value)} />
       <Input label="KPI description" value={kpiDescription} onChange={(e) => setKpiDescription(e.target.value)} />

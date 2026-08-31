@@ -638,7 +638,7 @@ export default async function ReviewerQueuePage() {
             {queuedOrProcessing.map((p) => (
               <li
                 key={p.companyName}
-                className="rounded-md border border-dashed border-blue-300 bg-blue-50 p-3 text-sm dark:border-blue-800 dark:bg-blue-950/40"
+                className="rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-3 text-sm dark:border-neutral-700 dark:bg-neutral-900/40"
               >
                 <span className="font-medium text-neutral-700 dark:text-neutral-300">{p.companyName}</span>{" "}
                 <span className="text-neutral-500 dark:text-neutral-400">

@@ -35,7 +35,7 @@ const STATUS_LABELS: Record<IdeaStatus, string> = {
 const STATUS_BADGE: Record<IdeaStatus, string> = {
   new: "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300",
   considering: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  in_progress: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  in_progress: "bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300",
   done: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
   declined: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
 };

@@ -71,7 +71,7 @@ export function SprintInterestButton({
             type="button"
             onClick={() => handleRespond("other", otherNote.trim() || null)}
             disabled={status !== "choosing_other" || otherNote.trim().length === 0}
-            className="rounded-md border border-accent bg-accent px-2 py-1 text-xs font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
+            className="rounded-md border border-accent bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-40"
           >
             Send
           </button>
@@ -100,7 +100,7 @@ export function SprintInterestButton({
           type="button"
           onClick={() => handleRespond("interested", null)}
           disabled={status === "sending"}
-          className="rounded-md border border-accent bg-accent px-2 py-1 text-xs font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
+          className="rounded-md border border-accent bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-40"
         >
           Yes
         </button>

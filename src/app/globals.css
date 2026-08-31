@@ -1,41 +1,33 @@
 @import "tailwindcss";
 
 /**
- * Premium B2B redesign (confirmed 2026-08-28, visual layer only — no
- * functionality/data/copy changes anywhere in this pass) — supersedes the
- * warm charcoal/cream brand-identity pass above with a cooler, more
- * restrained Linear/Notion-style palette, per the founder's exact 10-point
- * spec. Same lever as before: the `neutral-*` Tailwind scale is remapped
- * once here, and every existing `bg-neutral-100`, `border-neutral-200`,
- * `text-neutral-700`, `dark:text-neutral-400`, etc. across the entire app
- * (hundreds of usages) picks up the new cool-grey values automatically —
- * this is the single highest-leverage change in the whole pass. Several
- * scale stops were deliberately chosen to land exactly on the spec's own
- * named hex values (neutral-200 = the spec's faint-border #e8e8e8,
- * neutral-500 = the spec's supporting-label #8a8a8a, neutral-700 = the
- * spec's body-text #4a4a4a, neutral-900 = the spec's page-title/section-
- * header/financial-figure #1a1a1a), so the typography-hierarchy and card-
- * border rules mostly fall out of this remap "for free," not as separate
- * per-file work.
+ * "v2" briefing-document redesign (confirmed 2026-08-31, visual layer only
+ * — no functionality/data/copy changes anywhere in this pass), superseding
+ * the 2026-08-28 "Premium B2B" pass above. North star: "opening a
+ * well-prepared briefing document — calm, authoritative" (Mercury/Ramp/
+ * Notion, explicitly NOT Linear/Supabase). Same lever as before: the
+ * `neutral-*` scale is remapped once here (unchanged from the prior pass —
+ * its stops already matched this spec's own named greys exactly), so the
+ * real deltas from that pass are: (1) full commitment to light — dark mode
+ * is now disabled outright, not just left alone, since this brief is
+ * explicit ("Not dark mode... no dark elements anywhere, no halfway
+ * blending of directions") where the prior pass's brief was silent; (2) the
+ * accent hex changes from #ba7517 to the spec's exact #B87333, with no
+ * "or current brand copper" escape hatch this time.
  *
- * `--color-accent`/`--color-accent-hover`/`--color-accent-ink` are kept as
- * the one copper/CTA color family (interpreted per the spec's own "#B87333
- * or current brand copper" — the two are close enough in hue that
- * introducing a second, competing copper token would be inconsistent, not
- * more precise). `--color-accent-hover` is recalculated to the spec's
- * exact "darken copper by 8%" instruction (186,117,23 × 0.92 = 171,108,21
- * = #ab6c15), a small but deliberate change from the prior brand pass's
- * value.
- *
- * Dark mode: the spec is explicitly light-mode-only ("Not dark mode" as an
- * aesthetic description, and every hex value given is a light-mode value)
- * — this pass does not remove or redesign dark mode, since nothing here
- * asked for that. The remapped neutral scale extends naturally into a cool
- * dark grey at its high end (neutral-900/950), so `dark:bg-neutral-900`
- * etc. across the app now render a cool charcoal instead of the previous
- * warm one — a consistent side effect of the one palette remap, not a
- * separately-designed dark theme.
+ * Dark mode disabled via Tailwind v4's `@custom-variant` override, not by
+ * deleting every `dark:` utility class across the app (that would be a
+ * huge, high-risk mechanical diff for zero visible difference once this
+ * variant never matches). Pointing `dark` at a class that is never applied
+ * anywhere makes every existing `dark:*` utility permanently inert in one
+ * line, app-wide — the same "one lever, hundreds of call sites" principle
+ * already used for the neutral-scale remap itself. The old
+ * `@media (prefers-color-scheme: dark)` background/foreground override
+ * below is removed for the same reason: the page must render identically
+ * regardless of the visitor's OS theme.
  */
+@custom-variant dark (&:where(.elvanis-dark-mode-disabled, .elvanis-dark-mode-disabled *));
+
 @theme {
   --color-neutral-50: #fafafa;
   --color-neutral-100: #f5f5f4;
@@ -49,8 +41,17 @@
   --color-neutral-900: #1a1a1a;
   --color-neutral-950: #0d0d0d;
 
-  --color-accent: #ba7517;
-  --color-accent-hover: #ab6c15;
+  /*
+   * Copper (spec point 6): #B87333 exact, no "or current brand copper"
+   * escape hatch this time. Hover = darken 8% per the spec's own formula
+   * (184,115,51 × 0.92 = 169,106,47 = #a96a2f). --color-accent-ink stays
+   * for the handful of non-button, informational surfaces that still want
+   * dark-on-copper (e.g. the small core_audit type badge) — buttons
+   * specifically use white text per spec point 6, wired directly in
+   * Button.tsx/button-variants.ts rather than through this token.
+   */
+  --color-accent: #b87333;
+  --color-accent-hover: #a96a2f;
   --color-accent-ink: #412402;
 
   /*
@@ -79,13 +80,6 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0d0d0d;
-    --foreground: #fafafa;
-  }
 }
 
 body {

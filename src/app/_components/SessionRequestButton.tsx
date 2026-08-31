@@ -93,7 +93,7 @@ export function SessionRequestButton({ companyId, sessionType }: { companyId: st
         type="button"
         onClick={handleRequest}
         disabled={status === "sending"}
-        className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:opacity-40"
+        className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
       >
         {status === "sending" ? "Requesting…" : LABELS[sessionType].cta}
       </button>

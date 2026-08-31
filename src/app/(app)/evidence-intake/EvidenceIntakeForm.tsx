@@ -59,11 +59,9 @@ const FIELD_SETS = EVIDENCE_FIELD_SETS;
 function ExportHints({ lens }: { lens: EvidenceLensKey }) {
   const tools = EXPORT_INSTRUCTIONS_BY_LENS[lens];
   return (
-    <details className="mb-3 rounded border border-blue-200 bg-blue-50 text-xs dark:border-blue-900 dark:bg-blue-950">
-      <summary className="cursor-pointer select-none px-3 py-2 font-medium text-blue-800 dark:text-blue-300">
-        <span className="mr-1 rounded bg-blue-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-          Tip
-        </span>
+    <details className="mb-3 rounded border border-accent/30 bg-[#fffbf0] text-xs dark:border-neutral-700 dark:bg-neutral-900">
+      <summary className="cursor-pointer select-none px-3 py-2 font-medium text-accent dark:text-accent">
+        <span className="mr-1 rounded bg-accent px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">Tip</span>
         Using one of these tools? Quick export steps
       </summary>
       <div className="space-y-2 px-3 pb-3">

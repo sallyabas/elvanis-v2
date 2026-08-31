@@ -12,6 +12,7 @@ import {
   rejectProcurementAnswerAction,
 } from "./actions";
 import { PROCUREMENT_QUESTIONS, type ProcurementCategory } from "@/lib/modules/tender-readiness/procurement-categories";
+import { MODULE_LEGAL_DISCLAIMER } from "@/lib/modules/legal-disclaimer";
 import { humanizeStatus } from "@/lib/format";
 import { SEVERITY_STYLES } from "@/lib/severity-badge";
 import { Card } from "@/app/_components/ui/Card";
@@ -39,6 +40,13 @@ interface GenericModuleFinding {
   category?: string;
   evidenceCited?: string[];
   isMissingDataFinding?: boolean;
+  /**
+   * AI Reliability conversational-mode only (confirmed 2026-08-31) — see
+   * misclassification-guard.ts. Additive-only, never affects reviewer
+   * disposition or ordering; rendered as a visible, distinct warning in
+   * FindingCard below, separate from the severity/status badges.
+   */
+  possibleMisclassification?: { reason: string; confidence: "high" | "medium" | "low" };
   [key: string]: unknown;
 }
 
@@ -147,7 +155,7 @@ function hoursBetween(fromIso: string | null, toIso: string | null): number | nu
 const STATUS_BADGE: Record<FindingRow["reviewer_status"], string> = {
   draft: "bg-yellow-50 text-yellow-700 dark:bg-amber-950 dark:text-amber-300",
   approved: "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-300",
-  edited: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  edited: "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200",
   rejected: "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300",
 };
 
@@ -315,18 +323,15 @@ export function ModuleReviewWorkspaceClient({
       )}
       {deliveryHours === null && <div className="mb-6" />}
 
-      {/* Non-negotiable legal disclaimer (confirmed 2026-08-27, Onboarding
-          Architecture & Path Routing brief, Part 8e) — reviewer-facing
-          copy of the same reminder the client sees, so a reviewer is
-          never approving/delivering content without seeing it too. */}
-      {moduleType === "tender_readiness" && (
-        <Alert variant="warning" className="mb-6">
-          This report is a readiness assessment and starting point. It is not legal certification, formal compliance
-          confirmation, or a guarantee of regulatory compliance. Elvanis identifies gaps and drafts responses based on
-          current regulatory frameworks — review and adapt all outputs with qualified legal or compliance counsel
-          before submitting to any authority or procurement body.
-        </Alert>
-      )}
+      {/* Non-negotiable legal disclaimer (originally confirmed 2026-08-27,
+          Tender Readiness only; extended 2026-08-31 to every module, same
+          reasoning as the client-facing copy in
+          services/module/[requestId]/page.tsx) — reviewer-facing copy of
+          the same reminder the client sees, so a reviewer is never
+          approving/delivering content without seeing it too. */}
+      <Alert variant="warning" className="mb-6">
+        {MODULE_LEGAL_DISCLAIMER}
+      </Alert>
 
       {actionError && (
         <Alert variant="error" className="mb-4">
@@ -500,7 +505,7 @@ function ProcurementAnswerEditForm({
   const [notes, setNotes] = useState("");
 
   return (
-    <div className="mt-2 space-y-3 rounded-md border-l-2 border-blue-400 bg-white p-3 shadow-card-1 dark:border-blue-700 dark:bg-neutral-900">
+    <div className="mt-2 space-y-3 rounded-md border-l-2 border-neutral-400 bg-white p-3 shadow-card-1 dark:border-neutral-600 dark:bg-neutral-900">
       <Textarea label="Answer" value={answer} onChange={(e) => setAnswer(e.target.value)} rows={4} />
       <Input placeholder="Reviewer notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} className="text-xs" />
       <div className="flex gap-2">
@@ -529,6 +534,23 @@ function FindingCard({ f }: { f: FindingRow }) {
         <span className={`rounded-full px-2 py-0.5 ${STATUS_BADGE[f.reviewer_status]}`}>{isDraft ? "needs decision" : f.reviewer_status}</span>
       </div>
       <div className="font-medium text-neutral-900 dark:text-neutral-50">{content.title}</div>
+      {/* Deterministic post-hoc misclassification flag (confirmed
+          2026-08-31) — deliberately distinct from the severity/status
+          badges above, since it's a "double-check this" nudge, not a
+          statement about severity or review status. Never present for
+          category "bias" (see the caption below) or agent/automation-mode
+          findings — see misclassification-guard.ts. */}
+      {content.possibleMisclassification && (
+        <Alert variant="warning" className="mt-2 text-xs">
+          ⚠ Possible misclassification ({content.possibleMisclassification.confidence} confidence):{" "}
+          {content.possibleMisclassification.reason}
+        </Alert>
+      )}
+      {content.category === "bias" && (
+        <p className="mt-2 text-xs italic text-neutral-400 dark:text-neutral-500">
+          Not checked for possible misclassification — bias findings have no refusal-language signal to check against.
+        </p>
+      )}
       <dl className="mt-2 space-y-1 text-sm">
         <div>
           <dt className="text-xs font-medium uppercase text-neutral-400 dark:text-neutral-500">Diagnosis</dt>
@@ -564,7 +586,7 @@ function EditForm({
   const [notes, setNotes] = useState("");
 
   return (
-    <div className="mt-2 space-y-3 rounded-md border-l-2 border-blue-400 bg-white p-3 shadow-card-1 dark:border-blue-700 dark:bg-neutral-900">
+    <div className="mt-2 space-y-3 rounded-md border-l-2 border-neutral-400 bg-white p-3 shadow-card-1 dark:border-neutral-600 dark:bg-neutral-900">
       <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
       <Textarea label="Diagnosis" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} rows={2} />
       <Textarea label="Root cause" value={rootCause} onChange={(e) => setRootCause(e.target.value)} rows={2} />

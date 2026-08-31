@@ -1,5 +1,6 @@
 import { generateValidatedJson } from "@/lib/ai-client";
 import { aiReliabilityOutputSchema, type RawAiReliabilityOutput } from "./schemas";
+import { flagPossibleMisclassifiedFailFindings } from "./misclassification-guard";
 import type {
   AgentAutomationEvidence,
   AiReliabilityDraftInput,
@@ -78,7 +79,8 @@ async function runConversationalMode(input: AiReliabilityDraftInput): Promise<Ai
     messages: [{ role: "system", content: buildConversationalPrompt(input.companyId, transcripts) }],
   });
 
-  return { systemType: "conversational", findings: mapFindings(raw.findings, "conversational"), notes: raw.notes };
+  const findings = flagPossibleMisclassifiedFailFindings(mapFindings(raw.findings, "conversational"), transcripts);
+  return { systemType: "conversational", findings, notes: raw.notes };
 }
 
 function buildNoTranscriptsFinding(): AiReliabilityFinding {
