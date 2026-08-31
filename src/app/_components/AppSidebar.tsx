@@ -33,23 +33,24 @@ export function AppSidebar({ displayName, signalsCount }: { displayName: string;
           <SidebarLink href="/dashboard">Dashboard</SidebarLink>
         </div>
 
-        {/* Group-label contrast strengthened (confirmed 2026-08-31, direct
-            founder investigation request) — measured live via
-            getComputedStyle() before changing anything: the label was
-            rgb(138,138,138)/11px/500 while its own child links were the
-            darker rgb(74,74,74)/14px/400 — a "header" objectively lighter
-            than the content it heads, reading as a faded caption rather
-            than a real section break. Fixed with a real, if modest, color
-            darkening (neutral-500 -> neutral-600), heavier weight
-            (medium -> semibold), slightly wider tracking, AND a top
-            border + real padding before each group — the border does the
-            structural "this is a new section" work that color/weight
-            alone can't fully carry, without introducing any new hue
-            outside the existing light-only/copper-only system (same
-            border-neutral-200 already used for the sidebar's own top/
-            bottom dividers). */}
-        <div className="border-t border-neutral-200 pt-4">
-          <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-neutral-600">Intelligence</p>
+        {/* Group-label contrast — second, stronger pass (confirmed
+            2026-08-31, direct founder instruction: "not another subtle
+            tweak"). The first pass (neutral-500->600, medium->semibold)
+            was judged still insufficient. This one goes further on every
+            axis at once: heading text is now the same #1a1a1a
+            (neutral-900) used for page titles — genuinely dark, not a
+            muted gray — at weight 600; the divider is darkened one step
+            (neutral-200->300) to read as a real, clear line rather than a
+            faint hairline; and the vertical rhythm is deliberately
+            generous — pt-6 above the divider-to-heading gap, mb-3 below
+            the heading before the first link — noticeably more than the
+            prior pt-4/mb-1.5, so each group reads as its own visually
+            separated block at a glance, not just a differently-colored
+            label sitting close to its links. Still entirely inside the
+            light-only/copper-only system — no new hue, just darker/
+            heavier use of tokens already in the palette. */}
+        <div className="border-t border-neutral-300 pt-6">
+          <p className="mb-3 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-neutral-900">Intelligence</p>
           <div className="space-y-0.5">
             <SidebarLink href="/business-profile">Business Profile</SidebarLink>
             <SidebarLink
@@ -66,15 +67,15 @@ export function AppSidebar({ displayName, signalsCount }: { displayName: string;
           </div>
         </div>
 
-        <div className="border-t border-neutral-200 pt-4">
-          <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-neutral-600">Diagnose</p>
+        <div className="border-t border-neutral-300 pt-6">
+          <p className="mb-3 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-neutral-900">Diagnose</p>
           <div className="space-y-0.5">
             <SidebarLink href="/evidence-intake">Business Diagnosis</SidebarLink>
           </div>
         </div>
 
-        <div className="border-t border-neutral-200 pt-4">
-          <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-neutral-600">AI &amp; Compliance</p>
+        <div className="border-t border-neutral-300 pt-6">
+          <p className="mb-3 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-neutral-900">AI &amp; Compliance</p>
           <div className="space-y-0.5">
             <SidebarLink href="/ai-audit">AI Audit</SidebarLink>
             <SidebarLink href="/tender-readiness">Tender Readiness</SidebarLink>
@@ -83,8 +84,8 @@ export function AppSidebar({ displayName, signalsCount }: { displayName: string;
           </div>
         </div>
 
-        <div className="border-t border-neutral-200 pt-4">
-          <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-neutral-600">Execution</p>
+        <div className="border-t border-neutral-300 pt-6">
+          <p className="mb-3 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-neutral-900">Execution</p>
           <div className="space-y-0.5">
             <SidebarLink href="/services">Services</SidebarLink>
           </div>

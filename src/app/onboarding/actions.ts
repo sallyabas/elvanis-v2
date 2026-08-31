@@ -83,6 +83,7 @@ export async function createCompanyAndGoal(input: {
       industry: input.industry?.trim() || null,
       employee_count: input.employeeCount,
       entry_path: "diagnosis",
+      entry_path_set_at: new Date().toISOString(),
     })
     .select("id")
     .single();
@@ -129,7 +130,7 @@ export async function createCompanyMinimal(input: { companyName: string }): Prom
 
   const { data: company, error: companyError } = await supabase
     .from("companies")
-    .insert({ user_id: user.id, name: trimmedName, entry_path: "undecided" })
+    .insert({ user_id: user.id, name: trimmedName, entry_path: "undecided", entry_path_set_at: new Date().toISOString() })
     .select("id")
     .single();
   if (companyError) return { success: false, error: `Couldn't create company: ${companyError.message}` };
@@ -179,7 +180,7 @@ export async function addGoalToExistingCompany(input: {
   } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "Not signed in." };
 
-  const update: Record<string, unknown> = { entry_path: "diagnosis" };
+  const update: Record<string, unknown> = { entry_path: "diagnosis", entry_path_set_at: new Date().toISOString() };
   if (input.industry !== undefined) update.industry = input.industry?.trim() || null;
   if (input.employeeCount !== undefined) update.employee_count = input.employeeCount;
 
@@ -215,6 +216,12 @@ export async function addGoalToExistingCompany(input: {
  * retroactively alters delivered reports, since reports/module_requests
  * carry no reference to entry_path at all. Session-scoped, ownership
  * verified.
+ *
+ * Also stamps `entry_path_set_at` (confirmed 2026-08-31, direct founder
+ * bug fix) — the real anchor `hasCompletedPathBSetup()` now time-scopes
+ * against, so switching entry_path away from 'ai_audit' and back later
+ * starts a genuinely new era rather than inheriting old module/session
+ * requests from a previous one.
  */
 export async function chooseEntryPath(companyId: string, entryPath: "diagnosis" | "ai_audit" | "undecided"): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
@@ -223,7 +230,11 @@ export async function chooseEntryPath(companyId: string, entryPath: "diagnosis" 
   } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "Not signed in." };
 
-  const { error } = await supabase.from("companies").update({ entry_path: entryPath }).eq("id", companyId).eq("user_id", user.id);
+  const { error } = await supabase
+    .from("companies")
+    .update({ entry_path: entryPath, entry_path_set_at: new Date().toISOString() })
+    .eq("id", companyId)
+    .eq("user_id", user.id);
   if (error) return { success: false, error: error.message };
   return { success: true };
 }

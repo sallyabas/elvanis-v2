@@ -45,6 +45,11 @@ export async function submitPathBMinimalProfile(input: PathBMinimalProfileInput)
     uae_free_zone: input.registrationCountry === "United Arab Emirates" ? input.uaeFreeZone : null,
     customer_market_countries: input.customerMarketCountries,
     entry_path: "ai_audit" as const,
+    // Stamped here too (confirmed 2026-08-31) — this is a real
+    // entry_path-set moment (the Hub-resumed UPDATE case flips an
+    // 'undecided' company to 'ai_audit' here), not just the fresh-insert
+    // case. See chooseEntryPath()'s own docblock for why this matters.
+    entry_path_set_at: new Date().toISOString(),
   };
 
   if (input.existingCompanyId) {

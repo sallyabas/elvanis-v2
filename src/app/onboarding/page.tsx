@@ -5,6 +5,7 @@ import { OnboardingFlow } from "./OnboardingFlow";
 import { HubResume } from "./HubResume";
 import { PathBWizard } from "./PathBWizard";
 import { hasCompletedPathBSetup } from "@/lib/onboarding/path-b-completion";
+import { computePathBRouting, type TriageAiUsage, type TriageComplianceRequest, type TriagePersonalData } from "@/lib/onboarding/path-b-routing";
 
 // Real Company/Goal creation (confirmed 2026-08-03, Priority 1) — a
 // top-level route deliberately outside the (app) route group, so
@@ -42,7 +43,11 @@ export default async function OnboardingPage() {
     redirect("/client-login");
   }
 
-  const { data: existingCompany } = await supabase.from("companies").select("id, name, entry_path").eq("user_id", user.id).maybeSingle();
+  const { data: existingCompany } = await supabase
+    .from("companies")
+    .select("id, name, entry_path, triage_ai_usage, triage_compliance_request, triage_personal_data")
+    .eq("user_id", user.id)
+    .maybeSingle();
 
   if (existingCompany) {
     if (existingCompany.entry_path === "undecided") {
@@ -56,13 +61,27 @@ export default async function OnboardingPage() {
     if (existingCompany.entry_path === "ai_audit") {
       const done = await hasCompletedPathBSetup(createAdminClient(), existingCompany.id as string);
       if (!done) {
+        // Real fix (confirmed 2026-08-31, direct founder bug report): this
+        // resume branch previously always re-showed the 3 triage questions
+        // from scratch, even when they were already answered and saved —
+        // unlike the newer /ai-audit sidebar entry point, which reuses
+        // saved answers via `initialRouting`. Same computation here now,
+        // so the two resume paths behave identically rather than one
+        // silently re-asking what the other already remembers.
+        const aiUsage = existingCompany.triage_ai_usage as TriageAiUsage | null;
+        const complianceRequest = existingCompany.triage_compliance_request as TriageComplianceRequest | null;
+        const personalData = existingCompany.triage_personal_data as TriagePersonalData | null;
+        const hasSavedTriage = !!aiUsage && !!complianceRequest && !!personalData;
+        const initialRouting = hasSavedTriage ? computePathBRouting(aiUsage!, complianceRequest!, personalData!) : undefined;
+
         return (
           <div className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-6 py-12">
             <PathBWizard
               mode="attach"
               existingCompanyId={existingCompany.id as string}
               existingCompanyName={existingCompany.name as string}
-              startAtTriage
+              startAtTriage={!hasSavedTriage}
+              initialRouting={initialRouting}
             />
           </div>
         );
