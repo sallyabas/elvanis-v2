@@ -8,6 +8,8 @@ import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
 import { DocumentUploadField } from "@/app/_components/ui/DocumentUploadField";
 import { ModuleSubmittedNotice } from "@/app/_components/ModuleSubmittedNotice";
+import { ModuleStartConfirm } from "@/app/_components/ModuleStartConfirm";
+import { MODULE_META } from "@/lib/modules/module-meta";
 
 const CATEGORY_FIELDS: { key: "consentFlow" | "dataSubjectRights" | "retentionPolicy" | "breachResponse" | "crossBorderTransfer"; label: string; placeholder: string }[] = [
   {
@@ -87,7 +89,7 @@ export function DataProtectionIntakeForm({
    * deterministic rather than trusted from a prompt instruction alone.
    */
   const [existingDocumentationText, setExistingDocumentationText] = useState<string | null>(null);
-  const [status, setStatus] = useState<"idle" | "confirming" | "submitting" | "done" | "error">("idle");
+  const [status, setStatus] = useState<"start" | "idle" | "confirming" | "submitting" | "done" | "error">("start");
   const [error, setError] = useState<string | null>(null);
 
   const anyFilled = Object.values(values).some((v) => v.trim().length > 0) || Boolean(existingDocumentationText?.trim());
@@ -131,6 +133,16 @@ export function DataProtectionIntakeForm({
       return;
     }
     doSubmit();
+  }
+
+  if (status === "start") {
+    return (
+      <ModuleStartConfirm
+        label={MODULE_META.data_protection.label}
+        description={MODULE_META.data_protection.description}
+        onContinue={() => setStatus("idle")}
+      />
+    );
   }
 
   if (status === "done") {

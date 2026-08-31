@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "./sign-out-button";
 import { ReviewerSidebar } from "@/app/_components/ReviewerSidebar";
+import { formatDisplayName } from "@/lib/format-display-name";
 
 // Internal-only reviewer area (Reviewer Queue + Reviewer Workspace) —
 // confirmed 2026-08-01, a fifth internal area alongside the four
@@ -28,7 +29,7 @@ export default async function ReviewerLayout({ children }: { children: React.Rea
     redirect("/reviewer-login");
   }
 
-  const { data: profile } = await supabase.from("users").select("role").eq("id", user.id).maybeSingle();
+  const { data: profile } = await supabase.from("users").select("role, name").eq("id", user.id).maybeSingle();
 
   if (profile?.role !== "reviewer") {
     return (
@@ -48,7 +49,7 @@ export default async function ReviewerLayout({ children }: { children: React.Rea
           extension per item 14 ("all reviewer-side pages"), so the
           internal reviewer tooling reads as the same product, not a
           visually separate admin panel. */}
-      <ReviewerSidebar email={user.email ?? ""} />
+      <ReviewerSidebar displayName={formatDisplayName(profile?.name as string | null, user.email)} />
       <div className="ml-[200px] min-h-screen bg-[#f9f9f9]">{children}</div>
     </div>
   );

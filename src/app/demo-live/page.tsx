@@ -163,12 +163,15 @@ export default async function DemoLivePage() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="bg-neutral-900">
+      {/* Light-only commitment (confirmed 2026-08-31, sidebar rework item
+          12) — same white/bottom-border header treatment as the main
+          landing page, replacing the previous full dark-navy block. */}
+      <header className="border-b border-neutral-200 bg-white">
         <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-4 px-6 py-5">
-          <Link href="/" className="text-lg font-semibold tracking-tight text-neutral-50">
+          <Link href="/" className="text-lg font-semibold tracking-tight text-neutral-900">
             Elvanis
           </Link>
-          <Link href="/client-login" className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover">
+          <Link href="/client-login" className="rounded bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover">
             Start your free audit
           </Link>
         </div>
@@ -449,13 +452,12 @@ export default async function DemoLivePage() {
           </section>
         )}
 
-        <section className="mt-10 rounded-lg bg-neutral-900 p-8 text-center">
-          <h2 className="text-xl font-semibold text-neutral-50">This is what your real report will look like.</h2>
-          <p className="mx-auto mt-2 max-w-md text-sm text-neutral-300">Your first completed audit is free. No card required, no password — just your email.</p>
-          <Link
-            href="/client-login"
-            className="mt-6 inline-block rounded bg-accent px-5 py-3 text-sm font-medium text-accent-ink hover:bg-accent-hover"
-          >
+        {/* Same copper-wash conversion as the main landing page's own
+            final CTA (confirmed 2026-08-31, item 12). */}
+        <section className="mt-10 rounded-lg border-l-4 border-accent bg-[#fffbf0] p-8 text-center shadow-card-2">
+          <h2 className="text-xl font-semibold text-neutral-900">This is what your real report will look like.</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-neutral-600">Your first completed audit is free. No card required, no password — just your email.</p>
+          <Link href="/client-login" className="mt-6 inline-block rounded bg-accent px-5 py-3 text-sm font-medium text-white hover:bg-accent-hover">
             Start your free audit
           </Link>
         </section>

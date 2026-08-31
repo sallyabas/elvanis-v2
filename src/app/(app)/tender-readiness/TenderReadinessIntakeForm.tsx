@@ -9,6 +9,8 @@ import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
 import { DocumentUploadField } from "@/app/_components/ui/DocumentUploadField";
 import { ModuleSubmittedNotice } from "@/app/_components/ModuleSubmittedNotice";
+import { ModuleStartConfirm } from "@/app/_components/ModuleStartConfirm";
+import { MODULE_META } from "@/lib/modules/module-meta";
 
 /**
  * Three real bugs found in live testing, fixed 2026-08-15:
@@ -50,7 +52,7 @@ export function TenderReadinessIntakeForm({
   // unanswered question never triggers the guaranteed finding as if it
   // were a real "no."
   const [aiLiteracyTrainingProvided, setAiLiteracyTrainingProvided] = useState<"" | "yes" | "no">("");
-  const [status, setStatus] = useState<"idle" | "confirming" | "submitting" | "done" | "error">("idle");
+  const [status, setStatus] = useState<"start" | "idle" | "confirming" | "submitting" | "done" | "error">("start");
   const [error, setError] = useState<string | null>(null);
 
   async function doSubmit() {
@@ -95,6 +97,16 @@ export function TenderReadinessIntakeForm({
       return;
     }
     doSubmit();
+  }
+
+  if (status === "start") {
+    return (
+      <ModuleStartConfirm
+        label={MODULE_META.tender_readiness.label}
+        description={MODULE_META.tender_readiness.description}
+        onContinue={() => setStatus("idle")}
+      />
+    );
   }
 
   if (status === "done") {

@@ -1,23 +1,12 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { computeJourneyStatus } from "@/lib/reports/journey-status";
 import { NextStepBanner } from "@/app/_components/NextStepBanner";
 import { ProgressStepper } from "@/app/_components/ProgressStepper";
-import { Card } from "@/app/_components/ui/Card";
-import { type ItemType, TypeBadge } from "@/lib/item-type-badge";
+import { type ItemType } from "@/lib/item-type-badge";
 import { SESSION_STATUS_LABELS } from "@/lib/format";
-
-interface HistoryItem {
-  id: string;
-  type: ItemType;
-  group: "deliverable" | "session";
-  subLabel: string | null;
-  date: string | null;
-  dateLabel: string;
-  href: string | null;
-}
+import { ReportsHistoryClient, type HistoryItem } from "./ReportsHistoryClient";
 
 /**
  * Reports & History — full redesign (confirmed 2026-08-26), same
@@ -105,7 +94,7 @@ export default async function ReportsHistoryPage() {
   // real duplication, not "more complete history."
   const { data: allSessionRequests } = await supabase
     .from("session_requests")
-    .select("id, session_type, status, requested_at, scheduled_at, completed_at")
+    .select("id, session_type, status, requested_at, scheduled_at, completed_at, reviewer_notes")
     .eq("company_id", company.id)
     .order("requested_at", { ascending: false });
   const historicalSessionRequests = (allSessionRequests ?? []).filter(
@@ -143,6 +132,7 @@ export default async function ReportsHistoryPage() {
       date: r.delivered_at as string | null,
       dateLabel: "Delivered",
       href: `/reports/${r.id}`,
+      reviewerNotes: null,
     })),
     ...(moduleRequests ?? []).map((r) => ({
       id: r.id as string,
@@ -155,6 +145,7 @@ export default async function ReportsHistoryPage() {
       // real client-facing detail view now exists; this previously showed
       // "Detail view coming soon" with no link at all.
       href: `/services/module/${r.id}`,
+      reviewerNotes: null,
     })),
     ...(completeSprints ?? []).map((s) => ({
       id: s.id as string,
@@ -164,6 +155,7 @@ export default async function ReportsHistoryPage() {
       date: (s.signed_off_at as string | null) ?? (s.target_end_date as string | null),
       dateLabel: s.signed_off_at ? "Signed off" : "Target end",
       href: `/execution-sprint/${s.id}`,
+      reviewerNotes: null,
     })),
   ].sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
 
@@ -190,61 +182,28 @@ export default async function ReportsHistoryPage() {
         // "real, deliberately deferred follow-on scope" precedent as
         // module results before their own detail view was built.
         href: null,
+        // Real reviewer completion/outcome note (confirmed 2026-08-31,
+        // sidebar rework item 15) — session_requests.reviewer_notes,
+        // already captured by the reviewer at completion time, surfaced
+        // here for the first time via the existing field/mechanism, not a
+        // new one.
+        reviewerNotes: (r.reviewer_notes as string | null) ?? null,
       };
     })
     .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
 
   const isEmpty = deliverables.length === 0 && sessions.length === 0;
 
-  function renderItem(item: HistoryItem) {
-    return (
-      <li
-        key={item.id}
-        className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-4 shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900"
-      >
-        <div>
-          <div className="mb-1 flex items-center gap-2">
-            <TypeBadge type={item.type} />
-            {item.subLabel && <span className="text-xs font-normal text-neutral-500 dark:text-neutral-400">{item.subLabel}</span>}
-          </div>
-          <div className="text-xs text-neutral-500 dark:text-neutral-400">
-            {item.dateLabel} {item.date ? new Date(item.date).toLocaleDateString() : "unknown"}
-          </div>
-        </div>
-        {item.href && (
-          <Link href={item.href} className="text-sm font-medium text-accent hover:underline">
-            View
-          </Link>
-        )}
-      </li>
-    );
-  }
-
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
       <ProgressStepper journeyStatus={journeyStatus} />
-      <h1 className="mb-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">Reports &amp; History</h1>
-      <p className="mb-8 text-sm text-neutral-500 dark:text-neutral-400">
+      <h1 className="mb-1 text-2xl font-semibold text-neutral-900">Reports &amp; History</h1>
+      <p className="mb-8 text-sm text-neutral-500">
         Every report, module result, and completed sprint you&apos;ve received, plus your session history — grouped
         so real deliverables and calls with your reviewer don&apos;t blur together.
       </p>
 
-      {isEmpty ? (
-        <NextStepBanner journeyStatus={journeyStatus} />
-      ) : (
-        <div className="space-y-8">
-          {deliverables.length > 0 && (
-            <Card title="Deliverables" subtitle="Real, reviewed output — your Core Audit, module results, and completed sprints.">
-              <ul className="space-y-3">{deliverables.map(renderItem)}</ul>
-            </Card>
-          )}
-          {sessions.length > 0 && (
-            <Card title="Sessions" subtitle="Calls and workshops with your reviewer.">
-              <ul className="space-y-3">{sessions.map(renderItem)}</ul>
-            </Card>
-          )}
-        </div>
-      )}
+      {isEmpty ? <NextStepBanner journeyStatus={journeyStatus} /> : <ReportsHistoryClient deliverables={deliverables} sessions={sessions} />}
     </div>
   );
 }

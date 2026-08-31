@@ -3,25 +3,21 @@ import { SidebarLink } from "@/app/_components/ui/SidebarLink";
 import { SignOutButton } from "@/app/(app)/sign-out-button";
 
 /**
- * "v2" briefing-document redesign (confirmed 2026-08-31, spec point 1) —
- * replaces the previous top nav bar entirely. Exact structure/labels/
- * grouping per the brief, verbatim: ELVANIS wordmark + "AI Business OS"
- * subtitle, Dashboard on its own, then three labeled groups (INTELLIGENCE /
- * DIAGNOSE / EXECUTION), then a footer with display name + Account
- * Settings + Sign out.
+ * Sidebar rework (confirmed 2026-08-31, direct founder spec, items 1-2) —
+ * replaces the earlier "v2" redesign's DIAGNOSE/EXECUTION split with a real
+ * AI & COMPLIANCE group: AI Audit plus all three named modules as four
+ * equal sibling links, no parent/child nesting. "Business Diagnosis" moves
+ * to its own single-item DIAGNOSE group (Business Diagnosis was
+ * previously paired with "AI Audit" there in the prior pass — that
+ * pairing is now retired in favor of this more specific grouping).
  *
- * "Business Diagnosis" and "AI Audit" are always rendered — no
- * `entry_path` branching here at all, per the brief's explicit
- * instruction ("no conditional hiding, no client ever locked into seeing
- * only one... entry_path continues to determine only the Dashboard's lead
- * section, never nav visibility"). Real interpretation, flagged: neither
- * label is an existing single page — "Business Diagnosis" links to
- * /evidence-intake (the real start/continue action for a Core Audit,
- * previously labeled "Submit Evidence" in this same nav slot) and
- * "AI Audit" links to /services (the real, existing start/continue action
- * for any of the three standalone modules, regardless of entry_path or
- * whether Path B triage was ever completed) — both are genuine, already-
- * built destinations, not new pages invented for this nav.
+ * "AI Audit" routes to /ai-audit (new — see that page's own docblock for
+ * why it's a real, dedicated destination, not /onboarding or /services).
+ * The three named modules route straight to their own intake pages,
+ * skipping triage entirely (confirmed rule 3) — each of those pages now
+ * shows its own confirm-before-starting screen first (ModuleStartConfirm,
+ * item 6), so a direct sidebar click still never silently drops the
+ * client into a bare form with zero context.
  */
 export function AppSidebar({ displayName, signalsCount }: { displayName: string; signalsCount: number }) {
   return (
@@ -59,7 +55,16 @@ export function AppSidebar({ displayName, signalsCount }: { displayName: string;
           <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">Diagnose</p>
           <div className="space-y-0.5">
             <SidebarLink href="/evidence-intake">Business Diagnosis</SidebarLink>
-            <SidebarLink href="/services">AI Audit</SidebarLink>
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">AI &amp; Compliance</p>
+          <div className="space-y-0.5">
+            <SidebarLink href="/ai-audit">AI Audit</SidebarLink>
+            <SidebarLink href="/tender-readiness">Tender Readiness</SidebarLink>
+            <SidebarLink href="/ai-reliability-audit">AI Reliability</SidebarLink>
+            <SidebarLink href="/data-protection-compliance">Data Protection</SidebarLink>
           </div>
         </div>
 

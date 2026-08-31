@@ -45,6 +45,19 @@ export interface PathBWizardProps {
    * profile again.
    */
   startAtTriage?: boolean;
+  /**
+   * Real, saved-answers-only entry point (confirmed 2026-08-31, sidebar
+   * "AI Audit" rework) — when the company already has all 3 triage
+   * answers on file (`companies.triage_*`), the caller computes
+   * `computePathBRouting()` server-side and passes the result in here,
+   * skipping BOTH the profile and triage screens entirely and rendering
+   * the recommendation directly. "Triage only shows if no saved answers
+   * exist yet... never re-asks" — this is the "already answered" branch;
+   * `startAtTriage` alone is the "profile done, triage not yet answered"
+   * branch. Both can be true structurally, but a caller only ever sets
+   * one of them per the real state it found.
+   */
+  initialRouting?: PathBRoutingResult;
 }
 
 const AI_USAGE_OPTIONS: { value: TriageAiUsage; label: string }[] = [
@@ -66,9 +79,11 @@ const PERSONAL_DATA_OPTIONS: { value: TriagePersonalData; label: string }[] = [
   { value: "not_sure", label: "Not sure" },
 ];
 
-export function PathBWizard({ mode = "create", existingCompanyId, existingCompanyName, startAtTriage = false }: PathBWizardProps) {
+export function PathBWizard({ mode = "create", existingCompanyId, existingCompanyName, startAtTriage = false, initialRouting }: PathBWizardProps) {
   const router = useRouter();
-  const [screen, setScreen] = useState<"profile" | "triage" | "recommendation" | "core_audit_fork">(startAtTriage ? "triage" : "profile");
+  const [screen, setScreen] = useState<"profile" | "triage" | "recommendation" | "core_audit_fork">(
+    initialRouting ? "recommendation" : startAtTriage ? "triage" : "profile",
+  );
   const [companyId, setCompanyId] = useState<string | undefined>(existingCompanyId);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -86,7 +101,7 @@ export function PathBWizard({ mode = "create", existingCompanyId, existingCompan
   const [complianceRequest, setComplianceRequest] = useState<TriageComplianceRequest | "">("");
   const [personalData, setPersonalData] = useState<TriagePersonalData | "">("");
 
-  const [routing, setRouting] = useState<PathBRoutingResult | null>(null);
+  const [routing, setRouting] = useState<PathBRoutingResult | null>(initialRouting ?? null);
 
   const isKnownCountry = !registrationCountry || KNOWN_COUNTRIES.includes(registrationCountry);
   const isUae = registrationCountry === "United Arab Emirates";

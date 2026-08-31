@@ -9,6 +9,7 @@ import { SprintInterestButton } from "@/app/_components/SprintInterestButton";
 import { TYPE_BADGE_STYLES, moduleTypeToItemType } from "@/lib/item-type-badge";
 import { SEVERITY_STYLES } from "@/lib/severity-badge";
 import { Card } from "@/app/_components/ui/Card";
+import { FilterChip } from "@/app/_components/ui/FilterChip";
 
 export interface SignalItem {
   id: string;
@@ -127,18 +128,7 @@ export function SignalsClient({
           <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Source</p>
           <div className="flex flex-wrap gap-1.5">
             {sources.map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => toggleSource(key)}
-                className={`rounded-full border border-transparent px-2.5 py-1 text-xs font-medium transition-colors ${
-                  activeSources.has(key)
-                    ? sourceKeyBadgeStyle(key)
-                    : "border-neutral-300 text-neutral-500 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800"
-                }`}
-              >
-                {label}
-              </button>
+              <FilterChip key={key} label={label} active={activeSources.has(key)} activeClassName={sourceKeyBadgeStyle(key)} onClick={() => toggleSource(key)} />
             ))}
           </div>
         </div>
@@ -146,18 +136,7 @@ export function SignalsClient({
           <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Severity</p>
           <div className="flex flex-wrap gap-1.5">
             {SEVERITY_ORDER.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => toggleSeverity(s)}
-                className={`rounded-full border border-transparent px-2.5 py-1 text-xs font-medium capitalize transition-colors ${
-                  activeSeverities.has(s)
-                    ? SEVERITY_STYLES[s]
-                    : "border-neutral-300 text-neutral-500 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800"
-                }`}
-              >
-                {s}
-              </button>
+              <FilterChip key={s} label={s} active={activeSeverities.has(s)} activeClassName={SEVERITY_STYLES[s]} onClick={() => toggleSeverity(s)} />
             ))}
           </div>
         </div>

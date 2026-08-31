@@ -46,20 +46,26 @@ export default async function LandingPage() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="bg-neutral-900">
+      {/* Light-only commitment (confirmed 2026-08-31, sidebar rework item
+          12) — was a full-bleed dark-navy/charcoal header; converted to
+          the same white + bottom-border treatment already used for the
+          app's own sidebar header, "no dark navy anywhere" applied
+          consistently to the public landing page too, not just the
+          authenticated app. */}
+      <header className="border-b border-neutral-200 bg-white">
         <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-5">
-          <span className="text-lg font-semibold tracking-tight text-neutral-50">Elvanis</span>
-          <nav className="flex flex-wrap items-center gap-5 text-sm text-neutral-300">
-            <a href="#how-it-works" className="hover:text-neutral-50 hover:underline">
+          <span className="text-lg font-semibold tracking-tight text-neutral-900">Elvanis</span>
+          <nav className="flex flex-wrap items-center gap-5 text-sm text-neutral-600">
+            <a href="#how-it-works" className="hover:text-neutral-900 hover:underline">
               How it works
             </a>
-            <a href="#modules" className="hover:text-neutral-50 hover:underline">
+            <a href="#modules" className="hover:text-neutral-900 hover:underline">
               Modules
             </a>
-            <a href="#pricing" className="hover:text-neutral-50 hover:underline">
+            <a href="#pricing" className="hover:text-neutral-900 hover:underline">
               Pricing
             </a>
-            <a href="#faq" className="hover:text-neutral-50 hover:underline">
+            <a href="#faq" className="hover:text-neutral-900 hover:underline">
               FAQ
             </a>
             {/* Renamed from bare "Sign in" (confirmed 2026-08-07) — a
@@ -72,7 +78,7 @@ export default async function LandingPage() {
                 itself, led with the founder's own exact wording — the
                 explanation now lives once, at the point it's actually
                 needed, not as clutter in the nav bar. */}
-            <Link href="/client-login" className="font-medium underline hover:text-neutral-50">
+            <Link href="/client-login" className="font-medium text-accent underline hover:text-accent-hover">
               Get started
             </Link>
           </nav>
@@ -109,7 +115,7 @@ export default async function LandingPage() {
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <Link
               href="/client-login"
-              className="rounded bg-accent px-5 py-3 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+              className="rounded bg-accent px-5 py-3 text-sm font-medium text-white hover:bg-accent-hover"
             >
               Start your free audit
             </Link>
@@ -124,7 +130,7 @@ export default async function LandingPage() {
               href={CALENDLY_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded border border-accent px-5 py-3 text-sm font-medium text-accent hover:bg-accent hover:text-accent-ink"
+              className="rounded border border-accent px-5 py-3 text-sm font-medium text-accent hover:bg-accent hover:text-white"
             >
               Book a demo
             </Link>
@@ -350,7 +356,7 @@ export default async function LandingPage() {
               </p>
               <Link
                 href="/client-login"
-                className="mt-6 inline-block self-start rounded bg-accent px-5 py-2.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+                className="mt-6 inline-block self-start rounded bg-accent px-5 py-2.5 text-sm font-medium text-white hover:bg-accent-hover"
               >
                 Get started
               </Link>
@@ -368,7 +374,7 @@ export default async function LandingPage() {
                 href={CALENDLY_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-6 inline-block self-start rounded border border-accent px-5 py-2.5 text-sm font-medium text-accent hover:bg-accent hover:text-accent-ink"
+                className="mt-6 inline-block self-start rounded border border-accent px-5 py-2.5 text-sm font-medium text-accent hover:bg-accent hover:text-white"
               >
                 Request a demo
               </Link>
@@ -464,7 +470,7 @@ export default async function LandingPage() {
                 href={CALENDLY_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-4 inline-block rounded bg-accent px-5 py-2.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+                className="mt-4 inline-block rounded bg-accent px-5 py-2.5 text-sm font-medium text-white hover:bg-accent-hover"
               >
                 Book a demo →
               </Link>
@@ -478,7 +484,7 @@ export default async function LandingPage() {
               </p>
               <Link
                 href="/client-login"
-                className="mt-4 inline-block rounded border border-accent px-5 py-2.5 text-sm font-medium text-accent hover:bg-accent hover:text-accent-ink"
+                className="mt-4 inline-block rounded border border-accent px-5 py-2.5 text-sm font-medium text-accent hover:bg-accent hover:text-white"
               >
                 Sign up and request one
               </Link>
@@ -486,15 +492,15 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        {/* 11. Final CTA + footer */}
-        <section className="border-t border-neutral-200 py-16 dark:border-neutral-800">
-          <div className="rounded-lg bg-neutral-900 p-8 text-center">
-            <h2 className="text-xl font-semibold text-neutral-50">Ready to see where you actually stand?</h2>
-            <p className="mx-auto mt-2 max-w-md text-sm text-neutral-300">Your first completed audit is free. No card required to start.</p>
-            <Link
-              href="/client-login"
-              className="mt-6 inline-block rounded bg-accent px-5 py-3 text-sm font-medium text-accent-ink hover:bg-accent-hover"
-            >
+        {/* 11. Final CTA + footer — converted from a full dark-navy block
+            to the same copper-wash priority-callout treatment used
+            throughout the authenticated app (confirmed 2026-08-31, item
+            12: "no dark navy anywhere"). */}
+        <section className="border-t border-neutral-200 py-16">
+          <div className="rounded-lg border-l-4 border-accent bg-[#fffbf0] p-8 text-center shadow-card-2">
+            <h2 className="text-xl font-semibold text-neutral-900">Ready to see where you actually stand?</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm text-neutral-600">Your first completed audit is free. No card required to start.</p>
+            <Link href="/client-login" className="mt-6 inline-block rounded bg-accent px-5 py-3 text-sm font-medium text-white hover:bg-accent-hover">
               Start your free audit
             </Link>
           </div>

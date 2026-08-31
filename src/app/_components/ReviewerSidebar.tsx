@@ -12,8 +12,13 @@ import { SignOutButton } from "@/app/(reviewer)/sign-out-button";
  * groups (Intelligence/Diagnose/Execution) — inventing groups for four
  * items that don't actually cluster would be manufacturing structure the
  * brief didn't ask for.
+ *
+ * Footer display name (confirmed 2026-08-31, item 13) — same
+ * formatDisplayName() treatment as the client sidebar, resolved by the
+ * caller ((reviewer)/layout.tsx) from `users.name`/email, never the raw
+ * email shown directly here.
  */
-export function ReviewerSidebar({ email }: { email: string }) {
+export function ReviewerSidebar({ displayName }: { displayName: string }) {
   return (
     <aside className="fixed inset-y-0 left-0 flex w-[200px] flex-col border-r border-neutral-200 bg-white">
       <div className="px-4 pb-3 pt-5">
@@ -30,8 +35,8 @@ export function ReviewerSidebar({ email }: { email: string }) {
       </nav>
 
       <div className="border-t border-neutral-200 px-3 py-3">
-        <p className="mb-2 truncate text-xs text-neutral-500" title={email}>
-          {email}
+        <p className="mb-2 truncate text-xs text-neutral-500" title={displayName}>
+          {displayName}
         </p>
         <SignOutButton />
       </div>

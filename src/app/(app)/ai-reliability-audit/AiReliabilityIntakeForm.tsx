@@ -10,6 +10,8 @@ import { Card } from "@/app/_components/ui/Card";
 import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
 import { ModuleSubmittedNotice } from "@/app/_components/ModuleSubmittedNotice";
+import { ModuleStartConfirm } from "@/app/_components/ModuleStartConfirm";
+import { MODULE_META } from "@/lib/modules/module-meta";
 
 export function AiReliabilityIntakeForm({ companyId, reviewPeriodHours }: { companyId: string; reviewPeriodHours: number }) {
   const [systemType, setSystemType] = useState<AiReliabilitySystemType | null>(null);
@@ -22,7 +24,7 @@ export function AiReliabilityIntakeForm({ companyId, reviewPeriodHours }: { comp
     hasHumanEscalation: null,
     escalationDescription: "",
   });
-  const [status, setStatus] = useState<"idle" | "submitting" | "done" | "error">("idle");
+  const [status, setStatus] = useState<"start" | "idle" | "submitting" | "done" | "error">("start");
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit() {
@@ -71,6 +73,18 @@ export function AiReliabilityIntakeForm({ companyId, reviewPeriodHours }: { comp
       setError("Something went wrong reaching the server — please try again.");
       setStatus("error");
     }
+  }
+
+  if (status === "start") {
+    return (
+      <div className="mx-auto max-w-2xl px-6 py-10">
+        <ModuleStartConfirm
+          label={MODULE_META.ai_reliability.label}
+          description={MODULE_META.ai_reliability.description}
+          onContinue={() => setStatus("idle")}
+        />
+      </div>
+    );
   }
 
   if (status === "done") {
