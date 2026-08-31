@@ -1993,7 +1993,7 @@ Two follow-ups to the sidebar/entry_path work above: the founder rejected the fi
 
 `tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean throughout. Temporary `/api/debug-set-session` route and all scratch scripts (`scratch-verify-entrypath.ts`, `scratch-setup-initialrouting.ts`, `scratch-check-entry-path.ts`, `scratch-cleanup.ts`) deleted after use, never committed — confirmed via `git status --short` before this writeup. The two disposable test accounts created purely to drive this verification were deleted afterward — a targeted bug-fix verification pass, not a first-of-its-kind proof run worth retaining.
 
-**Not yet committed/pushed** — held for explicit go-ahead, same standing pattern as every other change this session. The founder's own decision on where the `entry_path` setting should live is still pending, now that both real bugs underneath it are fixed.
+Committed and pushed (commit `f9cca5d`), per explicit go-ahead. The founder's own decision on where the `entry_path` setting should live was made immediately afterward — see the next section.
 
 ## `entry_path` setting relocated from Account Settings to Business Profile (confirmed 2026-08-31)
 
@@ -2005,7 +2005,7 @@ Answers the "where should this setting live" question left open above. Direct fo
 
 `tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean. Temporary `/api/debug-set-session` route and all scratch scripts (`scratch-mint.ts`, `scratch-check-entry-path.ts`, `scratch-find-company.ts`) deleted after use, never committed — confirmed via `git status --short` before this writeup (a clean move/edit set, no scratch debris).
 
-**Not yet committed/pushed** — held for explicit go-ahead, same standing pattern as every other change this session.
+Committed and pushed (commit `d2ac86c`), per explicit go-ahead.
 
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
