@@ -90,6 +90,7 @@ export function PathBWizard({ mode = "create", existingCompanyId, existingCompan
 
   // Profile fields
   const [companyName, setCompanyName] = useState(existingCompanyName ?? "");
+  const [yourName, setYourName] = useState("");
   const [industry, setIndustry] = useState("");
   const [employeeCount, setEmployeeCount] = useState("");
   const [registrationCountry, setRegistrationCountry] = useState("");
@@ -116,6 +117,7 @@ export function PathBWizard({ mode = "create", existingCompanyId, existingCompan
       const result = await submitPathBMinimalProfile({
         existingCompanyId,
         companyName: mode === "attach" ? undefined : companyName,
+        yourName: mode === "attach" ? undefined : yourName.trim() || undefined,
         industry,
         employeeCount: Number(employeeCount),
         registrationCountry,
@@ -308,7 +310,14 @@ export function PathBWizard({ mode = "create", existingCompanyId, existingCompan
           Readiness can&apos;t tell you which regulations actually apply.
         </p>
       </div>
-      {mode !== "attach" && <Input label="Company name" required autoFocus value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Acme Ltd" />}
+      {mode !== "attach" && (
+        <>
+          <Input label="Company name" required autoFocus value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Acme Ltd" />
+          {/* Real gap closed (confirmed 2026-08-31) — same as OnboardingWizard's
+              own equivalent field; see setUserNameIfUnset's docblock. */}
+          <Input label="Your name" value={yourName} onChange={(e) => setYourName(e.target.value)} placeholder="e.g. Alex Chen" hint="Optional — how we'll address you." />
+        </>
+      )}
       {mode === "attach" && (
         <p className="text-sm text-neutral-700 dark:text-neutral-300">
           Continuing for <span className="font-medium">{existingCompanyName}</span>

@@ -28,13 +28,28 @@ export function AppSidebar({ displayName, signalsCount }: { displayName: string;
       </div>
       <div className="border-t border-neutral-200" />
 
-      <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-4">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-4">
         <div>
           <SidebarLink href="/dashboard">Dashboard</SidebarLink>
         </div>
 
-        <div>
-          <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">Intelligence</p>
+        {/* Group-label contrast strengthened (confirmed 2026-08-31, direct
+            founder investigation request) — measured live via
+            getComputedStyle() before changing anything: the label was
+            rgb(138,138,138)/11px/500 while its own child links were the
+            darker rgb(74,74,74)/14px/400 — a "header" objectively lighter
+            than the content it heads, reading as a faded caption rather
+            than a real section break. Fixed with a real, if modest, color
+            darkening (neutral-500 -> neutral-600), heavier weight
+            (medium -> semibold), slightly wider tracking, AND a top
+            border + real padding before each group — the border does the
+            structural "this is a new section" work that color/weight
+            alone can't fully carry, without introducing any new hue
+            outside the existing light-only/copper-only system (same
+            border-neutral-200 already used for the sidebar's own top/
+            bottom dividers). */}
+        <div className="border-t border-neutral-200 pt-4">
+          <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-neutral-600">Intelligence</p>
           <div className="space-y-0.5">
             <SidebarLink href="/business-profile">Business Profile</SidebarLink>
             <SidebarLink
@@ -51,15 +66,15 @@ export function AppSidebar({ displayName, signalsCount }: { displayName: string;
           </div>
         </div>
 
-        <div>
-          <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">Diagnose</p>
+        <div className="border-t border-neutral-200 pt-4">
+          <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-neutral-600">Diagnose</p>
           <div className="space-y-0.5">
             <SidebarLink href="/evidence-intake">Business Diagnosis</SidebarLink>
           </div>
         </div>
 
-        <div>
-          <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">AI &amp; Compliance</p>
+        <div className="border-t border-neutral-200 pt-4">
+          <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-neutral-600">AI &amp; Compliance</p>
           <div className="space-y-0.5">
             <SidebarLink href="/ai-audit">AI Audit</SidebarLink>
             <SidebarLink href="/tender-readiness">Tender Readiness</SidebarLink>
@@ -68,8 +83,8 @@ export function AppSidebar({ displayName, signalsCount }: { displayName: string;
           </div>
         </div>
 
-        <div>
-          <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">Execution</p>
+        <div className="border-t border-neutral-200 pt-4">
+          <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-neutral-600">Execution</p>
           <div className="space-y-0.5">
             <SidebarLink href="/services">Services</SidebarLink>
           </div>

@@ -51,6 +51,15 @@ export default async function BusinessProfilePage() {
     .limit(1)
     .maybeSingle();
 
+  // Real gap closed (confirmed 2026-08-31, direct founder investigation
+  // request) — free-tier/first-audit-free status was genuinely invisible
+  // anywhere on Business Profile. Same "at least one report ever reached
+  // status='sent'" check evidence-intake's own confirmation modal already
+  // uses (see that page's `isFreeAudit` computation) — a genuinely shared
+  // fact, not a second, differently-derived version of the same answer.
+  const { data: priorSentReports } = await supabase.from("reports").select("id").eq("company_id", company.id).eq("status", "sent").limit(1);
+  const isFreeAuditAvailable = (priorSentReports ?? []).length === 0;
+
   // Admin client here ONLY for the journey-status check — see
   // journey-status.ts's own docblock: `reports`' client-facing RLS only
   // allows status='sent' through, so a session-scoped query would silently
@@ -95,6 +104,21 @@ export default async function BusinessProfilePage() {
         The living record every lens prompt reads from — changes are logged and tracked over time.
       </p>
 
+      {/* Free-tier status indicator (confirmed 2026-08-31, direct founder
+          investigation request) — real gap: this was invisible anywhere on
+          Business Profile before this. */}
+      <div className="mb-6">
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${
+            isFreeAuditAvailable
+              ? "border-accent/40 bg-[#fffbf0] text-accent"
+              : "border-neutral-200 bg-neutral-50 text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/50 dark:text-neutral-400"
+          }`}
+        >
+          {isFreeAuditAvailable ? "Your first Core Audit is free — not yet used" : "Free first audit already used — re-audits are paid"}
+        </span>
+      </div>
+
       {company.entry_path === "ai_audit" && !pathBSetupDone && (
         <div className="mb-6">
           <Alert variant="warning">
@@ -138,6 +162,14 @@ export default async function BusinessProfilePage() {
                   initialValue={goal.desired_future_state_secondary}
                   label="What would good look like here?"
                 />
+                {/* Honest weighting disclosure (confirmed 2026-08-31) —
+                    same copy and same reasoning as the Dashboard's own
+                    goal pill; see that page's docblock for the ranking-
+                    code investigation behind this. */}
+                <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
+                  Both goals are shared with your audit as context — we don&apos;t currently guarantee one is weighted more
+                  heavily than the other.
+                </p>
               </Card>
             )}
           </>

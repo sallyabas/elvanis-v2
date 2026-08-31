@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { computePathBRouting, type PathBRoutingResult, type TriageAiUsage, type TriageComplianceRequest, type TriagePersonalData } from "@/lib/onboarding/path-b-routing";
 import { requestSession } from "@/lib/service-layer/session-requests";
+import { setUserNameIfUnset } from "@/lib/users/set-name";
 import type { CreateCompanyResult } from "./actions";
 
 export interface PathBMinimalProfileInput {
@@ -10,6 +11,8 @@ export interface PathBMinimalProfileInput {
   existingCompanyId?: string;
   /** Required only when existingCompanyId is absent — the Hub-resumed case already has a name from createCompanyMinimal(). */
   companyName?: string;
+  /** Optional, only meaningful alongside a fresh companyName (confirmed 2026-08-31) — see setUserNameIfUnset's own docblock. */
+  yourName?: string;
   industry: string;
   employeeCount: number;
   registrationCountry: string;
@@ -65,6 +68,9 @@ export async function submitPathBMinimalProfile(input: PathBMinimalProfileInput)
     .select("id")
     .single();
   if (error) return { success: false, error: `Couldn't create company: ${error.message}` };
+
+  if (input.yourName) await setUserNameIfUnset(supabase, user.id, input.yourName);
+
   return { success: true, companyId: company.id as string };
 }
 

@@ -626,6 +626,22 @@ export default async function DashboardPage() {
               <span>· also: {GOAL_LABELS[currentGoal.secondary_goal as keyof typeof GOAL_LABELS] ?? currentGoal.secondary_goal}</span>
             )}
           </p>
+          {/* Honest weighting disclosure (confirmed 2026-08-31, direct
+              founder investigation request) — checked the actual ranking
+              code (scoreForDefaultRanking, isFixFirstCandidate,
+              formatGoalContextForPrompt) before writing this: neither
+              function reads secondary_goal at all, and the shared prompt
+              formatter hands both goals to every lens/synthesis call as
+              plain, unweighted context. There is no code path that
+              deterministically weighs Primary above Secondary — only ever
+              shown when a secondary goal actually exists, since the line
+              is about the relationship between the two. */}
+          {currentGoal.secondary_goal && (
+            <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+              Both goals are shared with your audit as context — we don&apos;t currently guarantee one is weighted more
+              heavily than the other.
+            </p>
+          )}
           <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
             Want to pursue a different goal?{" "}
             <Link href="/evidence-intake" className="font-medium text-accent hover:underline">

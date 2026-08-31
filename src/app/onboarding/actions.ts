@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { PrimaryGoal } from "@/lib/lenses/types";
 import { validateDesiredFutureState } from "@/lib/goals/validation";
 import { findMetricDefinition } from "@/lib/lenses/metric-direction";
+import { setUserNameIfUnset } from "@/lib/users/set-name";
 
 export interface CreateCompanyResult {
   success: boolean;
@@ -50,6 +51,7 @@ function validateGoalFields(input: {
  */
 export async function createCompanyAndGoal(input: {
   companyName: string;
+  yourName?: string | null;
   industry: string | null;
   employeeCount: number | null;
   primaryGoal: PrimaryGoal;
@@ -98,6 +100,8 @@ export async function createCompanyAndGoal(input: {
     success_definition: input.successDefinition,
   });
   if (insertGoalError) return { success: false, error: `Couldn't save goal: ${insertGoalError.message}` };
+
+  if (input.yourName) await setUserNameIfUnset(supabase, user.id, input.yourName);
 
   return { success: true, companyId: company.id as string };
 }

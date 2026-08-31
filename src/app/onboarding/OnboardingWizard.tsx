@@ -89,6 +89,7 @@ export function OnboardingWizard({ mode = "create", existingCompanyId, existingC
   const currentStep = stepKeys[stepIndex];
 
   const [companyName, setCompanyName] = useState(existingCompanyName ?? "");
+  const [yourName, setYourName] = useState("");
   const [industry, setIndustry] = useState("");
   const [employeeCount, setEmployeeCount] = useState("");
   const [primaryGoal, setPrimaryGoal] = useState<PrimaryGoal | null>(null);
@@ -156,6 +157,7 @@ export function OnboardingWizard({ mode = "create", existingCompanyId, existingC
           })
         : await createCompanyAndGoal({
             companyName,
+            yourName: yourName.trim() || null,
             industry: industry.trim() || null,
             employeeCount: employeeCount.trim() ? Number(employeeCount) : null,
             ...goalFields,
@@ -202,7 +204,24 @@ export function OnboardingWizard({ mode = "create", existingCompanyId, existingC
               Continuing for <span className="font-medium">{existingCompanyName}</span>
             </p>
           ) : (
-            <Input label="Company name" type="text" required autoFocus value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Acme Ltd" />
+            <>
+              <Input label="Company name" type="text" required autoFocus value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Acme Ltd" />
+              {/* Real gap closed (confirmed 2026-08-31, direct founder
+                  investigation request) — this app never captured a
+                  client's own name anywhere before this; users.name
+                  existed on the schema since the first migration but was
+                  only ever set later, manually, via Account Settings.
+                  Optional — never required to proceed, matching this
+                  step's own "just enough to get started" framing. */}
+              <Input
+                label="Your name"
+                type="text"
+                value={yourName}
+                onChange={(e) => setYourName(e.target.value)}
+                placeholder="e.g. Alex Chen"
+                hint="Optional — how we'll address you."
+              />
+            </>
           )}
           <Input label="Industry" type="text" required value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="e.g. B2B SaaS — marketing analytics" />
           <Input label="Employee count" type="number" required value={employeeCount} onChange={(e) => setEmployeeCount(e.target.value)} placeholder="e.g. 45" />
