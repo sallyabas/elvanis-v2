@@ -6,6 +6,7 @@ import type { PrimaryGoal } from "@/lib/lenses/types";
 import { DesiredFutureStateField } from "./DesiredFutureStateField";
 import { BusinessProfileForm } from "./BusinessProfileForm";
 import { DigitalPresenceCheck } from "./DigitalPresenceCheck";
+import { EntryPathSetting } from "./EntryPathSetting";
 import type { CompanyProfileFields } from "./actions";
 import { Card } from "@/app/_components/ui/Card";
 import { LinkButton } from "@/app/_components/ui/LinkButton";
@@ -160,6 +161,17 @@ export default async function BusinessProfilePage() {
 
         <Card title="Digital presence check">
           <DigitalPresenceCheck companyId={company.id as string} hasWebsiteUrl={!!company.website_url} />
+        </Card>
+
+        {/* Relocated here from Account Settings (confirmed 2026-08-31,
+            direct founder decision) — "what are you here for" is
+            conceptually the same category as the goal fields below (what
+            the business wants from the platform), not personal account
+            identity, which is what Account Settings is actually for. Same
+            component, same dropdown/copy/chooseEntryPath() behavior —
+            see EntryPathSetting.tsx's own docblock for the full history. */}
+        <Card title="Your focus">
+          <EntryPathSetting companyId={company.id as string} currentEntryPath={company.entry_path as string} />
         </Card>
 
         {goal && (

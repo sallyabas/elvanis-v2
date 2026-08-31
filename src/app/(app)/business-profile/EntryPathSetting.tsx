@@ -14,13 +14,21 @@ const LABELS: Record<string, string> = {
 
 /**
  * Real entry_path editor (confirmed 2026-08-27, Onboarding Architecture &
- * Path Routing brief, Part 1 — "can be changed later from Account
- * Settings"). Deliberately does not touch anything else: switching this
- * never retroactively alters delivered reports (nothing in reports/
- * module_requests references entry_path at all), and the Dashboard's own
- * per-path fallback state (Part 5 refinement — path-specific activity, not
- * any activity) already handles "switched paths, nothing there yet"
- * honestly without this component needing to know about it.
+ * Path Routing brief, Part 1 — "can be changed later"). Deliberately does
+ * not touch anything else: switching this never retroactively alters
+ * delivered reports (nothing in reports/module_requests references
+ * entry_path at all), and the Dashboard's own per-path fallback state
+ * (Part 5 refinement — path-specific activity, not any activity) already
+ * handles "switched paths, nothing there yet" honestly without this
+ * component needing to know about it.
+ *
+ * Relocated 2026-08-31 (direct founder decision) from Account Settings to
+ * Business Profile, near the goal fields — "what are you here for" is
+ * conceptually the same category as the goal fields (what the business
+ * wants from the platform), not personal account identity, which is what
+ * Account Settings is actually for. A pure relocation, not a functional
+ * change: same dropdown, same copy, same chooseEntryPath() call — only the
+ * import path and the page it's rendered from changed.
  */
 export function EntryPathSetting({ companyId, currentEntryPath }: { companyId: string; currentEntryPath: string }) {
   const router = useRouter();

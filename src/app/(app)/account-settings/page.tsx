@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AccountSettingsForm } from "./AccountSettingsForm";
-import { EntryPathSetting } from "./EntryPathSetting";
 import type { NotificationPreferences } from "./actions";
 import { Card } from "@/app/_components/ui/Card";
 
@@ -33,7 +32,6 @@ export default async function AccountSettingsPage() {
   }
 
   const { data: profile } = await supabase.from("users").select("name, email, notification_preferences, plan_tier").eq("id", user.id).single();
-  const { data: company } = await supabase.from("companies").select("id, entry_path").eq("user_id", user.id).maybeSingle();
 
   const preferences = {
     ...DEFAULT_PREFERENCES,
@@ -62,17 +60,6 @@ export default async function AccountSettingsPage() {
             Billing management isn&apos;t available yet — no payment provider is connected.
           </p>
         </Card>
-
-        {/* Real entry_path editor (confirmed 2026-08-27, Onboarding
-            Architecture & Path Routing brief, Part 1). Only rendered when
-            a company already exists — a brand-new signup with no company
-            yet is still inside /onboarding, which is where this choice is
-            first made, not here. */}
-        {company && (
-          <Card title="Your focus">
-            <EntryPathSetting companyId={company.id as string} currentEntryPath={company.entry_path as string} />
-          </Card>
-        )}
       </div>
     </div>
   );
