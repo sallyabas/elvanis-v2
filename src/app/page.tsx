@@ -265,8 +265,15 @@ export default async function LandingPage() {
               fix first" as two smaller, equal side-by-side cards below —
               replacing three visually-identical cards that gave the
               actual differentiator no more weight than its two
-              supporting points. */}
-          <div className="mt-10 grid gap-6">
+              supporting points.
+
+              Gap to the subheadline above tightened mt-10 (40px) → mt-8
+              (32px), confirmed 2026-09-02 — the only spacing gap flagged
+              on the page this round, kept at the top of the requested
+              24-32px band rather than the tighter floor, since this is
+              the transition into the section's single most load-bearing
+              card, not an ordinary intra-section gap. */}
+          <div className="mt-8 grid gap-6">
             <div className="rounded-lg bg-white p-6 shadow-card-1 sm:p-8">
               <h3 className="text-lg font-medium text-neutral-900">What&apos;s genuinely missing</h3>
               <p className="mt-2 max-w-2xl text-sm text-neutral-600">
