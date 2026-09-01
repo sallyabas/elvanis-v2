@@ -2125,7 +2125,25 @@ Direct founder brief: the content/copy/structure/routing were confirmed correct,
 
 `tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean. `git status --short` confirmed only the two real files touched.
 
-Committed and pushed, per explicit go-ahead.
+Committed and pushed (commit `70f54b3`), per explicit go-ahead.
+
+## Landing page: layout redesign of the three post-hero sections (confirmed 2026-09-02)
+
+Direct founder follow-up on the visual execution pass above: the three post-hero sections (Problem/Solution/Why Us) still used a uniform three-column grid each — "identical and blog-like." A real layout redesign, not another color/typography pass — three genuinely different structures, one per section, per exact spec.
+
+**Section 1 ("Someone is about to ask about your AI") — 60/40 split, `bg-background` (`#f9f9f9`).** Left column (`lg:col-span-3`, measured 572.8px vs. 371.2px = **60.7/39.3**, close enough to 60/40 not to force with a hand-tuned fractional grid) holds a new `<TriageScreenMockup>` — a "browser chrome" card reproducing PathBWizard's own real triage heading/subhead and the 3 real Q&A rows already used in the interactive demo's Step 1, styled as copper-highlighted answer pills. Right column (`lg:col-span-2`) stacks the 3 existing trigger-type items as compact vertical cards (`shadow-card-1`, `p-4`, unchanged copy) instead of the old flat three-column row.
+
+**Section 2 ("Evidence in. Human-reviewed findings out.") — bento layout, `bg-white`.** One full-width featured card ("What's genuinely missing") containing a new `<FindingCardMockup>` — the same verbatim real Nimbus Ledger Ltd finding text/HIGH badge already used in the demo's Step 4, reused here rather than a second differently-worded example. Below it, two smaller cards side by side ("What's safe" / "What to fix first," unchanged copy). Below all three, the human-reviewer statement in a copper callout — confirmed exact via computed styles: `background: rgb(255,251,240)` (#fffbf0), `border-left: 3px solid rgb(184,115,51)` (#B87333, the true brand hex — a decorative border, not text, so this one deliberately uses raw `accent` rather than `accent-cta`), `padding: 16px 20px`, text `15px/600/rgb(26,26,26)`.
+
+**Section 3 ("Built so you're ready before they ask.") — 3 stacked horizontal rows, `bg-background`.** Replaces the 3 equal side-by-side cards with `divide-y divide-neutral-200` rows, each a 40×40px `rounded-full bg-accent-cta` circle with a white numeral (confirmed `accent-cta`, not raw `accent` — a numeral needs real text contrast, unlike Section 2's decorative border) + `text-base font-semibold text-neutral-900` title + `text-sm text-neutral-700` body, unchanged copy — reads as a trust checklist now, not a feature grid.
+
+**New file, [LandingPageMockups.tsx](src/app/_components/LandingPageMockups.tsx)** — `TriageScreenMockup()`/`FindingCardMockup()`, same disclosed honest-placeholder approach already established for the interactive demo's own Step 4 (this session's browser tooling has no way to export a literal raster screenshot to disk, confirmed by directly searching for a persisted file after a test capture — nothing exists outside the chat transcript). Real copy, real finding text, real `SEVERITY_STYLES` classes, sized and structured so a literal screenshot can be dropped in later with zero layout change — not a generic illustration.
+
+**Verified live, all three sections individually screenshotted**, using the `document.body.style.marginTop = '-Npx'` technique already established in the prior round for avoiding the scroll-triggered capture desync — computed each section's real `getBoundingClientRect()` offset first, then shifted and screenshotted each in turn at a normal viewport size (no scroll event fired). Confirmed via `getComputedStyle()`: Section 1's column split ratio and trigger-card padding/shadow; Section 2's callout box's exact background/border/padding/text values and the featured card's full width; Section 3's circle size/color and row title/body typography exactly matching spec.
+
+`tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean (`rm -rf .next` first, confirming a genuinely fresh production build). `git status --short` confirmed only `page.tsx` and the new `LandingPageMockups.tsx` touched, no scratch debris.
+
+Committed and pushed (commit `665563e`), per explicit go-ahead.
 
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
