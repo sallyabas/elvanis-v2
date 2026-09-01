@@ -2051,6 +2051,24 @@ Direct founder follow-up on the rebuild above, six numbered fixes plus two copy 
 
 `tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean. `git status --short` confirmed only the three touched files, no scratch debris, before delivering screenshots for review.
 
+Committed and pushed (commit `6db3c97`), per explicit go-ahead.
+
+## Landing page polish, round 2 — tighter spacing, real Concierge price, wider demo zone, 3-step how-it-works, legible example text (confirmed 2026-09-02)
+
+Second, more targeted follow-up from the founder — five numbered fixes, no copy changes this round, each measured live before deciding rather than assumed, then screenshotted for review before committing.
+
+**1. Section padding, tightened further.** Measured first: sections were `py-8` (32px/side, 64px combined gap), reading as 80–100px in places due to the hero's extra `sm:py-12`. All sections dropped to `py-6` (24px/side) — confirmed via `getComputedStyle()`: interior gaps now **48px** (the floor of the requested 48–64px range), hero-to-next **56px**. Uniform, not special-cased — the specific "Someone is about to ask..." → "Evidence in..." gap the founder flagged is included in the same reduction as every other pair.
+
+**2. Concierge pricing — a real, founder-caught contradiction, fixed.** The Pricing section's own subhead promises "real, live pricing... not a sales-call-to-find-out," while the Concierge card itself said "Contact Sales" — directly undermining that promise. Confirmed the real DB price first (`concierge_tier`, £300, non-placeholder), then replaced "Contact Sales" with the real **£300** and a solid-copper **"Request Concierge"** button, routed to `/client-login` rather than Calendly — the real in-app Concierge request (`concierge_inquiry` session request) is a signed-in, session-scoped action, so that's the honest destination, not a call.
+
+**3. Interactive demo — widened further, given a distinguishing background.** `max-w-6xl` (1152px) → `max-w-7xl` (1280px), confirmed via measurement to be the widest section on the page by 256px over every other section (1024px). Added `bg-neutral-100` (`#f5f5f4`, the exact hex requested) applied to the section itself so the wash spans full-bleed edge-to-edge, not just the constrained content column — the widget's own slightly-lighter `bg-neutral-50` now reads as a real card floating on a distinct zone rather than one flat gray.
+
+**4. "How it works" reduced from 5 steps to 3 — a real measurement, not a guess.** The founder's instruction was conditional ("if the five columns are too narrow"); checked live before deciding rather than assuming either way — at a real 1280px viewport, 5 columns in the shared `max-w-5xl` section were only **170px wide each**, confirming the condition. Kept the 3 steps carrying the real differentiators (3 quick questions, deterministic matching, mandatory human review) at **304px** columns now. The two dropped steps (submit evidence, get findings) aren't lost content — a new link ("see the full walkthrough below," `#see-it-work`) points straight at the Interactive Demo immediately below, which already covers both in real depth, so nothing needed duplicating.
+
+**5. Execution Audit real example panel — remaining small text bumped.** The "Top 3 priorities" list was already 14px; the caption label (was 10px) and the three roadmap day boxes (were 11px) were both under the requested 13px floor. All now `text-sm` (14px).
+
+**Verified live**, not assumed: every section's real computed padding, every wrapper's real rendered width (1280px demo vs. 1024px everywhere else), the demo section's real background color (`rgb(245, 245, 244)`), the Concierge card's real rendered price and button `href`, the new anchor link's `href` resolving to the correct section id, and the how-it-works column width before and after the reduction. `tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean. `git status --short` confirmed only `page.tsx` touched, no scratch debris, before delivering screenshots for review.
+
 Committed and pushed, per explicit go-ahead.
 
 ## Working style
