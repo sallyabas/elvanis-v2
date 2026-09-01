@@ -2145,6 +2145,20 @@ Direct founder follow-up on the visual execution pass above: the three post-hero
 
 Committed and pushed (commit `665563e`), per explicit go-ahead.
 
+## Landing page: mockup crop, second finding, module-card-parity confirmation (confirmed 2026-09-02)
+
+Four numbered follow-ups on the layout redesign above, worked through individually.
+
+**1. Section 1 mockup — browser chrome removed entirely.** [TriageScreenMockup](src/app/_components/LandingPageMockups.tsx) previously wrapped its content in a simulated "browser chrome" bar (traffic-light dots + a fake address-bar string) to read as a real app screen. Direct founder feedback: no browser/OS chrome at all, product UI only, cropped tight. Removed the chrome bar entirely — the card's own real border + `shadow-card-2` now does that job on its own. **Verified live**: confirmed zero chrome dots and zero address-bar text anywhere in the rendered DOM.
+
+**2 & 4. "What's safe"/"What to fix first" and all three "Three reviews" module cards — verified already identical, no code change.** Both pairs already used the exact same className string generated from a single `.map()` (or hand-written twice identically) — structurally guaranteed to render the same, not just visually similar. Measured live rather than trusted from source alone: Section 2's two cards both compute `boxShadow: rgba(0,0,0,0.08) 0px 1px 3px` (the exact requested value) with identical padding/background; all three module cards compute `boxShadow: rgba(0,0,0,0.1) 0px 4px 12px`, `border-radius: 8px`, `1px solid rgb(232,232,232)` (neutral-200, uncolored), white background, 24px padding, and an identical 320px rendered height — no discrepancy found anywhere. **This is the third time this session a reported visual difference didn't reproduce locally** (following the section-padding and demo-shadow reports in the prior two rounds) — flagged again, now with a concrete, disclosed likely cause: this session separately discovered and deleted a broken, zero-env-var duplicate Vercel project (`elvanis-v2`) that failed every single build; a stale tab or a deploy predating that cleanup would explain all three false-positive reports.
+
+**3. Second real finding added to the featured "What's genuinely missing" card.** [FindingCardMockup](src/app/_components/LandingPageMockups.tsx) now renders two real findings stacked with a divider inside one card, rather than one — the original HIGH "No compliance documentation submitted for applicable jurisdictions" plus the real MEDIUM "EU AI Act Risk Classification" (the identical real finding already used in the interactive demo's own Step 4, from the same real Nimbus Ledger Ltd report) — demonstrating multiple specific findings rather than one. Since a second real finding was available, the instructed fallback (bumping the body copy above the card to 15px) wasn't needed. The card's own browser-chrome bar (dots + URL) was left untouched — that wasn't part of this round's crop feedback, which was scoped specifically to the Section 1 triage screenshot.
+
+**Verified live**: all three affected areas individually screenshotted (triage card with zero chrome, the featured card showing both real findings above the two now-confirmed-identical support cards, and all three module cards side by side with matching height/shadow/border). `tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean. `git status --short` confirmed only `LandingPageMockups.tsx` touched.
+
+Committed and pushed (commit `7f41a86`), per explicit go-ahead.
+
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
 - Don't over-build ahead of proof. Exception: modules built from external research (Tender Readiness, AI Reliability, Data Protection) don't need a live client first — they're sequenced by engine-readiness, not by demand signal.
