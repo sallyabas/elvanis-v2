@@ -34,6 +34,19 @@ import { AI_READINESS_DEMO_STEPS } from "./_components/AiReadinessDemoSteps";
  * the FAQ's own security-questionnaire answer — the same voice and
  * stakes are meant to still be present at the bottom of the page as at
  * the top, not reset section by section.
+ *
+ * Full visual-execution pass (confirmed 2026-09-02) — copy/structure/
+ * routing all unchanged from the state above; every section restructured
+ * from "one shared max-w-5xl wrapper div per group" into independent,
+ * full-bleed <section> siblings (each with its own inner max-w-5xl — or
+ * max-w-7xl for the demo — content column), because alternating,
+ * edge-to-edge section backgrounds genuinely require each section to own
+ * its own full-width background, the same technique already established
+ * for the demo section's own light-then-dark zone. This actually
+ * simplifies the DOM versus the previous two-wrapper-div-with-a-
+ * breakout-in-the-middle structure: every section is now a uniform
+ * direct child of the same root flex-col, so the footer's mt-auto still
+ * reaches the true page bottom with no special-casing needed.
  */
 export const revalidate = 60;
 
@@ -62,11 +75,47 @@ export const metadata: Metadata = {
  */
 const CALENDLY_URL = "https://calendly.com/elvanis-app/30min";
 
+/**
+ * Section headline treatment (confirmed 2026-09-02, direct founder fix,
+ * item 4) — text-3xl (30px, inside the requested 28-32px band) + font-
+ * bold (700) + text-neutral-900 (#1a1a1a exact). Applied as one shared
+ * class string so every major section headline stays byte-identical,
+ * never independently drifting. The founder's own list of 8 headlines
+ * omitted 3 structurally identical section h2s ("Someone is about to
+ * ask...", "Frequently asked questions", "Not ready to submit evidence
+ * yet...") — applied here too, disclosed explicitly, since leaving just
+ * those three at the old 24px/600 size while every sibling section
+ * jumped to 30px/700 would read as an unintentional inconsistency, the
+ * exact opposite of this pass's own stated goal.
+ */
+const SECTION_HEADLINE = "text-3xl font-bold text-neutral-900";
+
 export default async function LandingPage() {
   const pricing = await listPricing();
   const pricingByKey = new Map(pricing.map((p) => [p.itemKey, p]));
   const { totalHours: executionAuditTotalHours } = await getTotalTurnaroundHours();
   const moduleTurnaroundHours = await getSettingNumber("module_delivery_turnaround_target_hours", 48);
+
+  const MODULES = [
+    {
+      key: "tender_readiness",
+      title: "Tender Readiness",
+      slug: "tender-readiness",
+      body: `Know exactly which AI regulations actually apply to you — EU AI Act, UAE DIFC Regulation 10, Saudi AI governance — with a documented jurisdiction determination and draft procurement answers ready within ${moduleTurnaroundHours} hours.`,
+    },
+    {
+      key: "ai_reliability_audit",
+      title: "AI Reliability Audit",
+      slug: "ai-reliability",
+      body: `Find out how your AI actually behaves under pressure — tested against documented real-world failure patterns like invented policy and prompt injection — with a human-reviewed reliability report within ${moduleTurnaroundHours} hours, before a customer finds the gap themselves.`,
+    },
+    {
+      key: "data_protection_compliance",
+      title: "Data Protection Compliance",
+      slug: "data-protection",
+      body: `See precisely where your GDPR/PDPL readiness stands — consent, data-subject rights, retention, breach response, cross-border transfer — with a human-reviewed report within ${moduleTurnaroundHours} hours.`,
+    },
+  ];
 
   return (
     <div className="flex flex-1 flex-col">
@@ -93,14 +142,18 @@ export default async function LandingPage() {
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-5xl flex-col px-6">
-        {/* ================= 1. HERO ================= */}
-        <section className="py-6 sm:py-8">
+      {/* ================= 1. HERO — white ================= */}
+      <section className="bg-white">
+        <div className="mx-auto w-full max-w-5xl px-6 py-6 sm:py-8">
           <p className="text-sm font-medium uppercase tracking-wide text-accent">For teams running AI in production</p>
           <h1 className="mt-4 max-w-2xl text-4xl font-semibold leading-tight tracking-tight text-neutral-900 sm:text-5xl">
             Your AI Readiness Review, before they ask.
           </h1>
-          <p className="mt-6 max-w-xl text-lg leading-relaxed text-neutral-600">
+          {/* Subheadline, 18px/400/#4a4a4a exact (confirmed 2026-09-02,
+              item 6) — text-lg is exactly 18px; text-neutral-700 is
+              exactly #4a4a4a (was text-neutral-600, #6b6b69, one step
+              lighter than requested). */}
+          <p className="mt-6 max-w-xl text-lg font-normal leading-relaxed text-neutral-700">
             Get a documented answer for your next procurement questionnaire, security review, or investor question about your
             AI — reviewed by a human, typically ready within {moduleTurnaroundHours} hours.
           </p>
@@ -108,7 +161,7 @@ export default async function LandingPage() {
           {/* Exactly one primary CTA + one secondary TEXT link, never two
               competing hero cards (direct instruction). "Book a demo" was
               removed from the hero specifically — it's not gone from the
-              page, it keeps its own full section further down (10). */}
+              page, it keeps its own full section further down (11). */}
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <Link
               href="/client-login"
@@ -124,29 +177,30 @@ export default async function LandingPage() {
             </a>
           </p>
 
-          {/* Hero-gap fix, Option B (confirmed 2026-09-01 — fastest to ship
-              correctly, per explicit instruction; Option A held for a real
-              screenshot when one exists, see AiReadinessDemoSteps.tsx's own
-              docblock for why a literal raster capture wasn't available
-              this pass). Exact requested copy, no background colour, real
-              claims — "48 hours" reads from the same live setting used
-              everywhere else on this page, not a separately hardcoded
-              number that could drift from it. */}
+          {/* Trust bar, 14px/500 (confirmed 2026-09-02, item 6) — was
+              text-sm with no explicit weight (inheriting the browser
+              default 400); now font-medium (500) explicitly. Checkmark
+              stays the true brand --color-accent (#B87333, not
+              accent-cta) — a small decorative glyph, not sentence text,
+              same "purely decorative accent uses keep the true brand
+              color" principle already established in globals.css. */}
           <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-6">
             {["Evidence-based", "Human-reviewed", `Delivered within ${moduleTurnaroundHours} hours`].map((label) => (
-              <div key={label} className="flex items-center gap-2 text-sm text-neutral-700">
-                <span aria-hidden="true" className="text-accent-cta">
+              <div key={label} className="flex items-center gap-2 text-sm font-medium text-neutral-700">
+                <span aria-hidden="true" className="text-accent">
                   ✓
                 </span>
                 <span>{label}</span>
               </div>
             ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ================= 2. THE PROBLEM ================= */}
-        <section className="border-t border-neutral-200 py-6">
-          <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">Someone is about to ask about your AI</h2>
+      {/* ================= 2. THE PROBLEM — #f9f9f9 ================= */}
+      <section className="border-t border-neutral-200 bg-background">
+        <div className="mx-auto w-full max-w-5xl px-6 py-6">
+          <h2 className={SECTION_HEADLINE}>Someone is about to ask about your AI</h2>
           <p className="mt-3 max-w-2xl text-neutral-600">
             Not hypothetically — this is already how AI gets scrutinized in a real deal, a real security review, or a real
             board conversation.
@@ -175,18 +229,24 @@ export default async function LandingPage() {
           <p className="mt-8 max-w-2xl font-medium text-neutral-900">
             Elvanis gives you a documented, evidence-based answer to exactly this — before you&apos;re asked for one.
           </p>
-        </section>
+        </div>
+      </section>
 
-        {/* ================= 3. THE SOLUTION (new) ================= */}
-        <section className="border-t border-neutral-200 py-6">
-          <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">
-            Evidence in. Human-reviewed findings out. No generic advice.
-          </h2>
+      {/* ================= 3. THE SOLUTION (new) — white ================= */}
+      <section className="border-t border-neutral-200 bg-white">
+        <div className="mx-auto w-full max-w-5xl px-6 py-6">
+          <h2 className={SECTION_HEADLINE}>Evidence in. Human-reviewed findings out. No generic advice.</h2>
           <p className="mt-3 max-w-2xl text-neutral-600">
             You submit real evidence — a document, or a short guided form. We tell you what&apos;s safe, what&apos;s
             genuinely missing, and what to fix first. A human checks every word before you see it.
           </p>
-          <div className="mt-10 grid gap-8 sm:grid-cols-3">
+          {/* Feature cards (confirmed 2026-09-02, item 2) — real cards,
+              not plain text columns: white bg, shadow-card-1 (exactly
+              0 1px 3px rgba(0,0,0,0.08), the requested value verbatim —
+              no arbitrary value needed, this app's own existing token
+              already matches it precisely), rounded-lg (8px exact),
+              p-5 (20px exact). */}
+          <div className="mt-10 grid gap-6 sm:grid-cols-3">
             {[
               {
                 title: "What's safe",
@@ -201,7 +261,7 @@ export default async function LandingPage() {
                 body: "Every finding carries a real severity and a concrete recommended action, so you know what actually needs attention now versus what can wait.",
               },
             ].map((item) => (
-              <div key={item.title}>
+              <div key={item.title} className="rounded-lg bg-white p-5 shadow-card-1">
                 <h3 className="font-medium text-neutral-900">{item.title}</h3>
                 <p className="mt-2 text-sm text-neutral-600">{item.body}</p>
               </div>
@@ -211,12 +271,14 @@ export default async function LandingPage() {
             Every one of these is accepted, edited, or rejected by a human reviewer before it ever reaches you — enforced at
             the system level, not a policy we just say we follow.
           </p>
-        </section>
+        </div>
+      </section>
 
-        {/* ================= 4. WHY US ================= */}
-        <section className="border-t border-neutral-200 py-6">
-          <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">Built so you&apos;re ready before they ask.</h2>
-          <div className="mt-10 grid gap-8 sm:grid-cols-3">
+      {/* ================= 4. WHY US — #f9f9f9 ================= */}
+      <section className="border-t border-neutral-200 bg-background">
+        <div className="mx-auto w-full max-w-5xl px-6 py-6">
+          <h2 className={SECTION_HEADLINE}>Built so you&apos;re ready before they ask.</h2>
+          <div className="mt-10 grid gap-6 sm:grid-cols-3">
             {[
               {
                 title: "Always human-reviewed",
@@ -231,47 +293,48 @@ export default async function LandingPage() {
                 body: "Upload a document (we extract the text automatically) or fill in a short guided form — no forced integrations, no OAuth handoff to a tool you don't already trust.",
               },
             ].map((item) => (
-              <div key={item.title}>
+              <div key={item.title} className="rounded-lg bg-white p-5 shadow-card-1">
                 <h3 className="font-medium text-neutral-900">{item.title}</h3>
                 <p className="mt-2 text-sm text-neutral-600">{item.body}</p>
               </div>
             ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ================= 5. MODULES (Feature-Benefit rewrite) ================= */}
-        <section id="modules" className="border-t border-neutral-200 py-6">
-          <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">
-            Three reviews. One matched to what&apos;s actually at stake.
-          </h2>
+      {/* ================= 5. MODULES (Feature-Benefit rewrite) — white ================= */}
+      <section id="modules" className="border-t border-neutral-200 bg-white">
+        <div className="mx-auto w-full max-w-5xl px-6 py-6">
+          <h2 className={SECTION_HEADLINE}>Three reviews. One matched to what&apos;s actually at stake.</h2>
           <p className="mt-3 max-w-2xl text-neutral-600">
             Whichever one applies to you, the process is the same: real evidence in, human-reviewed findings out — never a
             generic checklist.
           </p>
+          {/* Level 2 elevation (confirmed 2026-09-02, item 3) —
+              shadow-card-2 is exactly 0 4px 12px rgba(0,0,0,0.10), the
+              requested value verbatim. Price at 20px/600 uses the TRUE
+              brand --color-accent (#B87333) rather than accent-cta —
+              confirmed this specific case clears WCAG AA's 3:1 large-text
+              threshold (20px/600 vs white computes to ~3.79:1), unlike
+              the smaller 14px button text below, which still needs
+              accent-cta to clear the stricter 4.5:1 normal-text minimum.
+              "Request this review" button added here (previously only on
+              the Pricing section's own compact copy of these cards) —
+              same routing/slugs, same accessible-copper substitution. */}
           <div className="mt-10 grid gap-6 sm:grid-cols-3">
-            {[
-              {
-                key: "tender_readiness",
-                title: "Tender Readiness",
-                body: `Know exactly which AI regulations actually apply to you — EU AI Act, UAE DIFC Regulation 10, Saudi AI governance — with a documented jurisdiction determination and draft procurement answers ready within ${moduleTurnaroundHours} hours.`,
-              },
-              {
-                key: "ai_reliability_audit",
-                title: "AI Reliability Audit",
-                body: `Find out how your AI actually behaves under pressure — tested against documented real-world failure patterns like invented policy and prompt injection — with a human-reviewed reliability report within ${moduleTurnaroundHours} hours, before a customer finds the gap themselves.`,
-              },
-              {
-                key: "data_protection_compliance",
-                title: "Data Protection Compliance",
-                body: `See precisely where your GDPR/PDPL readiness stands — consent, data-subject rights, retention, breach response, cross-border transfer — with a human-reviewed report within ${moduleTurnaroundHours} hours.`,
-              },
-            ].map((mod) => {
+            {MODULES.map((mod) => {
               const price = pricingByKey.get(mod.key);
               return (
-                <div key={mod.key} className="rounded-lg border border-neutral-200 p-6 shadow-card-1">
+                <div key={mod.key} className="flex flex-col rounded-lg border border-neutral-200 bg-white p-6 shadow-card-2">
                   <h3 className="font-medium text-neutral-900">{mod.title}</h3>
                   <p className="mt-2 text-sm text-neutral-600">{mod.body}</p>
-                  {price && <p className="mt-4 text-sm font-medium text-accent-cta">{formatPrice(price)}</p>}
+                  {price && <p className="mt-4 text-xl font-semibold text-accent">{formatPrice(price)}</p>}
+                  <Link
+                    href={`/client-login?module=${mod.slug}`}
+                    className="mt-4 inline-block self-start rounded-md border border-accent-cta px-4 py-2 text-sm font-medium text-accent-cta hover:bg-accent-cta hover:text-white"
+                  >
+                    Request this review
+                  </Link>
                 </div>
               );
             })}
@@ -283,22 +346,24 @@ export default async function LandingPage() {
             </Link>{" "}
             and we&apos;ll match you — see exactly how in the demo below.
           </p>
-        </section>
+        </div>
+      </section>
 
-        {/* ================= 6. HOW IT WORKS (AI Audit path primary) =================
-            Reduced from 5 steps to 3 (confirmed 2026-09-02, direct founder
-            fix — measured live first: at a real 1280px desktop viewport,
-            5 columns in this max-w-5xl section were only ~170px wide
-            each, genuinely too narrow for body text to read comfortably,
-            not just a font-size problem). Kept the 3 steps that carry the
-            real differentiators (intake, deterministic matching, mandatory
-            human review); dropped "submit evidence" and "get findings" as
-            their own steps here — not lost content, the Interactive Demo
-            immediately below already walks through exactly those two
-            steps in real depth, so the "fuller explanation" link points
-            there rather than duplicating it. */}
-        <section id="how-it-works" className="border-t border-neutral-200 py-6">
-          <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">How your AI Readiness Review actually works</h2>
+      {/* ================= 6. HOW IT WORKS (AI Audit path primary) — #f9f9f9 =================
+          Reduced from 5 steps to 3 (confirmed 2026-09-02, direct founder
+          fix — measured live first: at a real 1280px desktop viewport,
+          5 columns in this max-w-5xl section were only ~170px wide
+          each, genuinely too narrow for body text to read comfortably,
+          not just a font-size problem). Kept the 3 steps that carry the
+          real differentiators (intake, deterministic matching, mandatory
+          human review); dropped "submit evidence" and "get findings" as
+          their own steps here — not lost content, the Interactive Demo
+          immediately below already walks through exactly those two
+          steps in real depth, so the "fuller explanation" link points
+          there rather than duplicating it. */}
+      <section id="how-it-works" className="border-t border-neutral-200 bg-background">
+        <div className="mx-auto w-full max-w-5xl px-6 py-6">
+          <h2 className={SECTION_HEADLINE}>How your AI Readiness Review actually works</h2>
           <ol className="mt-8 grid gap-8 sm:grid-cols-3">
             {[
               {
@@ -331,35 +396,31 @@ export default async function LandingPage() {
             </a>
             , including real evidence submission and real findings.
           </p>
-        </section>
+        </div>
+      </section>
 
-      </div>
-
-      {/* ================= 7. INTERACTIVE DEMO =================
-          Deliberately breaks out of the shared max-w-5xl column
-          (confirmed 2026-09-01, direct instruction: "the widest, most
-          visually prominent section on the page after the hero") — its
-          own wider container, a sibling of the max-w-5xl wrapper rather
-          than nested inside it, so every other section stays at its
-          existing width. The two max-w-5xl wrapper divs around it split
-          what was previously one — the second one keeps flex-1 so the
-          footer's mt-auto still reaches the true bottom of the page,
-          unchanged.
-          Widened further and given a full-bleed light background
-          (confirmed 2026-09-02, direct founder fix — "near-full width...
-          a very light background... to visually distinguish it as a
-          separate interactive zone"): max-w-6xl -> max-w-7xl (1280px,
-          the widest section on the page by a clear margin now), and
-          bg-neutral-100 (#f5f5f4, matching the exact hex requested)
-          applied to the SECTION itself so the wash spans edge-to-edge,
-          not just the constrained content column — the demo widget's
-          own bg-neutral-50 (#fafafa, very slightly lighter) still sits
-          inside it, so the widget now reads as a real card floating on
-          a distinct zone, not one flat identical gray. */}
-      <section id="see-it-work" className="border-t border-neutral-200 bg-neutral-100 py-6">
-        <div className="mx-auto w-full max-w-7xl px-6">
-          <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">See it work — no sign-in, no leaving this page</h2>
-          <p className="mt-3 max-w-2xl text-neutral-600">
+      {/* ================= 7. INTERACTIVE DEMO — Slate Onyx #1C2033 =================
+          Deliberately wider than every other section (confirmed
+          2026-09-01/02, direct instruction: "the widest, most visually
+          prominent section on the page after the hero") — its own
+          max-w-7xl inner column, same full-bleed-section pattern as
+          every other section on this page.
+          Background changed from the light #f5f5f4 wash to dark Slate
+          Onyx #1C2033 (confirmed 2026-09-02, item 5) — every text
+          element directly in this section (not inside the white active-
+          step panel, which "stays white with shadow" per explicit
+          instruction) recolored to white/neutral-200 (#e8e8e8 exact).
+          The "See it work..." heading is a deliberate, disclosed
+          resolution of a real conflict between item 4 (this headline
+          should be #1a1a1a like every other section headline) and item
+          5 (text in this section must be white/light-grey) — item 5's
+          explicit per-section color rule wins for color, item 4's size/
+          weight (30px/700) still applies, since #1a1a1a text on #1C2033
+          would be almost invisible. */}
+      <section id="see-it-work" className="border-t border-neutral-200 bg-[#1C2033]">
+        <div className="mx-auto w-full max-w-7xl px-6 py-6">
+          <h2 className="text-3xl font-bold text-white">See it work — no sign-in, no leaving this page</h2>
+          <p className="mt-3 max-w-2xl text-neutral-200">
             Click any step, use the arrows, or just let it play. Step 4 shows real, verbatim findings from an actual delivered
             review.
           </p>
@@ -369,24 +430,22 @@ export default async function LandingPage() {
         </div>
       </section>
 
-      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-6">
-        {/* ================= 8. EXECUTION AUDIT (secondary, condensed) =================
-            This is what the hero's own secondary text link jumps to. Deliberately
-            NOT a full top-level section matching sections 2-7's depth — the
-            five-lens breakdown that used to be its own dedicated section on the
-            old, single-core page is condensed into this one block, since
-            Execution Audit is now the secondary product, not the page's own
-            narrative spine. Conflict Detection lives here, not in "Why us"
-            above — it's a real, genuine differentiator of THIS product
-            specifically (Conflict Detection runs across a Core Audit's five
-            lenses; the three AI Readiness Review modules each have their own,
-            different duplicate-finding safeguards instead), so claiming it as a
-            universal "Why us" point under AI Readiness Review's own primary
-            framing would have overstated what's actually true there. */}
-        <section id="execution-audit" className="border-t border-neutral-200 py-6">
-          <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">
-            Not about AI specifically? Try the Execution Audit.
-          </h2>
+      {/* ================= 8. EXECUTION AUDIT (secondary, condensed) — white =================
+          This is what the hero's own secondary text link jumps to. Deliberately
+          NOT a full top-level section matching sections 2-7's depth — the
+          five-lens breakdown that used to be its own dedicated section on the
+          old, single-core page is condensed into this one block, since
+          Execution Audit is now the secondary product, not the page's own
+          narrative spine. Conflict Detection lives here, not in "Why us"
+          above — it's a real, genuine differentiator of THIS product
+          specifically (Conflict Detection runs across a Core Audit's five
+          lenses; the three AI Readiness Review modules each have their own,
+          different duplicate-finding safeguards instead), so claiming it as a
+          universal "Why us" point under AI Readiness Review's own primary
+          framing would have overstated what's actually true there. */}
+      <section id="execution-audit" className="border-t border-neutral-200 bg-white">
+        <div className="mx-auto w-full max-w-5xl px-6 py-6">
+          <h2 className={SECTION_HEADLINE}>Not about AI specifically? Try the Execution Audit.</h2>
           <p className="mt-3 max-w-2xl text-neutral-600">
             If your actual bottleneck is margin, growth, retention, execution speed, or product delivery, the Execution Audit
             runs five independent AI lenses — Financial, Commercial, Execution, Product, and AI &amp; Governance — against
@@ -401,7 +460,7 @@ export default async function LandingPage() {
                 prominent, top-of-card price statement mirroring how
                 Modules/Pricing anchor real offers with a bold price, not
                 a small footnote line. */}
-            <div className="rounded-lg border border-neutral-200 p-6 shadow-card-1">
+            <div className="rounded-lg border border-neutral-200 bg-white p-6 shadow-card-1">
               <p className="text-sm font-medium uppercase tracking-wide text-neutral-500">Execution Audit</p>
               <p className="mt-1 text-3xl font-semibold text-neutral-900">Free</p>
               <p className="mt-3 text-sm text-neutral-600">
@@ -427,10 +486,6 @@ export default async function LandingPage() {
             {/* Real, verbatim content from /demo-live (Riverbank Analytics
                 Ltd, a test company built specifically to be safe for public
                 display) — not fabricated example data. */}
-            {/* All text bumped to a minimum of text-sm/14px (confirmed
-                2026-09-02, direct founder fix) — the caption and the
-                roadmap day labels were previously 10px/11px, both under
-                the requested 13px floor. */}
             <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-6 shadow-card-1">
               <p className="text-sm font-medium uppercase tracking-wide text-neutral-400">Real example — Riverbank Analytics Ltd</p>
               <p className="mt-2 text-sm font-medium text-neutral-900">Top 3 priorities</p>
@@ -448,11 +503,13 @@ export default async function LandingPage() {
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ================= 9. PRICING (mirrors the in-app Services page) ================= */}
-        <section id="pricing" className="border-t border-neutral-200 py-6">
-          <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">Pricing</h2>
+      {/* ================= 9. PRICING (mirrors the in-app Services page) — #f9f9f9 ================= */}
+      <section id="pricing" className="border-t border-neutral-200 bg-background">
+        <div className="mx-auto w-full max-w-5xl px-6 py-6">
+          <h2 className={SECTION_HEADLINE}>Pricing</h2>
           <p className="mt-3 max-w-2xl text-neutral-600">
             Real, live pricing — the same numbers shown inside the product, not a sales-call-to-find-out.
           </p>
@@ -461,7 +518,7 @@ export default async function LandingPage() {
             <div>
               <h3 className="mb-4 text-base font-semibold text-neutral-900">Execution Audit</h3>
               <div className="grid gap-6 sm:grid-cols-2">
-                <div className="flex flex-col rounded-lg border-2 border-neutral-300 p-6">
+                <div className="flex flex-col rounded-lg border-2 border-neutral-300 bg-white p-6">
                   <p className="text-sm font-medium uppercase tracking-wide text-neutral-500">Standard</p>
                   <p className="mt-2 text-3xl font-semibold text-neutral-900">Free</p>
                   <p className="mt-2 text-sm text-neutral-600">
@@ -475,7 +532,7 @@ export default async function LandingPage() {
                     Get started
                   </Link>
                 </div>
-                <div className="flex flex-col rounded-lg border-2 border-accent p-6">
+                <div className="flex flex-col rounded-lg border-2 border-accent bg-white p-6">
                   <p className="text-sm font-medium uppercase tracking-wide text-accent-cta">Concierge</p>
                   {/* Real price, visible (confirmed 2026-09-02, direct
                       founder fix) — "Contact Sales" here directly
@@ -530,20 +587,16 @@ export default async function LandingPage() {
                   default rounded (4px). Query-param slugs match the
                   founder's own given examples exactly. */}
               <div className="grid gap-6 sm:grid-cols-3">
-                {[
-                  { key: "tender_readiness", title: "Tender Readiness", slug: "tender-readiness" },
-                  { key: "ai_reliability_audit", title: "AI Reliability Audit", slug: "ai-reliability" },
-                  { key: "data_protection_compliance", title: "Data Protection Compliance", slug: "data-protection" },
-                ].map((mod) => {
+                {MODULES.map((mod) => {
                   const price = pricingByKey.get(mod.key);
                   return (
-                    <div key={mod.key} className="rounded-lg border border-neutral-200 p-6">
+                    <div key={mod.key} className="flex flex-col rounded-lg border border-neutral-200 bg-white p-6">
                       <p className="font-medium text-neutral-900">{mod.title}</p>
                       {price && <p className="mt-2 text-2xl font-semibold text-neutral-900">{formatPrice(price)}</p>}
                       <p className="mt-2 text-xs text-neutral-500">Human-reviewed, typically within {moduleTurnaroundHours} hours.</p>
                       <Link
                         href={`/client-login?module=${mod.slug}`}
-                        className="mt-4 inline-block rounded-md border border-accent-cta px-4 py-2 text-sm font-medium text-accent-cta hover:bg-accent-cta hover:text-white"
+                        className="mt-4 inline-block self-start rounded-md border border-accent-cta px-4 py-2 text-sm font-medium text-accent-cta hover:bg-accent-cta hover:text-white"
                       >
                         Request this review
                       </Link>
@@ -569,11 +622,17 @@ export default async function LandingPage() {
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ================= 10. FAQ ================= */}
-        <section id="faq" className="border-t border-neutral-200 py-6">
-          <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">Frequently asked questions</h2>
+      {/* ================= 10. FAQ — white =================
+          Not explicitly listed in item 4/1's own section lists — extended
+          the established alternation pattern here deliberately (see
+          SECTION_HEADLINE's own docblock for the same reasoning applied
+          to headline sizing). */}
+      <section id="faq" className="border-t border-neutral-200 bg-white">
+        <div className="mx-auto w-full max-w-5xl px-6 py-6">
+          <h2 className={SECTION_HEADLINE}>Frequently asked questions</h2>
           <div className="mt-8 max-w-2xl divide-y divide-neutral-200">
             {[
               {
@@ -618,15 +677,15 @@ export default async function LandingPage() {
               </details>
             ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ================= 11. CONTACT US / BOOK A DEMO (preserved, per explicit instruction) ================= */}
-        <section className="border-t border-neutral-200 py-6">
-          <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">
-            Not ready to submit evidence yet? Talk it through first.
-          </h2>
+      {/* ================= 11. CONTACT US / BOOK A DEMO (preserved, per explicit instruction) — #f9f9f9 ================= */}
+      <section className="border-t border-neutral-200 bg-background">
+        <div className="mx-auto w-full max-w-5xl px-6 py-6">
+          <h2 className={SECTION_HEADLINE}>Not ready to submit evidence yet? Talk it through first.</h2>
           <div className="mt-8 grid gap-6 sm:grid-cols-2">
-            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-6">
+            <div className="rounded-lg border border-neutral-200 bg-white p-6">
               <h3 className="font-medium text-neutral-900">Book a demo now</h3>
               <p className="mt-2 text-sm text-neutral-600">
                 Pick a time yourself, right now — no signup, no evidence needed. Fastest way to talk to someone.
@@ -640,7 +699,7 @@ export default async function LandingPage() {
                 Book a demo →
               </Link>
             </div>
-            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-6">
+            <div className="rounded-lg border border-neutral-200 bg-white p-6">
               <h3 className="font-medium text-neutral-900">Request a Discovery Session</h3>
               <p className="mt-2 text-sm text-neutral-600">
                 Offered on every plan, no extra cost on Standard, included by default on Concierge. Sign up and request one
@@ -655,12 +714,21 @@ export default async function LandingPage() {
               </Link>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ================= 12. FINAL CTA + FOOTER ================= */}
-        <section className="border-t border-neutral-200 py-6">
-          <div className="rounded-lg border-l-4 border-accent bg-[#fffbf0] p-8 text-center shadow-card-2">
-            <h2 className="text-xl font-semibold text-neutral-900">Would your AI pass a real review?</h2>
+      {/* ================= 12. FINAL CTA + FOOTER — copper wash #FDF6EE =================
+          The outer section now carries the exact requested wash color;
+          the inner card switched from its own near-identical cream
+          (#fffbf0) to plain white, so it reads as a real card floating
+          on a matching-toned zone — the same "white panel on a colored
+          zone" pattern already proven for the dark demo section above,
+          rather than two near-identical creams flattening into one
+          undifferentiated block. */}
+      <section className="border-t border-neutral-200 bg-[#FDF6EE]">
+        <div className="mx-auto w-full max-w-5xl px-6 py-6">
+          <div className="rounded-lg border-l-4 border-accent bg-white p-8 text-center shadow-card-2">
+            <h2 className={SECTION_HEADLINE}>Would your AI pass a real review?</h2>
             <p className="mx-auto mt-2 max-w-md text-sm text-neutral-600">
               See exactly which one applies to you — before your next procurement, security, or investor question does.
             </p>
@@ -673,9 +741,11 @@ export default async function LandingPage() {
               </a>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <footer className="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-neutral-200 py-6 text-xs text-neutral-500">
+      <footer className="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-neutral-200 bg-background px-6 py-6 text-xs text-neutral-500">
+        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-4">
           <span>© {new Date().getFullYear()} Elvanis</span>
           <div className="flex gap-4">
             <Link href="/privacy" className="hover:underline">
@@ -688,8 +758,8 @@ export default async function LandingPage() {
               Get started
             </Link>
           </div>
-        </footer>
-      </div>
+        </div>
+      </footer>
     </div>
   );
 }

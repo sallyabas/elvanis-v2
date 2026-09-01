@@ -17,6 +17,21 @@ import { useEffect, useState, type ReactNode } from "react";
  * real-content reproduction using the app's own real CSS/data (see the
  * landing page's own docblock for why this session's tooling couldn't
  * export a literal raster screenshot, and what was done instead).
+ *
+ * Dark-frame styling (confirmed 2026-09-02, item 5) — this component's
+ * one current call site now sits on a dark #1C2033 section background,
+ * so the outer widget frame (previously bg-neutral-50, near-white) and
+ * the tab/prev/next chrome around the white active-step panel were
+ * recolored to sit correctly on dark: a subtle white-tinted frame
+ * (bg-white/5, border-white/10) instead of a solid light box, light-grey
+ * inactive tabs, and an accent-colored active tab (the old bg-neutral-900
+ * active state would have been nearly invisible against #1C2033). The
+ * active-step panel itself is untouched — it was already a real white
+ * card with its own shadow before this pass, exactly what "the demo
+ * panel itself stays white with shadow" asks for. Hardcoded for this
+ * dark context rather than given a light/dark variant prop — there is
+ * only one real call site today; a future light-background reuse would
+ * need this revisited, flagged here rather than over-engineered now.
  */
 
 const AUTOPLAY_MS = 4500;
@@ -60,7 +75,7 @@ export function InteractiveDemoSection({ steps }: { steps: DemoStep[] }) {
   const step = steps[activeStep];
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-8 sm:p-10">
+    <div className="rounded-lg border border-white/10 bg-white/5 p-8 sm:p-10">
       <div className="flex flex-wrap gap-2">
         {steps.map((s, i) => (
           <button
@@ -69,7 +84,7 @@ export function InteractiveDemoSection({ steps }: { steps: DemoStep[] }) {
             onClick={() => goTo(i)}
             aria-current={i === activeStep}
             className={`min-w-[8rem] flex-1 rounded px-4 py-3 text-left text-sm font-medium transition-colors ${
-              i === activeStep ? "bg-neutral-900 text-neutral-50" : "bg-white text-neutral-500 hover:text-neutral-900"
+              i === activeStep ? "bg-accent-cta text-white" : "bg-white/10 text-neutral-200 hover:bg-white/15 hover:text-white"
             }`}
           >
             <span className="block text-xs uppercase tracking-wide opacity-70">{s.eyebrow}</span>
@@ -99,14 +114,14 @@ export function InteractiveDemoSection({ steps }: { steps: DemoStep[] }) {
           type="button"
           onClick={prev}
           aria-label="Previous step"
-          className="rounded border border-neutral-300 px-4 py-2 text-sm text-neutral-600 hover:border-accent hover:text-accent"
+          className="rounded border border-white/20 px-4 py-2 text-sm text-neutral-200 hover:border-accent-cta hover:text-accent-cta"
         >
           ← Previous
         </button>
         {isPlaying ? (
-          <span className="text-sm text-neutral-400">Auto-playing…</span>
+          <span className="text-sm text-neutral-300">Auto-playing…</span>
         ) : (
-          <button type="button" onClick={() => setIsPlaying(true)} className="text-sm text-neutral-500 underline hover:text-accent">
+          <button type="button" onClick={() => setIsPlaying(true)} className="text-sm text-neutral-300 underline hover:text-accent-cta">
             ▶ Resume auto-play
           </button>
         )}
@@ -114,7 +129,7 @@ export function InteractiveDemoSection({ steps }: { steps: DemoStep[] }) {
           type="button"
           onClick={next}
           aria-label="Next step"
-          className="rounded border border-neutral-300 px-4 py-2 text-sm text-neutral-600 hover:border-accent hover:text-accent"
+          className="rounded border border-white/20 px-4 py-2 text-sm text-neutral-200 hover:border-accent-cta hover:text-accent-cta"
         >
           Next →
         </button>
