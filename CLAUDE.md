@@ -2069,6 +2069,24 @@ Second, more targeted follow-up from the founder — five numbered fixes, no cop
 
 **Verified live**, not assumed: every section's real computed padding, every wrapper's real rendered width (1280px demo vs. 1024px everywhere else), the demo section's real background color (`rgb(245, 245, 244)`), the Concierge card's real rendered price and button `href`, the new anchor link's `href` resolving to the correct section id, and the how-it-works column width before and after the reduction. `tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean. `git status --short` confirmed only `page.tsx` touched, no scratch debris, before delivering screenshots for review.
 
+Committed and pushed (commit `2556fe9`), per explicit go-ahead.
+
+## Landing page polish, round 3 — active-demo-panel shadow, copy trim, Concierge tracking param, one honest non-fix (confirmed 2026-09-02)
+
+Third, final-sign-off-targeted follow-up — five numbered items, each investigated/measured live before deciding, no copy changes except where explicitly requested.
+
+**1. Section padding — measured, genuine discrepancy found, not "fixed" further.** The founder flagged two specific gaps ("Someone is about to ask..." → "Evidence in...", and "Built so you're ready..." → "Three reviews...") as still 80–100px. Measured both precisely in this local build — real DOM distance from the last content element's bottom to the next `<h2>`'s top, not just the CSS padding value — and got **49px for both**, already at the floor of the requested 48–64px range. Did not reduce further, since that would have pushed below the founder's own stated floor on the strength of a number this build can't reproduce. Disclosed the likely explanation instead: the founder may be reviewing the deployed Vercel site rather than this local build, and if that deployment (or the founder's browser cache) hasn't picked up the last two pushed commits, the pre-fix spacing would still be showing. Deliberately did not attempt to check or trigger the Vercel deployment — doing so would have meant starting a Vercel account login flow, which isn't something to do unprompted.
+
+**2. Interactive demo active-step panel, strengthened — verified via computed styles, not eyeballed.** [InteractiveDemoSection.tsx](src/app/_components/InteractiveDemoSection.tsx)'s active-step content is now wrapped in a real white card (`bg-white`) with the exact requested shadow — `shadow-[0_4px_12px_rgba(0,0,0,0.08)]`, a deliberate arbitrary value rather than substituting the close-but-not-identical `shadow-card-2` token (which uses a 0.1 alpha, not the requested 0.08) — confirmed live via `getComputedStyle()` returning `rgba(0, 0, 0, 0.08) 0px 4px 12px` exactly. [AiReadinessDemoSteps.tsx](src/app/_components/AiReadinessDemoSteps.tsx)'s Step4Visual (the real verbatim finding text) bumped from 14px/medium to **16px/semibold** titles, each finding given its own light neutral-50, subtly-shadowed card so the two real findings read as distinct, weighty artifacts sitting inside the new white panel rather than blending into it — the single highest-trust moment on the page, per the founder's own framing.
+
+**3. "How it works" 3-step columns — copy trimmed, width left alone after checking.** Step 1's body was 4 sentences (3 questions + a closing statement); trimmed to 2 by combining the three questions into one ("Are you using AI with customers, had a compliance or procurement request, or handling personal data?"). Steps 2 and 3 were already single sentences, untouched. Measured real wrapping afterward at the existing 304px column width (from the previous round's 5-to-3-step reduction) — 4 clean lines, no awkward breaks — so the section's width was deliberately left unchanged, per the founder's own conditional instruction ("if text still wraps badly").
+
+**4. "Request Concierge" routing — already real, now tagged.** Confirmed it already routed to `/client-login` (the real Concierge request is a signed-in, session-scoped action — set in the previous round). Added `?plan=concierge` for future attribution, confirmed harmless by checking `/client-login`'s page code doesn't read `searchParams` at all.
+
+**5. Full bottom-section screenshot delivered** (modules pricing, Execution Sprint, FAQ, Contact, Final CTA, footer) alongside a full top-to-bottom capture with the demo mid-interaction on Step 4, showing the strengthened panel live.
+
+`tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean. `git status --short` confirmed only the three touched files, no scratch debris.
+
 Committed and pushed, per explicit go-ahead.
 
 ## Working style

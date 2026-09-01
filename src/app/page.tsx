@@ -304,7 +304,7 @@ export default async function LandingPage() {
               {
                 step: "1",
                 title: "Answer 3 quick questions",
-                body: "Using AI with customers? A recent compliance or procurement request? Handling personal data? That's the whole intake — a routing decision, not a form.",
+                body: "Are you using AI with customers, had a compliance or procurement request, or handling personal data? That's the whole intake — a routing decision, not a form.",
               },
               {
                 step: "2",
@@ -496,8 +496,14 @@ export default async function LandingPage() {
                     Everything in Standard, plus a Discovery Session and a Delivery Session included by default, and deeper
                     reviewer attention on ambiguous findings.
                   </p>
+                  {/* ?plan=concierge (confirmed 2026-09-02, direct
+                      founder fix) — a real tracking parameter, not a
+                      functional route: /client-login itself never reads
+                      searchParams (confirmed by reading the page
+                      directly), so this passes through harmlessly and is
+                      available for later analytics/attribution work. */}
                   <Link
-                    href="/client-login"
+                    href="/client-login?plan=concierge"
                     className="mt-6 inline-block self-start rounded bg-accent-cta px-5 py-2.5 text-sm font-medium text-white hover:bg-accent-cta-hover"
                   >
                     Request Concierge

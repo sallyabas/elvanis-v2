@@ -78,7 +78,15 @@ export function InteractiveDemoSection({ steps }: { steps: DemoStep[] }) {
         ))}
       </div>
 
-      <div className="mt-8 grid gap-8 sm:grid-cols-2 sm:items-center">
+      {/* Active step panel, strengthened (confirmed 2026-09-02, direct
+          founder fix — "this section needs to feel like the most
+          trustworthy moment on the page"): a real white card with an
+          exact rgba shadow (0 4px 12px rgba(0,0,0,0.08), the precise
+          value requested — close to but deliberately not substituted
+          with this app's own shadow-card-2 token, which uses a slightly
+          higher 0.1 alpha), lifted off the neutral-50 widget frame
+          behind it rather than sitting flush with it. */}
+      <div className="mt-8 grid gap-8 rounded-lg bg-white p-6 shadow-[0_4px_12px_rgba(0,0,0,0.08)] sm:grid-cols-2 sm:items-center sm:p-8">
         <div>
           <h3 className="text-xl font-medium text-neutral-900 sm:text-2xl">{step.title}</h3>
           <p className="mt-3 text-base text-neutral-600">{step.body}</p>

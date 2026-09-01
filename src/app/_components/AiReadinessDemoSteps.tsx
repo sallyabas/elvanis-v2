@@ -82,26 +82,31 @@ function Step3Visual() {
 }
 
 // Verbatim, real finding text — see this file's own docblock for source
-// and non-PII confirmation. Not paraphrased, not invented.
+// and non-PII confirmation. Not paraphrased, not invented. Made larger
+// and more prominent (confirmed 2026-09-02, direct founder fix — this is
+// the page's single highest-trust moment) — title bumped to 16px/
+// semibold, cards given a light neutral-50 fill + shadow-card-1 so they
+// read as distinct, weighty artifacts sitting inside the new white
+// active-step panel, not flush white-on-white.
 function Step4Visual() {
   return (
     <div className="space-y-3">
-      <div className="rounded border border-neutral-200 bg-white p-4">
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-medium text-neutral-900">No compliance documentation submitted for applicable jurisdictions</p>
+      <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 shadow-card-1">
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-base font-semibold text-neutral-900">No compliance documentation submitted for applicable jurisdictions</p>
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${SEVERITY_STYLES.high}`}>High</span>
         </div>
-        <p className="mt-1 text-sm text-neutral-600">
+        <p className="mt-2 text-sm text-neutral-600">
           This company is subject to at least one AI-specific regulatory regime but has submitted no existing risk assessment or
           procurement-readiness documentation.
         </p>
       </div>
-      <div className="rounded border border-neutral-200 bg-white p-4">
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-medium text-neutral-900">EU AI Act Risk Classification</p>
+      <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 shadow-card-1">
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-base font-semibold text-neutral-900">EU AI Act Risk Classification</p>
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${SEVERITY_STYLES.medium}`}>Medium</span>
         </div>
-        <p className="mt-1 text-sm text-neutral-600">Classified limited-risk — reviewed and approved by a human before delivery.</p>
+        <p className="mt-2 text-sm text-neutral-600">Classified limited-risk — reviewed and approved by a human before delivery.</p>
       </div>
     </div>
   );
