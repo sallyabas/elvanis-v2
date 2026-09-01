@@ -514,11 +514,26 @@ export default async function LandingPage() {
 
             <div>
               <h3 className="mb-4 text-base font-semibold text-neutral-900">AI Readiness Review modules</h3>
+              {/* Per-module "Request this review" CTA (confirmed
+                  2026-09-02, direct founder fix) — these three cards
+                  previously showed price/turnaround only, no action.
+                  "Copper outline" here uses --color-accent-cta (#9c612b),
+                  not the literal #B87333 given in the spec — the same
+                  accessible substitution already applied to every other
+                  copper CTA on this page (see globals.css's own
+                  disclosure comment): raw #B87333 text/border on a white
+                  background measures ~3.79:1, failing the WCAG AA 4.5:1
+                  minimum for normal text, which is exactly why
+                  accent-cta exists. rounded-md (6px) used specifically
+                  here to match the requested border-radius precisely,
+                  even though most other buttons on this page use the
+                  default rounded (4px). Query-param slugs match the
+                  founder's own given examples exactly. */}
               <div className="grid gap-6 sm:grid-cols-3">
                 {[
-                  { key: "tender_readiness", title: "Tender Readiness" },
-                  { key: "ai_reliability_audit", title: "AI Reliability Audit" },
-                  { key: "data_protection_compliance", title: "Data Protection Compliance" },
+                  { key: "tender_readiness", title: "Tender Readiness", slug: "tender-readiness" },
+                  { key: "ai_reliability_audit", title: "AI Reliability Audit", slug: "ai-reliability" },
+                  { key: "data_protection_compliance", title: "Data Protection Compliance", slug: "data-protection" },
                 ].map((mod) => {
                   const price = pricingByKey.get(mod.key);
                   return (
@@ -526,6 +541,12 @@ export default async function LandingPage() {
                       <p className="font-medium text-neutral-900">{mod.title}</p>
                       {price && <p className="mt-2 text-2xl font-semibold text-neutral-900">{formatPrice(price)}</p>}
                       <p className="mt-2 text-xs text-neutral-500">Human-reviewed, typically within {moduleTurnaroundHours} hours.</p>
+                      <Link
+                        href={`/client-login?module=${mod.slug}`}
+                        className="mt-4 inline-block rounded-md border border-accent-cta px-4 py-2 text-sm font-medium text-accent-cta hover:bg-accent-cta hover:text-white"
+                      >
+                        Request this review
+                      </Link>
                     </div>
                   );
                 })}

@@ -2087,6 +2087,20 @@ Third, final-sign-off-targeted follow-up — five numbered items, each investiga
 
 `tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean. `git status --short` confirmed only the three touched files, no scratch debris.
 
+Committed and pushed (commit `7880515`), per explicit go-ahead.
+
+## Landing page polish, round 4 — module request CTAs, one already-correct item confirmed twice (confirmed 2026-09-02)
+
+Three final pre-launch items, each investigated before touching code.
+
+**1. Demo Step 4 finding card shadows — confirmed already exact, no code change.** The founder reported the two finding cards still looking flat and asked for `box-shadow: 0 1px 3px rgba(0,0,0,0.08)`. Checked both the source and the live computed style: `shadow-card-1` (already applied to these cards the previous round) resolves to exactly `rgba(0, 0, 0, 0.08) 0px 1px 3px` — byte-for-byte the requested value, confirmed twice via `getComputedStyle()`. No change made, since the code already matches the spec precisely. This is the second round in a row where a reported visual gap didn't reproduce in this local build (the first was the section-padding gap) — flagged again that this pattern most likely means a deployed build or browser cache lagging behind the last few pushes, not a real discrepancy in the code.
+
+**2. "Request this review" CTAs added to the Pricing section's three module cards.** These compact cards (Tender Readiness/AI Reliability Audit/Data Protection Compliance, under "AI Readiness Review modules") previously showed price and turnaround only, no action — now each gets a real outline button routing to `/client-login?module=<slug>` (`tender-readiness`/`ai-reliability`/`data-protection`, matching the founder's own given examples exactly). **One deliberate, disclosed substitution**: used `--color-accent-cta` (`#9c612b`) for the button's border/text instead of the literal `#B87333` specified — raw `#B87333` on white measures ~3.79:1 contrast, failing the WCAG AA 4.5:1 minimum fixed earlier this session, and every other "copper" CTA on this page already uses this same accessible substitution rather than the raw brand hex. `rounded-md` used specifically for these buttons to hit the requested 6px radius exactly (most other buttons on the page use the default `rounded`, 4px). Verified live: all three buttons render `rgb(156, 97, 43)` border/text, transparent background, `border-radius: 6px`, and the three correct hrefs.
+
+**3. "Book a demo →" — confirmed already correct, no change.** Verified live via the actual rendered `href`: still the real, unchanged `https://calendly.com/elvanis-app/30min` — the founder's own account URL, not a placeholder.
+
+`tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean. `git status --short` confirmed only `page.tsx` touched.
+
 Committed and pushed, per explicit go-ahead.
 
 ## Working style
