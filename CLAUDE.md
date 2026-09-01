@@ -2159,6 +2159,14 @@ Four numbered follow-ups on the layout redesign above, worked through individual
 
 Committed and pushed (commit `7f41a86`), per explicit go-ahead.
 
+## Landing page: Section 2 subheadline-to-card gap tightened (confirmed 2026-09-02)
+
+Final single-item spacing fix, scoped explicitly to Section 2 ("Evidence in. Human-reviewed findings out.") only — the gap between the subheadline paragraph and the "What's genuinely missing" featured card below it, requested down to 24–32px. Measured live before changing: this local build showed 40px (`mt-10`), not the ~80px reported — flagged again as the fourth instance this session of a reported gap not reproducing locally, consistent with the already-disclosed stale-deployment/cache theory (the deleted, broken duplicate Vercel project). Changed `mt-10` → `mt-8` on the bento-grid wrapper regardless, landing exactly at **32px** — the top of the requested band, chosen deliberately over the tighter 24px floor since this transition leads into the section's single most load-bearing card, not an ordinary intra-section gap. No other section's spacing was touched — this was the only gap named.
+
+**Verified live**: computed the exact pixel gap before (40px) and after (32px) via `getBoundingClientRect()`, and screenshotted the section showing the subheadline now flowing directly into the featured card. `tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean. `git status --short` confirmed only `page.tsx` touched.
+
+Committed and pushed (commit `4697729`), per explicit go-ahead.
+
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
 - Don't over-build ahead of proof. Exception: modules built from external research (Tender Readiness, AI Reliability, Data Protection) don't need a live client first — they're sequenced by engine-readiness, not by demand signal.
