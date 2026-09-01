@@ -55,6 +55,32 @@
   --color-accent-ink: #412402;
 
   /*
+   * Accessible CTA shade (confirmed 2026-09-01, landing page rebuild) —
+   * a real, disclosed, deliberate deviation from --color-accent above,
+   * NOT an error. Computed contrast ratios (WCAG 2.2 relative-luminance
+   * formula) against this app's real backgrounds found white text on
+   * --color-accent is only 3.79:1, and --color-accent text on white/
+   * #f9f9f9/#f5f5f4 is also ~3.6-3.8:1 — both fail the 4.5:1 AA minimum
+   * for normal-weight text at typical button/link sizes (text-sm
+   * font-medium doesn't qualify for the 3:1 large-text exception, which
+   * needs 18.66px-bold or 24px-normal). This is a real, pre-existing gap
+   * in the app-wide brand system, not something introduced here — fixing
+   * --color-accent itself would be a separate, larger, app-wide
+   * accessibility remediation, not something to fold silently into a
+   * landing-page rebuild.
+   *
+   * --color-accent-cta (#9c612b, verified 4.8-5.1:1 against every real
+   * light background this app uses) is scoped to the new landing page
+   * only, for text/button elements where AA compliance matters — CTA
+   * button backgrounds/text and inline accent-colored links. Purely
+   * decorative accent uses (borders, small icons, hover washes, the
+   * eyebrow-label color) keep the true brand --color-accent (#b87333)
+   * unchanged, per direct founder confirmation.
+   */
+  --color-accent-cta: #9c612b;
+  --color-accent-cta-hover: #8a5626;
+
+  /*
    * Three-level card elevation system (spec point 2) — real box-shadow
    * values, not Tailwind's default `shadow-sm`/`shadow-md` scale (which
    * doesn't match the specified rgba/blur values). Used as `shadow-card-1`
