@@ -6,6 +6,7 @@ import { getSettingNumber } from "@/lib/app-settings";
 import { MODULE_LEGAL_DISCLAIMER } from "@/lib/modules/legal-disclaimer";
 import { InteractiveDemoSection } from "./_components/InteractiveDemoSection";
 import { AI_READINESS_DEMO_STEPS } from "./_components/AiReadinessDemoSteps";
+import { TriageScreenMockup, FindingCardMockup } from "./_components/LandingPageMockups";
 
 /**
  * Full landing page rebuild (confirmed 2026-09-01) — supersedes the
@@ -205,26 +206,42 @@ export default async function LandingPage() {
             Not hypothetically — this is already how AI gets scrutinized in a real deal, a real security review, or a real
             board conversation.
           </p>
-          <div className="mt-10 grid gap-8 sm:grid-cols-3">
-            {[
-              {
-                title: "A procurement questionnaire",
-                body: "Enterprise and public-sector buyers now ask AI-specific questions before they'll sign — \"we'll get back to you\" isn't a good look mid-deal.",
-              },
-              {
-                title: "A security review",
-                body: "Your customer's security team wants to know what your AI actually does with their data, and whether a human is watching what it produces.",
-              },
-              {
-                title: "An investor question",
-                body: "Diligence increasingly asks what AI you're running and whether you can prove it's governed — not just that a policy document exists somewhere.",
-              },
-            ].map((item) => (
-              <div key={item.title}>
-                <h3 className="font-medium text-neutral-900">{item.title}</h3>
-                <p className="mt-2 text-sm text-neutral-600">{item.body}</p>
-              </div>
-            ))}
+          {/* Split layout, 60/40 (confirmed 2026-09-02, layout redesign) —
+              lg:grid-cols-5 with a 3/2 column-span split hits exactly
+              60%/40%. Left: a real-content styled mockup of the actual
+              Path B triage screen (see LandingPageMockups.tsx's own
+              docblock for why this is a styled mockup, not a literal
+              screenshot). Right: the three trigger types as their own
+              compact cards, 16px padding exact (p-4), instead of a third
+              equal text column — this was the actual "looks like a blog
+              post" problem: three identical text columns with no visual
+              hierarchy between the product proof and the supporting
+              copy. */}
+          <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-5 lg:items-start">
+            <div className="lg:col-span-3">
+              <TriageScreenMockup />
+            </div>
+            <div className="space-y-4 lg:col-span-2">
+              {[
+                {
+                  title: "A procurement questionnaire",
+                  body: "Enterprise and public-sector buyers now ask AI-specific questions before they'll sign — \"we'll get back to you\" isn't a good look mid-deal.",
+                },
+                {
+                  title: "A security review",
+                  body: "Your customer's security team wants to know what your AI actually does with their data, and whether a human is watching what it produces.",
+                },
+                {
+                  title: "An investor question",
+                  body: "Diligence increasingly asks what AI you're running and whether you can prove it's governed — not just that a policy document exists somewhere.",
+                },
+              ].map((item) => (
+                <div key={item.title} className="rounded-lg bg-white p-4 shadow-card-1">
+                  <h3 className="font-medium text-neutral-900">{item.title}</h3>
+                  <p className="mt-2 text-sm text-neutral-600">{item.body}</p>
+                </div>
+              ))}
+            </div>
           </div>
           <p className="mt-8 max-w-2xl font-medium text-neutral-900">
             Elvanis gives you a documented, evidence-based answer to exactly this — before you&apos;re asked for one.
@@ -240,37 +257,54 @@ export default async function LandingPage() {
             You submit real evidence — a document, or a short guided form. We tell you what&apos;s safe, what&apos;s
             genuinely missing, and what to fix first. A human checks every word before you see it.
           </p>
-          {/* Feature cards (confirmed 2026-09-02, item 2) — real cards,
-              not plain text columns: white bg, shadow-card-1 (exactly
-              0 1px 3px rgba(0,0,0,0.08), the requested value verbatim —
-              no arbitrary value needed, this app's own existing token
-              already matches it precisely), rounded-lg (8px exact),
-              p-5 (20px exact). */}
-          <div className="mt-10 grid gap-6 sm:grid-cols-3">
-            {[
-              {
-                title: "What's safe",
-                body: "Genuine findings that show something is fine get reported as fine — never padded with invented risk to look more thorough than the evidence supports.",
-              },
-              {
-                title: "What's genuinely missing",
-                body: "If you don't have the documentation, trace logs, or a specific answer, that gap becomes a flagged finding automatically — guaranteed in code, never left to an AI's discretion to remember.",
-              },
-              {
-                title: "What to fix first",
-                body: "Every finding carries a real severity and a concrete recommended action, so you know what actually needs attention now versus what can wait.",
-              },
-            ].map((item) => (
-              <div key={item.title} className="rounded-lg bg-white p-5 shadow-card-1">
-                <h3 className="font-medium text-neutral-900">{item.title}</h3>
-                <p className="mt-2 text-sm text-neutral-600">{item.body}</p>
+          {/* Bento layout (confirmed 2026-09-02, layout redesign) — one
+              featured, full-width card for "What's genuinely missing"
+              (the deterministic-guarantee differentiator, arguably the
+              single most load-bearing claim on the page) with a real
+              finding-card mockup inside it, then "What's safe"/"What to
+              fix first" as two smaller, equal side-by-side cards below —
+              replacing three visually-identical cards that gave the
+              actual differentiator no more weight than its two
+              supporting points. */}
+          <div className="mt-10 grid gap-6">
+            <div className="rounded-lg bg-white p-6 shadow-card-1 sm:p-8">
+              <h3 className="text-lg font-medium text-neutral-900">What&apos;s genuinely missing</h3>
+              <p className="mt-2 max-w-2xl text-sm text-neutral-600">
+                If you don&apos;t have the documentation, trace logs, or a specific answer, that gap becomes a flagged
+                finding automatically — guaranteed in code, never left to an AI&apos;s discretion to remember.
+              </p>
+              <div className="mt-5 max-w-xl">
+                <FindingCardMockup />
               </div>
-            ))}
+            </div>
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div className="rounded-lg bg-white p-5 shadow-card-1">
+                <h3 className="font-medium text-neutral-900">What&apos;s safe</h3>
+                <p className="mt-2 text-sm text-neutral-600">
+                  Genuine findings that show something is fine get reported as fine — never padded with invented risk to
+                  look more thorough than the evidence supports.
+                </p>
+              </div>
+              <div className="rounded-lg bg-white p-5 shadow-card-1">
+                <h3 className="font-medium text-neutral-900">What to fix first</h3>
+                <p className="mt-2 text-sm text-neutral-600">
+                  Every finding carries a real severity and a concrete recommended action, so you know what actually needs
+                  attention now versus what can wait.
+                </p>
+              </div>
+            </div>
           </div>
-          <p className="mt-8 max-w-2xl font-medium text-neutral-900">
-            Every one of these is accepted, edited, or rejected by a human reviewer before it ever reaches you — enforced at
-            the system level, not a policy we just say we follow.
-          </p>
+          {/* Copper callout, exact spec (confirmed 2026-09-02) —
+              px-5/py-4 is exactly 20px/16px, border-l-[3px]/#B87333 and
+              text-[15px] are arbitrary values used deliberately since
+              Tailwind's default scale has no native 3px border-width or
+              15px text-size step. */}
+          <div className="mt-8 border-l-[3px] border-[#B87333] bg-[#fffbf0] px-5 py-4">
+            <p className="text-[15px] font-semibold text-neutral-900">
+              Every one of these is accepted, edited, or rejected by a human reviewer before it ever reaches you — enforced
+              at the system level, not a policy we just say we follow.
+            </p>
+          </div>
         </div>
       </section>
 
@@ -278,24 +312,44 @@ export default async function LandingPage() {
       <section className="border-t border-neutral-200 bg-background">
         <div className="mx-auto w-full max-w-5xl px-6 py-6">
           <h2 className={SECTION_HEADLINE}>Built so you&apos;re ready before they ask.</h2>
-          <div className="mt-10 grid gap-6 sm:grid-cols-3">
+          {/* Trust checklist, not a feature grid (confirmed 2026-09-02,
+              layout redesign) — three horizontal rows instead of three
+              equal cards, since "always human-reviewed / missing
+              evidence is itself a finding / source-agnostic evidence"
+              are guarantees to check off, not features to compare
+              side by side. h-10 w-10 = exactly 40x40px; the circle uses
+              accent-cta rather than the true brand accent — a small
+              numeral inside a 40px circle is closer to icon-scale than
+              body text, but using the already-WCAG-safe accessible
+              copper removes any doubt rather than re-litigating the
+              large-text exception a third time on this page. divide-y
+              gives the full-width divider between rows. */}
+          <div className="mt-10 divide-y divide-neutral-200">
             {[
               {
+                n: "1",
                 title: "Always human-reviewed",
                 body: "A human reviewer accepts, edits, or rejects every single AI-drafted finding before it's ever shown to you. This is enforced at the system level, not a policy we just say we follow.",
               },
               {
+                n: "2",
                 title: "Missing evidence is itself a finding",
                 body: "If you don't have documentation, trace logs, or a specific answer, that gap gets flagged automatically — guaranteed in code, never a silent gap in your report.",
               },
               {
+                n: "3",
                 title: "Source-agnostic evidence",
                 body: "Upload a document (we extract the text automatically) or fill in a short guided form — no forced integrations, no OAuth handoff to a tool you don't already trust.",
               },
             ].map((item) => (
-              <div key={item.title} className="rounded-lg bg-white p-5 shadow-card-1">
-                <h3 className="font-medium text-neutral-900">{item.title}</h3>
-                <p className="mt-2 text-sm text-neutral-600">{item.body}</p>
+              <div key={item.title} className="flex items-start gap-5 py-6 first:pt-0 last:pb-0">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-cta text-base font-semibold text-white">
+                  {item.n}
+                </span>
+                <div>
+                  <h3 className="text-base font-semibold text-neutral-900">{item.title}</h3>
+                  <p className="mt-1 text-sm text-neutral-700">{item.body}</p>
+                </div>
               </div>
             ))}
           </div>
