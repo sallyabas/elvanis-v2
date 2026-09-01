@@ -2029,6 +2029,28 @@ Direct founder brief: rebuild the public landing page ([src/app/page.tsx](src/ap
 
 **Verified live, real production build, not assumed from code review**: `tsc --noEmit`/`eslint src/ --quiet`/full `npm run build` all clean; confirmed via direct DOM read exactly one `<h1>`, 11 real specific `<h2>`s (not generic labels), meta title/description lengths exact; confirmed every price (£2,500/£2,000/£2,000/£3,000) and turnaround number (48h modules, 72h Execution Audit) renders from the live DB/settings read, not a literal; clicked through the interactive demo to its real-findings step and confirmed the exact verbatim finding text and severity badges render; expanded the "Is this legal certification?" FAQ item and confirmed it renders the real `MODULE_LEGAL_DISCLAIMER` text verbatim; confirmed both Calendly link occurrences still point to the real, unchanged `calendly.com/elvanis-app/30min` URL; confirmed 8 real `<details>`/`<summary>` FAQ elements and 4 real `<button>` demo tabs with `aria-current`; checked mobile-width (375px) rendering — hero stacks and wraps correctly. `git status --short` confirmed clean (no scratch debris) before delivering screenshots for review.
 
+Committed and pushed (commit `78c5361`), per explicit go-ahead.
+
+## Landing page polish pass — padding, hero trust bar, demo prominence, Execution Audit weight, 2 copy changes (confirmed 2026-09-01)
+
+Direct founder follow-up on the rebuild above, six numbered fixes plus two copy changes, worked through individually and screenshotted before committing.
+
+**1. Section padding, highest priority — done.** Measured before touching anything: every section was `py-16` (64px top/bottom), so two adjacent sections combined into a **128px** visual gap — matching the founder's own "~120–160px" estimate exactly, confirmed via `getComputedStyle()` rather than assumed from the Tailwind class alone. All 11 interior sections dropped to `py-8` (32px), landing the combined gap at **64px** — the floor of the requested 64–80px range, deliberate given this was flagged highest priority.
+
+**2. Hero gap — Option B (trust bar), per explicit "fastest to ship correctly" instruction.** Option A needed a real screenshot, not ready this pass (see the rebuild's own disclosed raster-export limitation above). Added the founder's exact copy — "Evidence-based · Human-reviewed · Delivered within N hours" — as a 3-column checkmark row directly under the hero disclaimer, no background color. The turnaround number reads from the same live `module_delivery_turnaround_target_hours` setting the rest of the page already uses, so it renders "48 hours" today without a second hardcoded copy of that number to drift. Hero's own padding dropped `py-16 sm:py-24` → `py-8 sm:py-12` per fix 1.
+
+**3. Top nav — confirmed untouched**, as instructed; this is the public landing page's own header, separate from the authenticated-app sidebar redesign.
+
+**4. Interactive demo prominence — done, verified numerically, not just visually.** [InteractiveDemoSection.tsx](src/app/_components/InteractiveDemoSection.tsx): step title 18px→24px, step body 14px→16px, tab labels/eyebrows bumped a size each, outer padding `p-6 sm:p-8`→`p-8 sm:p-10`. [AiReadinessDemoSteps.tsx](src/app/_components/AiReadinessDemoSteps.tsx)'s 4 step visuals had every `text-xs`/`text-[10px]`/`text-[11px]` bumped to `text-sm`/`text-xs`. Width: the section was pulled out of the shared 1024px (`max-w-5xl`) column into its own sibling `max-w-6xl` (1152px) container in [page.tsx](src/app/page.tsx) — the two `max-w-5xl` wrapper divs around it were split rather than nested, with `flex-1` kept on the second one so the footer's `mt-auto` still reaches the true page bottom, confirmed unaffected. **Verified live**: measured every section wrapper's real rendered width — every other section is 1024px, this one is genuinely 1152px, the widest section on the page after the header/hero column.
+
+**5. Pricing section — confirmed present, no action needed.** Standard (Free) + Concierge (Contact Sales) both render correctly under `#pricing` alongside the 3 real module prices and Execution Sprint, confirmed via `get_page_text` against the live page.
+
+**6. Execution Audit visual weight — done.** Added `shadow-card-1` (the app's own existing elevation token) to both Execution Audit cards — and, since the Modules cards above them had no elevation either, added it there too, so the two are now genuinely matched rather than one being upgraded past the other. Replaced the small "your first audit is free" footnote line with a bold, top-of-card "Free" price statement (uppercase label + `text-3xl font-semibold`), mirroring exactly how Modules/Pricing already anchor real offers with a prominent price rather than small print.
+
+**Copy changes, exact, verified against the live DOM**: "What Elvanis actually does" → "Evidence in. Human-reviewed findings out. No generic advice."; "Why Elvanis" → "Built so you're ready before they ask."; the hero's secondary text link ("Not about AI specifically? See the Execution Audit ↓") confirmed unchanged, as instructed.
+
+`tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean. `git status --short` confirmed only the three touched files, no scratch debris, before delivering screenshots for review.
+
 Committed and pushed, per explicit go-ahead.
 
 ## Working style

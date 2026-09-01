@@ -93,9 +93,9 @@ export default async function LandingPage() {
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-6">
+      <div className="mx-auto flex w-full max-w-5xl flex-col px-6">
         {/* ================= 1. HERO ================= */}
-        <section className="py-16 sm:py-24">
+        <section className="py-8 sm:py-12">
           <p className="text-sm font-medium uppercase tracking-wide text-accent">For teams running AI in production</p>
           <h1 className="mt-4 max-w-2xl text-4xl font-semibold leading-tight tracking-tight text-neutral-900 sm:text-5xl">
             Your AI Readiness Review, before they ask.
@@ -123,10 +123,29 @@ export default async function LandingPage() {
               Not about AI specifically? See the Execution Audit ↓
             </a>
           </p>
+
+          {/* Hero-gap fix, Option B (confirmed 2026-09-01 — fastest to ship
+              correctly, per explicit instruction; Option A held for a real
+              screenshot when one exists, see AiReadinessDemoSteps.tsx's own
+              docblock for why a literal raster capture wasn't available
+              this pass). Exact requested copy, no background colour, real
+              claims — "48 hours" reads from the same live setting used
+              everywhere else on this page, not a separately hardcoded
+              number that could drift from it. */}
+          <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-6">
+            {["Evidence-based", "Human-reviewed", `Delivered within ${moduleTurnaroundHours} hours`].map((label) => (
+              <div key={label} className="flex items-center gap-2 text-sm text-neutral-700">
+                <span aria-hidden="true" className="text-accent-cta">
+                  ✓
+                </span>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
         </section>
 
         {/* ================= 2. THE PROBLEM ================= */}
-        <section className="border-t border-neutral-200 py-16">
+        <section className="border-t border-neutral-200 py-8">
           <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">Someone is about to ask about your AI</h2>
           <p className="mt-3 max-w-2xl text-neutral-600">
             Not hypothetically — this is already how AI gets scrutinized in a real deal, a real security review, or a real
@@ -159,8 +178,10 @@ export default async function LandingPage() {
         </section>
 
         {/* ================= 3. THE SOLUTION (new) ================= */}
-        <section className="border-t border-neutral-200 py-16">
-          <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">What Elvanis actually does</h2>
+        <section className="border-t border-neutral-200 py-8">
+          <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">
+            Evidence in. Human-reviewed findings out. No generic advice.
+          </h2>
           <p className="mt-3 max-w-2xl text-neutral-600">
             You submit real evidence — a document, or a short guided form. We tell you what&apos;s safe, what&apos;s
             genuinely missing, and what to fix first. A human checks every word before you see it.
@@ -193,8 +214,8 @@ export default async function LandingPage() {
         </section>
 
         {/* ================= 4. WHY US ================= */}
-        <section className="border-t border-neutral-200 py-16">
-          <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">Why Elvanis</h2>
+        <section className="border-t border-neutral-200 py-8">
+          <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">Built so you&apos;re ready before they ask.</h2>
           <div className="mt-10 grid gap-8 sm:grid-cols-3">
             {[
               {
@@ -219,7 +240,7 @@ export default async function LandingPage() {
         </section>
 
         {/* ================= 5. MODULES (Feature-Benefit rewrite) ================= */}
-        <section id="modules" className="border-t border-neutral-200 py-16">
+        <section id="modules" className="border-t border-neutral-200 py-8">
           <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">
             Three reviews. One matched to what&apos;s actually at stake.
           </h2>
@@ -247,7 +268,7 @@ export default async function LandingPage() {
             ].map((mod) => {
               const price = pricingByKey.get(mod.key);
               return (
-                <div key={mod.key} className="rounded-lg border border-neutral-200 p-6">
+                <div key={mod.key} className="rounded-lg border border-neutral-200 p-6 shadow-card-1">
                   <h3 className="font-medium text-neutral-900">{mod.title}</h3>
                   <p className="mt-2 text-sm text-neutral-600">{mod.body}</p>
                   {price && <p className="mt-4 text-sm font-medium text-accent-cta">{formatPrice(price)}</p>}
@@ -265,7 +286,7 @@ export default async function LandingPage() {
         </section>
 
         {/* ================= 6. HOW IT WORKS (AI Audit path primary) ================= */}
-        <section id="how-it-works" className="border-t border-neutral-200 py-16">
+        <section id="how-it-works" className="border-t border-neutral-200 py-8">
           <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">How your AI Readiness Review actually works</h2>
           <ol className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-5">
             {[
@@ -304,8 +325,20 @@ export default async function LandingPage() {
           </ol>
         </section>
 
-        {/* ================= 7. INTERACTIVE DEMO ================= */}
-        <section className="border-t border-neutral-200 py-16">
+      </div>
+
+      {/* ================= 7. INTERACTIVE DEMO =================
+          Deliberately breaks out of the shared max-w-5xl column
+          (confirmed 2026-09-01, direct instruction: "the widest, most
+          visually prominent section on the page after the hero") — its
+          own wider max-w-6xl container, a sibling of the max-w-5xl
+          wrapper rather than nested inside it, so every other section
+          stays at its existing width. The two max-w-5xl wrapper divs
+          around it split what was previously one — the second one keeps
+          flex-1 so the footer's mt-auto still reaches the true bottom of
+          the page, unchanged. */}
+      <section className="border-t border-neutral-200 py-8">
+        <div className="mx-auto w-full max-w-6xl px-6">
           <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">See it work — no sign-in, no leaving this page</h2>
           <p className="mt-3 max-w-2xl text-neutral-600">
             Click any step, use the arrows, or just let it play. Step 4 shows real, verbatim findings from an actual delivered
@@ -314,8 +347,10 @@ export default async function LandingPage() {
           <div className="mt-8">
             <InteractiveDemoSection steps={AI_READINESS_DEMO_STEPS} />
           </div>
-        </section>
+        </div>
+      </section>
 
+      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-6">
         {/* ================= 8. EXECUTION AUDIT (secondary, condensed) =================
             This is what the hero's own secondary text link jumps to. Deliberately
             NOT a full top-level section matching sections 2-7's depth — the
@@ -329,7 +364,7 @@ export default async function LandingPage() {
             different duplicate-finding safeguards instead), so claiming it as a
             universal "Why us" point under AI Readiness Review's own primary
             framing would have overstated what's actually true there. */}
-        <section id="execution-audit" className="border-t border-neutral-200 py-16">
+        <section id="execution-audit" className="border-t border-neutral-200 py-8">
           <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">
             Not about AI specifically? Try the Execution Audit.
           </h2>
@@ -341,10 +376,18 @@ export default async function LandingPage() {
           </p>
 
           <div className="mt-8 grid gap-6 sm:grid-cols-2">
-            <div className="rounded-lg border border-neutral-200 p-6">
-              <p className="text-sm font-medium text-neutral-900">
+            {/* Card treatment/weight matched to the Modules cards above
+                (confirmed 2026-09-01, direct instruction — "a real offer,
+                not a footnote"): the same shadow-card-1 elevation, and a
+                prominent, top-of-card price statement mirroring how
+                Modules/Pricing anchor real offers with a bold price, not
+                a small footnote line. */}
+            <div className="rounded-lg border border-neutral-200 p-6 shadow-card-1">
+              <p className="text-sm font-medium uppercase tracking-wide text-neutral-500">Execution Audit</p>
+              <p className="mt-1 text-3xl font-semibold text-neutral-900">Free</p>
+              <p className="mt-3 text-sm text-neutral-600">
                 A ranked, financially-quantified top 3, with a 30/60/90 day roadmap — reviewed by a human, ready within{" "}
-                {executionAuditTotalHours} hours.
+                {executionAuditTotalHours} hours. Your first completed audit is free; re-audits are paid.
               </p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <Link
@@ -360,13 +403,12 @@ export default async function LandingPage() {
                   View a real, complete example
                 </Link>
               </div>
-              <p className="mt-3 text-xs text-neutral-500">Your first completed Execution Audit is free. Re-audits are paid.</p>
             </div>
 
             {/* Real, verbatim content from /demo-live (Riverbank Analytics
                 Ltd, a test company built specifically to be safe for public
                 display) — not fabricated example data. */}
-            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-6">
+            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-6 shadow-card-1">
               <p className="text-[10px] font-medium uppercase tracking-wide text-neutral-400">Real example — Riverbank Analytics Ltd</p>
               <p className="mt-2 text-sm font-medium text-neutral-900">Top 3 priorities</p>
               <ol className="mt-1 list-inside list-decimal text-sm text-neutral-700">
@@ -386,7 +428,7 @@ export default async function LandingPage() {
         </section>
 
         {/* ================= 9. PRICING (mirrors the in-app Services page) ================= */}
-        <section id="pricing" className="border-t border-neutral-200 py-16">
+        <section id="pricing" className="border-t border-neutral-200 py-8">
           <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">Pricing</h2>
           <p className="mt-3 max-w-2xl text-neutral-600">
             Real, live pricing — the same numbers shown inside the product, not a sales-call-to-find-out.
@@ -468,7 +510,7 @@ export default async function LandingPage() {
         </section>
 
         {/* ================= 10. FAQ ================= */}
-        <section id="faq" className="border-t border-neutral-200 py-16">
+        <section id="faq" className="border-t border-neutral-200 py-8">
           <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">Frequently asked questions</h2>
           <div className="mt-8 max-w-2xl divide-y divide-neutral-200">
             {[
@@ -517,7 +559,7 @@ export default async function LandingPage() {
         </section>
 
         {/* ================= 11. CONTACT US / BOOK A DEMO (preserved, per explicit instruction) ================= */}
-        <section className="border-t border-neutral-200 py-16">
+        <section className="border-t border-neutral-200 py-8">
           <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">
             Not ready to submit evidence yet? Talk it through first.
           </h2>
@@ -554,7 +596,7 @@ export default async function LandingPage() {
         </section>
 
         {/* ================= 12. FINAL CTA + FOOTER ================= */}
-        <section className="border-t border-neutral-200 py-16">
+        <section className="border-t border-neutral-200 py-8">
           <div className="rounded-lg border-l-4 border-accent bg-[#fffbf0] p-8 text-center shadow-card-2">
             <h2 className="text-xl font-semibold text-neutral-900">Would your AI pass a real review?</h2>
             <p className="mx-auto mt-2 max-w-md text-sm text-neutral-600">

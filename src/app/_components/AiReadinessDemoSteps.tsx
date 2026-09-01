@@ -44,11 +44,11 @@ function Step1Visual() {
     { q: "Handle personal data?", a: "Not sure" },
   ];
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {items.map((item) => (
-        <div key={item.q} className="flex items-center justify-between rounded border border-neutral-200 bg-white p-3 text-xs">
+        <div key={item.q} className="flex items-center justify-between rounded border border-neutral-200 bg-white p-4 text-sm">
           <span className="text-neutral-700">{item.q}</span>
-          <span className="rounded-full bg-accent-cta/10 px-2 py-0.5 font-medium text-accent-cta">{item.a}</span>
+          <span className="rounded-full bg-accent-cta/10 px-2.5 py-1 font-medium text-accent-cta">{item.a}</span>
         </div>
       ))}
     </div>
@@ -57,12 +57,12 @@ function Step1Visual() {
 
 function Step2Visual() {
   return (
-    <div className="rounded border border-neutral-200 bg-white p-3">
+    <div className="rounded border border-neutral-200 bg-white p-4">
       <div className="flex items-center gap-2">
-        <p className="text-xs font-medium text-neutral-900">Tender Readiness</p>
-        <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600">Urgent</span>
+        <p className="text-sm font-medium text-neutral-900">Tender Readiness</p>
+        <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-red-600">Urgent</span>
       </div>
-      <p className="mt-2 text-xs text-neutral-600">
+      <p className="mt-2 text-sm text-neutral-600">
         You have an active compliance or procurement request and AI already in use — Tender Readiness gets you a real jurisdiction
         determination and draft answers fast.
       </p>
@@ -72,11 +72,11 @@ function Step2Visual() {
 
 function Step3Visual() {
   return (
-    <div className="space-y-2">
-      <div className="rounded border border-dashed border-neutral-300 bg-white p-3 text-center text-xs text-neutral-500">
+    <div className="space-y-3">
+      <div className="rounded border border-dashed border-neutral-300 bg-white p-4 text-center text-sm text-neutral-500">
         Drop a PDF or DOCX, or type it in
       </div>
-      <div className="rounded border border-neutral-200 bg-white p-3 text-xs text-neutral-700">Describe your AI use case…</div>
+      <div className="rounded border border-neutral-200 bg-white p-4 text-sm text-neutral-700">Describe your AI use case…</div>
     </div>
   );
 }
@@ -85,23 +85,23 @@ function Step3Visual() {
 // and non-PII confirmation. Not paraphrased, not invented.
 function Step4Visual() {
   return (
-    <div className="space-y-2">
-      <div className="rounded border border-neutral-200 bg-white p-3">
+    <div className="space-y-3">
+      <div className="rounded border border-neutral-200 bg-white p-4">
         <div className="flex items-start justify-between gap-2">
-          <p className="text-xs font-medium text-neutral-900">No compliance documentation submitted for applicable jurisdictions</p>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${SEVERITY_STYLES.high}`}>High</span>
+          <p className="text-sm font-medium text-neutral-900">No compliance documentation submitted for applicable jurisdictions</p>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${SEVERITY_STYLES.high}`}>High</span>
         </div>
-        <p className="mt-1 text-[11px] text-neutral-600">
+        <p className="mt-1 text-sm text-neutral-600">
           This company is subject to at least one AI-specific regulatory regime but has submitted no existing risk assessment or
           procurement-readiness documentation.
         </p>
       </div>
-      <div className="rounded border border-neutral-200 bg-white p-3">
+      <div className="rounded border border-neutral-200 bg-white p-4">
         <div className="flex items-start justify-between gap-2">
-          <p className="text-xs font-medium text-neutral-900">EU AI Act Risk Classification</p>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${SEVERITY_STYLES.medium}`}>Medium</span>
+          <p className="text-sm font-medium text-neutral-900">EU AI Act Risk Classification</p>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${SEVERITY_STYLES.medium}`}>Medium</span>
         </div>
-        <p className="mt-1 text-[11px] text-neutral-600">Classified limited-risk — reviewed and approved by a human before delivery.</p>
+        <p className="mt-1 text-sm text-neutral-600">Classified limited-risk — reviewed and approved by a human before delivery.</p>
       </div>
     </div>
   );
