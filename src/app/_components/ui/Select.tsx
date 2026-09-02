@@ -1,8 +1,12 @@
 "use client";
 
-import { forwardRef, type SelectHTMLAttributes } from "react";
+import { forwardRef, useId, type SelectHTMLAttributes } from "react";
 
-/** Shared design-system primitive — see Input.tsx for the full rationale. */
+/**
+ * Shared design-system primitive — see Input.tsx for the full rationale,
+ * including the useId() fallback fix (confirmed 2026-09-02, found live via
+ * the Playwright E2E suite) applied identically here.
+ */
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   hint?: string;
@@ -12,7 +16,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   { label, hint, className, children, id, ...props },
   ref,
 ) {
-  const selectId = id ?? props.name;
+  const generatedId = useId();
+  const selectId = id ?? props.name ?? generatedId;
   return (
     <div className="space-y-1.5">
       {label && (

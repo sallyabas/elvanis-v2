@@ -1,0 +1,65 @@
+name: E2E tests (Playwright)
+
+# Real, runnable scaffold — confirmed 2026-09-02 — deliberately NOT yet
+# wired to fire automatically after a real deploy. Manual trigger
+# (workflow_dispatch) only, until the founder has:
+#   1. A real preview/staging Vercel deployment with ALLOW_TEST_AUTH=true
+#      set as an env var (NEVER set on the production domain).
+#   2. The secrets below configured on this GitHub repo (Settings ->
+#      Secrets and variables -> Actions), same `gh secret set` pattern
+#      already used for this repo's existing cron-tick.yml workflow:
+#        gh secret set TEST_AUTH_SECRET
+#        gh secret set SUPABASE_SERVICE_ROLE_KEY
+#        gh variable set NEXT_PUBLIC_SUPABASE_URL --body "..."
+#        gh variable set NEXT_PUBLIC_SUPABASE_ANON_KEY --body "..."
+#        gh variable set E2E_BASE_URL --body "https://<preview-or-staging-url>"
+#
+# Once those are set, uncomment ONE real trigger below to actually run
+# this after every deploy — two real options, with a real tradeoff:
+#   - `push` to main: fires immediately on push, which may be BEFORE
+#     Vercel's own deploy for that commit has actually finished building.
+#   - `deployment_status`: fires when Vercel's GitHub integration posts a
+#     real deployment status, so it genuinely runs after the deploy
+#     completes — needs that integration confirmed active on this repo
+#     first (not yet verified in this pass).
+# on:
+#   push:
+#     branches: [main]
+#   deployment_status: {}
+on:
+  workflow_dispatch: {}
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+      - name: Run E2E suite against a real deployed target
+        env:
+          E2E_BASE_URL: ${{ vars.E2E_BASE_URL }}
+          TEST_AUTH_SECRET: ${{ secrets.TEST_AUTH_SECRET }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run test:e2e
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: tests/e2e/report
+          retention-days: 14
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: tests/e2e/screenshots
+          retention-days: 14

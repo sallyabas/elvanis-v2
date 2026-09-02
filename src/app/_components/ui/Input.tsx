@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, type InputHTMLAttributes } from "react";
+import { forwardRef, useId, type InputHTMLAttributes } from "react";
 
 /**
  * Shared design-system primitive (confirmed 2026-08-07) — replaces the
@@ -22,7 +22,20 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { label, hint, error, className, id, ...props },
   ref,
 ) {
-  const inputId = id ?? props.name;
+  // Real bug found live via the Playwright E2E suite (confirmed
+  // 2026-09-02) — id ?? props.name silently produced NO id/htmlFor pairing
+  // at all whenever a call site passed neither (e.g. OnboardingWizard.tsx's
+  // "Company name" field), since React omits an attribute entirely when
+  // its value is undefined. The label still rendered correctly (a sighted
+  // user could read it fine), but with zero programmatic association —
+  // getByLabel() genuinely could not find the field, and neither could a
+  // screen reader or a real "click the label to focus the field" click.
+  // useId() as the final fallback guarantees a real, stable, unique id
+  // exists on every instance regardless of what the caller passes, fixing
+  // this at the root rather than patching individual call sites (Textarea/
+  // Select share this exact same pattern, fixed identically).
+  const generatedId = useId();
+  const inputId = id ?? props.name ?? generatedId;
   return (
     <div className="space-y-1.5">
       {label && (

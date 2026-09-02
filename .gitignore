@@ -48,3 +48,11 @@ supabase/.temp/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Playwright E2E — generated output, not source
+/tests/e2e/report/
+/tests/e2e/screenshots/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

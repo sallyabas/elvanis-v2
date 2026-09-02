@@ -1,8 +1,12 @@
 "use client";
 
-import { forwardRef, type TextareaHTMLAttributes } from "react";
+import { forwardRef, useId, type TextareaHTMLAttributes } from "react";
 
-/** Shared design-system primitive — see Input.tsx for the full rationale. */
+/**
+ * Shared design-system primitive — see Input.tsx for the full rationale,
+ * including the useId() fallback fix (confirmed 2026-09-02, found live via
+ * the Playwright E2E suite) applied identically here.
+ */
 interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
   hint?: string;
@@ -13,7 +17,8 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
   { label, hint, error, className, id, rows = 3, ...props },
   ref,
 ) {
-  const textareaId = id ?? props.name;
+  const generatedId = useId();
+  const textareaId = id ?? props.name ?? generatedId;
   return (
     <div className="space-y-1.5">
       {label && (
