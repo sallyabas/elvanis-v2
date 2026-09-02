@@ -1,0 +1,11 @@
+-- Real gap found and fixed, 2026-09-03 (direct founder request, following
+-- a full investigation into Groq failure behavior across the core audit
+-- and all three modules) — `runAudit()` already computes `failedLenses`
+-- (which of the 5 lenses genuinely failed to run, via Promise.allSettled)
+-- but never persisted it anywhere: it was returned in-memory and silently
+-- discarded by every caller. A total Groq outage (all 5 lenses fail)
+-- produced a report indistinguishable, from the data model alone, from a
+-- genuinely clean audit with nothing to report — no signal anywhere for a
+-- reviewer or client to tell the two apart. See workspace.ts's
+-- approveReport() and ReviewWorkspaceClient.tsx for the read side.
+alter table reports add column failed_lenses text[] not null default '{}';

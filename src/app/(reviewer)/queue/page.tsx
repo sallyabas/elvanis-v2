@@ -7,7 +7,7 @@ import { listOpenSprintQueueItems, listAllSprints } from "@/lib/execution-sprint
 import { listOpenSprintInterestRequests } from "@/lib/execution-sprint/interest-requests";
 import { listDeliveryFeedback } from "@/lib/reviewer/delivery-feedback";
 import { computeSubmissionDisplayStage, SUBMISSION_STAGE_LABELS } from "@/lib/evidence/submission-status";
-import { getTotalTurnaroundHours } from "@/lib/reports/sla";
+import { getSettingNumber } from "@/lib/app-settings";
 import { type ItemType, TypeBadge, moduleTypeToItemType, sessionTypeToItemType } from "@/lib/item-type-badge";
 import { SESSION_STATUS_LABELS } from "@/lib/format";
 import {
@@ -122,11 +122,25 @@ export default async function ReviewerQueuePage() {
 
   // Real gap closed (confirmed 2026-08-19, direct founder request) — once
   // a reviewer approves a module request, it dropped out of this queue
-  // entirely with no reminder that delivery is still owed. Reuses the
-  // exact same DB-backed total-turnaround-hours target core reports
-  // already enforce (getTotalTurnaroundHours()) against created_at, since
-  // modules have no separate client-edit-window step — created_at IS the
-  // real submission moment here.
+  // entirely with no reminder that delivery is still owed. `created_at` IS
+  // the real submission moment here — modules have no separate client-
+  // edit-window step.
+  //
+  // SLA source of truth, corrected 2026-09-03 (direct founder request,
+  // following the Groq-failure investigation) — this used to read
+  // getTotalTurnaroundHours() (edit_window_hours + review_period_hours,
+  // 72h by default), a CORE-AUDIT-specific concept that doesn't actually
+  // apply to modules (they have no client edit window at all). Meanwhile
+  // module_delivery_turnaround_target_hours (48h) already existed,
+  // purpose-built for exactly this, and was already the number the
+  // landing page and the module review workspace's own "time in review"
+  // display used — a real, live inconsistency between what "on time"
+  // meant depending on which page you looked at. Standardized on the
+  // purpose-built setting everywhere modules are concerned; see
+  // dashboard/page.tsx's isModuleOverdue() for the matching fix on the
+  // client-facing side.
+  const moduleTurnaroundHours = await getSettingNumber("module_delivery_turnaround_target_hours", 48);
+
   const { data: awaitingDeliveryModules, error: awaitingDeliveryError } = await supabase
     .from("module_requests")
     .select("id, module_type, created_at, approved_at, companies(name)")
@@ -135,7 +149,6 @@ export default async function ReviewerQueuePage() {
   if (awaitingDeliveryError) {
     return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {awaitingDeliveryError.message}</div>;
   }
-  const { totalHours: moduleTurnaroundHours } = await getTotalTurnaroundHours();
 
   const { data: scopedSprints, error: sprintsError } = await supabase
     .from("execution_sprints")
@@ -183,7 +196,14 @@ export default async function ReviewerQueuePage() {
       readyAt: (r.created_at as string | null),
       notified: Boolean(r.reviewer_notified_at),
       href: `/review-module/${r.id}`,
-      overdue: false,
+      // Real gap closed (confirmed 2026-09-03, direct founder request) —
+      // this was hardcoded false, meaning a module sitting in
+      // pending_review (not yet reviewed at all) had zero overdue
+      // visibility anywhere; only "awaiting delivery" (already approved)
+      // ever got a badge. Same deadline math as that section, applied to
+      // the pre-review stage instead — created_at is the real submission
+      // moment for a module either way.
+      overdue: new Date(new Date(r.created_at as string).getTime() + moduleTurnaroundHours * 60 * 60 * 1000) < new Date(),
       urgent: Boolean(r.is_urgent),
     })),
   ].sort((a, b) => new Date(a.readyAt ?? 0).getTime() - new Date(b.readyAt ?? 0).getTime());

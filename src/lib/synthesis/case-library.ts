@@ -69,12 +69,27 @@ export async function recordCaseLibraryEntry(reportId: string): Promise<void> {
     }
   }
 
-  const { error: insertError } = await supabase.from("case_library").insert({
-    company_id: report.company_id,
-    report_id: reportId,
-    tags: [...tags],
-    stored_for_retrieval: true,
-  });
+  // upsert on report_id, not insert (confirmed 2026-09-02) — a real,
+  // reproducible bug: recordCaseLibraryEntry() being called more than once
+  // for the same already-delivered report (this project's own extensive
+  // live-verification history repeatedly re-touches the same real reports)
+  // produced genuine duplicate case_library rows, which surfaced as a real
+  // React duplicate-key warning in findSimilarPatterns()'s own consumer —
+  // see supabase/migrations/20260902100000_case_library_report_id_unique.sql
+  // for the schema-level fix this pairs with. Upserting here closes the
+  // write side of the same bug: a second call now updates the existing row
+  // in place instead of creating a duplicate one.
+  const { error: insertError } = await supabase
+    .from("case_library")
+    .upsert(
+      {
+        company_id: report.company_id,
+        report_id: reportId,
+        tags: [...tags],
+        stored_for_retrieval: true,
+      },
+      { onConflict: "report_id" },
+    );
   if (insertError) throw new Error(`recordCaseLibraryEntry: failed to insert: ${insertError.message}`);
 }
 
@@ -112,19 +127,37 @@ export async function findSimilarPatterns(companyId: string): Promise<SimilarPat
     .neq("company_id", companyId);
   if (otherError) throw new Error(`findSimilarPatterns: failed to load other entries: ${otherError.message}`);
 
-  const matches: SimilarPatternMatch[] = [];
+  // Deduped by reportId, keeping the highest-similarity match per report
+  // (confirmed 2026-09-02) — a real backstop, not a hypothetical one: a
+  // genuine `case_library` write-side bug (now fixed at both the schema
+  // level, via a unique constraint on report_id, and the write side, via
+  // an upsert instead of an insert — see recordCaseLibraryEntry()'s own
+  // comment) had already produced real duplicate rows for the same report,
+  // which meant this function returned two SimilarPatternMatch objects
+  // sharing one reportId — a real React duplicate-key warning in the one
+  // UI consumer that renders this list keyed by reportId. Kept here too,
+  // not just fixed upstream, matching this codebase's established
+  // "don't rely on a single line of defense" discipline for a correctness
+  // assumption that already turned out wrong once.
+  const matchesByReportId = new Map<string, SimilarPatternMatch>();
   for (const entry of otherEntries ?? []) {
     const otherTags = new Set<string>(entry.tags as string[]);
     const overlap = [...ownTags].filter((t) => otherTags.has(t));
     if (overlap.length === 0) continue;
     const union = new Set([...ownTags, ...otherTags]);
-    matches.push({
+    const reportId = entry.report_id as string;
+    const candidate: SimilarPatternMatch = {
       companyId: entry.company_id as string,
-      reportId: entry.report_id as string,
+      reportId,
       overlappingTags: overlap,
       similarityScore: overlap.length / union.size,
-    });
+    };
+    const existing = matchesByReportId.get(reportId);
+    if (!existing || candidate.similarityScore > existing.similarityScore) {
+      matchesByReportId.set(reportId, candidate);
+    }
   }
+  const matches = [...matchesByReportId.values()];
 
   const distinctOtherCompanies = new Set(matches.map((m) => m.companyId));
   if (distinctOtherCompanies.size < MIN_OTHER_COMPANIES_FOR_PATTERN) return [];

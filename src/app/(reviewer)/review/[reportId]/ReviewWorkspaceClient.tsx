@@ -84,6 +84,15 @@ interface Props {
   companyUserId: string | null;
   planTier: string;
   reportStatus: string;
+  /**
+   * Real gap closed (confirmed 2026-09-03) — which of the 5 lenses
+   * genuinely failed to run during this audit, persisted for the first
+   * time (see run-audit.ts). Non-empty means the report is provably
+   * incomplete, not just thin — approveReport() now hard-blocks on this
+   * server-side too; the banner below just makes the reason visible
+   * before the reviewer even tries.
+   */
+  failedLenses: string[];
   top3FindingIds: string[];
   canRerun: boolean;
   rerunOfReportId: string | null;
@@ -179,6 +188,7 @@ export function ReviewWorkspaceClient({
   companyUserId,
   planTier,
   reportStatus,
+  failedLenses,
   top3FindingIds,
   canRerun,
   rerunOfReportId,
@@ -484,6 +494,40 @@ export function ReviewWorkspaceClient({
             </>
           )}
         </p>
+      )}
+
+      {/* Real gap closed (confirmed 2026-09-03, direct founder decision
+          following a full investigation into Groq failure handling) —
+          the mandatory-decision banner below covers "findings exist but
+          aren't decided yet"; it had nothing to say about "this audit is
+          missing entire lenses" or "this audit produced nothing at all,"
+          both of which previously passed the approval gate silently. Two
+          distinct treatments, per the confirmed design: a failed lens is
+          a HARD block (server-side too, see approveReport()) since the
+          report is provably incomplete — no override, only "Re-run
+          analysis" below. Zero findings with no lens failure is a real,
+          reachable state (confirmed: no lens schema requires at least one
+          finding, and none has a deterministic fallback forcing one) but
+          not necessarily wrong — a genuinely clean audit is possible — so
+          it's a visible warning only; Approve stays enabled and the
+          reviewer's own judgment decides. */}
+      {failedLenses.length > 0 && (
+        <section className="mb-6 rounded-lg bg-red-50 p-4 text-sm text-red-700 shadow-card-1 dark:bg-red-950 dark:text-red-300">
+          <p className="font-medium">
+            {failedLenses.length} lens{failedLenses.length === 1 ? "" : "es"} failed to generate during this audit:{" "}
+            {failedLenses.map((l) => LENS_LABELS[l as LensType] ?? l).join(", ")}.
+          </p>
+          <p className="mt-1">
+            This report is genuinely incomplete, not just thin — approval is blocked. Re-run the analysis below rather than deliver a report
+            missing whole sections with no disclosure.
+          </p>
+        </section>
+      )}
+
+      {failedLenses.length === 0 && findings.length === 0 && (
+        <Alert variant="warning" className="mb-6">
+          No findings were generated — all lenses ran successfully. Confirm this is genuinely correct before approving.
+        </Alert>
       )}
 
       {(draftFindings.length > 0 || unresolvedConflicts.length > 0) && (

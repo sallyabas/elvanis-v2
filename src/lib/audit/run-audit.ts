@@ -225,6 +225,13 @@ export async function runAudit(input: RunAuditInput): Promise<RunAuditResult> {
       governance_maturity_tier: governanceMaturityTier,
       source_evidence_snapshot: input.sourceEvidenceSnapshot ?? null,
       rerun_of_report_id: input.rerunOfReportId ?? null,
+      // Real gap closed (confirmed 2026-09-03) — failedLenses was already
+      // computed above but never persisted anywhere, so a total Groq
+      // outage (all 5 lenses fail) produced a report indistinguishable
+      // from a genuinely clean one with nothing to report. See
+      // approveReport()'s own gate and the reviewer workspace's warning
+      // banner for the read side.
+      failed_lenses: failedLenses,
     })
     .select("id")
     .single();

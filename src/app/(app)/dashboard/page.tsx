@@ -12,7 +12,7 @@ import { computeJourneyStatus } from "@/lib/reports/journey-status";
 import { loadGoalMetricTrend, type MetricTrend } from "@/lib/goals/metric-trend";
 import { aggregateFinancialImpact, formatCurrencyRange, isUsableFinancialImpact } from "@/lib/reports/financial-impact";
 import { MODULE_META, MODULE_ORDER, MODULE_STATUS_LABELS, type ModuleType } from "@/lib/modules/module-meta";
-import { getTotalTurnaroundHours } from "@/lib/reports/sla";
+import { getSettingNumber } from "@/lib/app-settings";
 import { TYPE_LABELS, sessionTypeToItemType } from "@/lib/item-type-badge";
 import { humanizeStatus, SESSION_STATUS_LABELS } from "@/lib/format";
 import { hasCompletedPathBSetup } from "@/lib/onboarding/path-b-completion";
@@ -404,18 +404,30 @@ export default async function DashboardPage() {
   // straight to pending_review on submission), so there's no separate
   // submitted_at/edit_window_closes_at pair to anchor a deadline against
   // the way core reports do. created_at IS the real submission moment for
-  // a module request, so the same DB-backed total-turnaround-hours target
-  // core reports already use (getTotalTurnaroundHours()) is reused here
-  // against created_at, rather than inventing a second, module-specific
-  // SLA number.
-  const { totalHours: moduleTurnaroundHours } = await getTotalTurnaroundHours();
+  // a module request either way.
+  //
+  // SLA source of truth, corrected 2026-09-03 (direct founder request,
+  // following the Groq-failure investigation) — this used to read
+  // getTotalTurnaroundHours() (edit_window_hours + review_period_hours,
+  // 72h by default), a core-audit-specific concept modules don't actually
+  // have. Standardized on module_delivery_turnaround_target_hours (48h),
+  // the purpose-built setting already used by the landing page and the
+  // module review workspace's own display — see queue/page.tsx's matching
+  // fix for the full writeup of the inconsistency this closes.
+  const moduleTurnaroundHours = await getSettingNumber("module_delivery_turnaround_target_hours", 48);
   // Uses `new Date()` for "now", matching the exact idiom this codebase's
   // own pre-existing Overdue-badge logic already uses (queue/page.tsx's
   // `review_due_at` check below) — the bare `Date.now()` static method is
   // what a real React-purity lint rule flags as impure; `new Date()`
   // construction is the tolerated, already-shipped pattern here.
+  //
+  // Extended 2026-09-03 to cover `pending_review` too (previously
+  // `approved`-only) — the matching client-facing half of the reviewer-
+  // side fix on /queue: a module still awaiting its FIRST review has just
+  // as real a right to an honest "this is taking longer than usual"
+  // signal as one already approved and awaiting delivery.
   function isModuleOverdue(status: string, createdAt: string): boolean {
-    if (status !== "approved") return false;
+    if (status !== "approved" && status !== "pending_review") return false;
     const deadline = new Date(new Date(createdAt).getTime() + moduleTurnaroundHours * 60 * 60 * 1000);
     return deadline < new Date();
   }
@@ -884,7 +896,7 @@ export default async function DashboardPage() {
                   ) : (
                     <ul className="space-y-1 text-neutral-800 dark:text-neutral-200">
                       {roadmap[bucket].map((item) => (
-                        <li key={item.finding.findingId}>
+                        <li key={item.id}>
                           {item.finding.title}
                           {item.cascadeCount >= 2 && (
                             <span className="ml-1.5 text-xs text-accent" title={item.cascadesToFindingTitles.join(", ")}>
@@ -1038,6 +1050,20 @@ export default async function DashboardPage() {
                       This was reviewed and approved on {new Date(r.approved_at as string).toLocaleDateString()}{" "}
                       and is taking a little longer than expected to reach you — we&apos;re on it, and you&apos;ll get an email the moment
                       it&apos;s ready.
+                    </p>
+                  )}
+                  {/* Real gap closed (confirmed 2026-09-03, direct founder
+                      request) — the matching client-facing half of the
+                      pending-module overdue signal (see queue/page.tsx's
+                      reviewer-side fix): a module still awaiting its FIRST
+                      review has no r.approved_at yet, so it needs its own
+                      distinct copy rather than the "reviewed and
+                      approved..." branch above, which would be false for
+                      this stage. */}
+                  {isModuleOverdue(r.status as string, r.created_at as string) && !r.approved_at && (
+                    <p className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">
+                      This has been with your reviewer since {new Date(r.created_at as string).toLocaleDateString()}{" "}
+                      and is taking a little longer than expected — we&apos;re on it.
                     </p>
                   )}
                 </div>

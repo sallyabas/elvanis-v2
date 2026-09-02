@@ -199,8 +199,12 @@ export default async function DemoLivePage() {
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-accent">Dashboard</p>
           <h2 className="mb-3 font-medium">Latest top-3 priorities</h2>
           <ol className="list-inside list-decimal space-y-2 text-sm">
-            {top3.map((f) => (
-              <li key={f.findingId}>{f.title}</li>
+            {/* Keyed by the real DB id (top3WithIds), not f.findingId — see
+                RoadmapItem.id's docblock in roadmap.ts for the real bug
+                this fixes (findingId is the LLM's own stale, often-blank
+                id, not a safe React key). */}
+            {top3WithIds.map(({ id, finding }) => (
+              <li key={id}>{finding.title}</li>
             ))}
           </ol>
 
@@ -225,10 +229,10 @@ export default async function DemoLivePage() {
           <section className="mb-10 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
             <h2 className="mb-3 text-lg font-medium">Top 3 priorities</h2>
             <ol className="list-inside list-decimal space-y-3 text-sm">
-              {top3.map((f) => (
-                <li key={f.findingId}>
-                  <span className="font-medium">{f.title}</span>
-                  <p className="mt-1 text-neutral-600 dark:text-neutral-400">{f.diagnosis}</p>
+              {top3WithIds.map(({ id, finding }) => (
+                <li key={id}>
+                  <span className="font-medium">{finding.title}</span>
+                  <p className="mt-1 text-neutral-600 dark:text-neutral-400">{finding.diagnosis}</p>
                 </li>
               ))}
             </ol>
@@ -247,7 +251,7 @@ export default async function DemoLivePage() {
                   ) : (
                     <ul className="space-y-1">
                       {roadmap[bucket].map((item) => (
-                        <li key={item.finding.findingId}>
+                        <li key={item.id}>
                           {item.finding.title}
                           {item.cascadeCount >= 2 && (
                             <span className="ml-1.5 text-xs text-accent" title={item.cascadesToFindingTitles.join(", ")}>

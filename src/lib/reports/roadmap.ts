@@ -26,6 +26,21 @@ import type { RecommendationLibraryEntry } from "@/lib/recommendations/recommend
  * finding in a tied bucket is worth tackling first, not just WHEN.
  */
 export interface RoadmapItem {
+  /**
+   * The real `lens_findings.id` DB row id, not `finding.findingId` —
+   * added 2026-09-02 after a real, confirmed bug: every consumer of this
+   * type used `finding.findingId` as its React list key (the docblock on
+   * `Top3FindingWithId` below even said this was "harmless... collisions
+   * are unlikely in practice"). That assumption turned out wrong — this
+   * project's own seeded/test fixtures (and plausibly some real LLM
+   * output) set `findingId: ""`, so multiple top-3 findings sharing the
+   * same blank key produced real "Encountered two children with the same
+   * key" React warnings, reproduced live via the Playwright E2E suite.
+   * `toItem()` below already had the real id in scope (used for the
+   * cascade lookup) and simply discarded it before returning — carrying
+   * it through here is a small, surgical fix, not a new lookup.
+   */
+  id: string;
   finding: LensFinding;
   cascadeCount: number;
   cascadesToFindingTitles: string[];
@@ -64,7 +79,7 @@ export function deriveRoadmap(top3: Top3FindingWithId[], allReportFindings: Find
 
   function toItem({ id, finding }: Top3FindingWithId): RoadmapItem {
     const signal = cascadeSignals.get(id);
-    return { finding, cascadeCount: signal?.cascadeCount ?? 0, cascadesToFindingTitles: signal?.cascadesToFindingTitles ?? [] };
+    return { id, finding, cascadeCount: signal?.cascadeCount ?? 0, cascadesToFindingTitles: signal?.cascadesToFindingTitles ?? [] };
   }
 
   function bucket(items: Top3FindingWithId[]): RoadmapItem[] {

@@ -83,7 +83,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
   const admin = createAdminClient();
   const { data: reportStatus, error: statusError } = await admin
     .from("reports")
-    .select("id, status, company_id, submitted_at, edit_window_closes_at, companies(user_id)")
+    .select("id, status, company_id, submitted_at, edit_window_closes_at, review_due_at, companies(user_id)")
     .eq("id", reportId)
     .maybeSingle();
 
@@ -109,16 +109,37 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
     // more "still editable" state to render here at all. Editing now
     // genuinely happens earlier, before any report exists — see
     // evidence-intake/page.tsx and NextStepBanner for that flow.
+    //
+    // Overdue-aware copy added 2026-09-03 (direct founder request,
+    // following the Groq-failure investigation, same class of gap as the
+    // module client-facing copy) — this page previously always promised
+    // "ready within {totalHours} hours" regardless of whether that
+    // deadline had already passed, the exact "misleading if overdue"
+    // pattern flagged for the module case. reports.review_due_at is the
+    // same DB-backed value the reviewer's own Overdue badge on /queue
+    // already reads, so the two surfaces can't disagree about whether
+    // this report is actually late.
+    // new Date() for "now", not the bare Date.now() static method — the
+    // exact idiom this codebase already uses everywhere else for the same
+    // reason (a real React-purity lint rule flags Date.now() as impure).
+    const isOverdue = reportStatus.review_due_at ? new Date(reportStatus.review_due_at as string) < new Date() : false;
     return (
       <div className="mx-auto max-w-2xl px-6 py-16">
         <Card className="text-center">
           <h1 className="mb-2 text-xl font-semibold text-neutral-900 dark:text-neutral-50">Your report is being reviewed</h1>
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            We&apos;ll have this ready within{" "}
-            {totalHours}{" "}
-            hours of your original submission, and we&apos;ll email you the moment it&apos;s ready — no need to
-            keep checking back.
-          </p>
+          {isOverdue ? (
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+              This is taking a little longer than expected to reach you — we&apos;re on it, and you&apos;ll get an email the moment it&apos;s
+              ready. No need to keep checking back.
+            </p>
+          ) : (
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+              We&apos;ll have this ready within{" "}
+              {totalHours}{" "}
+              hours of your original submission, and we&apos;ll email you the moment it&apos;s ready — no need to
+              keep checking back.
+            </p>
+          )}
         </Card>
       </div>
     );
@@ -289,10 +310,16 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
               label — real, verbatim duplication on a report meant to be
               scannable at a glance, not a design choice. */}
           <ol className="list-inside list-decimal space-y-3 text-sm">
-            {top3.map((f) => (
-              <li key={f.findingId}>
-                <span className="font-medium">{f.title}</span>
-                <p className="mt-1 text-neutral-600 dark:text-neutral-400">{f.diagnosis}</p>
+            {/* Keyed by the real DB id (top3WithIds), not f.findingId — a
+                real, confirmed bug: findingId is the LLM's own stale,
+                draft-scoped id (often blank, e.g. every seeded E2E fixture
+                finding), so keying by it produced real duplicate-key React
+                warnings whenever two top-3 findings shared one. See
+                RoadmapItem.id's docblock in roadmap.ts for the full story. */}
+            {top3WithIds.map(({ id, finding }) => (
+              <li key={id}>
+                <span className="font-medium">{finding.title}</span>
+                <p className="mt-1 text-neutral-600 dark:text-neutral-400">{finding.diagnosis}</p>
               </li>
             ))}
           </ol>
@@ -311,7 +338,7 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
                 ) : (
                   <ul className="space-y-1">
                     {roadmap[bucket].map((item) => (
-                      <li key={item.finding.findingId}>
+                      <li key={item.id}>
                         {item.finding.title}
                         {item.cascadeCount >= 2 && (
                           <span className="ml-1.5 text-xs text-accent" title={item.cascadesToFindingTitles.join(", ")}>
@@ -518,8 +545,25 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
           error rather than an honest (rare) edge case: every finding on
           this delivered report was rejected during review. Given real
           visual weight via the shared Alert component, same as every
-          other message surface swept in the app-wide message-design pass. */}
-      {visibleFindings.length === 0 && (
+          other message surface swept in the app-wide message-design pass.
+          Extended 2026-09-03 (direct founder request, following the Groq-
+          failure investigation) — the single copy above was factually
+          wrong for a real, confirmed second cause of zero visible
+          findings, `findings.length === 0` (nothing was ever created to
+          "remove"). Deliberately NOT framed as a failure here: a report
+          whose analysis genuinely failed (approveReport()'s own new
+          failed_lenses hard block, see workspace.ts) can never reach
+          `sent` status at all — the only way a delivered report reaches
+          this branch is a reviewer explicitly confirming the zero-
+          findings warning shown on their own workspace and approving
+          anyway, i.e. a deliberate, reviewed judgment call, not an
+          error. `findings` (unlike `visibleFindings`) includes every
+          status, so it's the honest signal for "did anything ever exist
+          here at all." */}
+      {findings.length === 0 && (
+        <Alert variant="info">This audit didn&apos;t identify any findings to report — your reviewer has confirmed this reflects your business accurately.</Alert>
+      )}
+      {findings.length > 0 && visibleFindings.length === 0 && (
         <Alert variant="info">
           None of this report&apos;s findings are currently visible — every one was removed during review.
         </Alert>

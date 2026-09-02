@@ -128,10 +128,28 @@ export async function approveReport(reportId: string, reviewerId: string): Promi
 
   const { data: report, error: reportError } = await supabase
     .from("reports")
-    .select("edit_window_closes_at")
+    .select("edit_window_closes_at, failed_lenses")
     .eq("id", reportId)
     .single();
   if (reportError) throw new Error(`approveReport: failed to load report: ${reportError.message}`);
+
+  // Real, confirmed bug fix (2026-09-03, direct founder decision after
+  // investigation confirmed a lens can genuinely succeed with zero
+  // findings, and a report with zero findings entirely was previously
+  // approvable with no check at all — see run-audit.ts's own docblock).
+  // Deliberately a HARD block, no override — unlike the zero-findings-
+  // with-no-lens-failure case below (which stays a reviewer judgment
+  // call), a genuinely FAILED lens means the report is provably
+  // incomplete, not just possibly-thin, so the only honest path forward
+  // is re-running the audit, not delivering a report missing whole
+  // sections with no disclosure.
+  const failedLenses = (report.failed_lenses as string[] | null) ?? [];
+  if (failedLenses.length > 0) {
+    return {
+      approved: false,
+      blockedReason: `${failedLenses.length} lens(es) failed to generate during this audit (${failedLenses.join(", ")}) — this report is genuinely incomplete, not just thin. Re-run the analysis before approving.`,
+    };
+  }
 
   if (report.edit_window_closes_at && new Date(report.edit_window_closes_at).getTime() > Date.now()) {
     // Reads the same DB-backed setting the window was originally computed
