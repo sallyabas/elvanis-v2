@@ -308,7 +308,26 @@ export default async function ReviewerQueuePage() {
                     {r.status === "requested" && (
                       <form action={scheduleSessionRequestAction} className="flex items-end gap-1.5">
                         <input type="hidden" name="requestId" value={r.id} />
-                        <Input type="datetime-local" name="scheduledAt" label="Schedule for" required className="py-1 text-xs" />
+                        {/* Real, confirmed accessibility bug found live via
+                            the Playwright session-lifecycle spec
+                            (2026-09-03) — id defaults to `name` when no
+                            explicit id is passed (see Input.tsx), and
+                            since every pending session request on this
+                            page renders its own copy of this exact form
+                            with the same literal name="scheduledAt", every
+                            instance got the SAME id, a genuine HTML id
+                            collision. Only the first one on the page ever
+                            got a real label association — every other
+                            request's "Schedule for" field was
+                            programmatically unnamed (confirmed via the
+                            accessibility tree: a bare, unnamed textbox),
+                            same real-user impact as the original id/name
+                            gap this component's own useId() fix already
+                            closed once, just triggered by a different
+                            cause. Fixed with a real per-request unique id
+                            — name stays "scheduledAt" unchanged, since the
+                            Server Action reads the field by name, not id. */}
+                        <Input type="datetime-local" name="scheduledAt" id={`scheduledAt-${r.id}`} label="Schedule for" required className="py-1 text-xs" />
                         <Input type="text" name="notes" placeholder="Notes (optional)" className="py-1 text-xs" />
                         <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
                           Schedule
