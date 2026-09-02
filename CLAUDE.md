@@ -2167,6 +2167,33 @@ Final single-item spacing fix, scoped explicitly to Section 2 ("Evidence in. Hum
 
 Committed and pushed (commit `4697729`), per explicit go-ahead.
 
+## Full-journey exploratory UX pass + four real fixes (confirmed 2026-09-02)
+
+Direct founder request: an evidence-based exploratory pass across the full journey (landing page through delivered report) checking five things — self-evidence without instructions, next-step clarity, exact click-behavior match, real mobile rendering at 375px/768px, and anywhere something felt slow/broken/confusing — flagged with real evidence, not impression. Then asked to fix all four confirmed findings plus definitively resolve one inconclusive item from the pass.
+
+**Finding 1 (fixed) — sidebar had zero mobile responsiveness, squeezing every authenticated page.** `AppSidebar`/`ReviewerSidebar` were both `fixed ... w-[200px]` with no responsive classes, and both layouts reserved that width unconditionally (`ml-[200px]`, no breakpoint) — confirmed live at 375px: sidebar took ~52% of the viewport, content column ~185px wide, headline text wrapping to 5-6 lines. Affected every single authenticated page, client and reviewer both (both used the identical pattern).
+
+**Finding 2 (fixed) — real horizontal overflow on the Services page.** The Core Audit card's link row (`flex gap-4`, no wrap) had genuine overflow — confirmed via `scrollWidth` (403px) exceeding `clientWidth` (375px), not just narrow wrapping. "Submit new evidence" was actually clipped.
+
+**Finding 3 (investigated, no bug) — interactive demo's ~1s tab-highlight lag.** Re-measured precisely rather than trusting the earlier screenshot-based observation: computed `transition-duration` is correctly `0.15s`. Built a completely isolated, unrelated test element (a plain `<div>` with an inline `transition: background-color 150ms`) and it showed the **identical** slow-settling artifact — still the old color 300ms after the change, 2x the declared duration. This proves the lag is a rendering characteristic of the automated test browser itself, not the app's code — no code change made, since nothing in the app needed fixing.
+
+**Finding 4 (fixed) — ambiguous "Review" stepper label.** `ProgressStepper.tsx`'s third step ("Profile → Evidence → Review → Report") used "Review" to mean the *reviewer's* review, but nothing distinguished this from the far more common meaning ("you review your own answers") — this app has no client-facing confirm-your-answers screen at all.
+
+**Fixes built:**
+1. **New `SidebarShell.tsx`** (`src/app/_components/ui/`) — the one shared client wrapper both sidebars now render their content through. Below `lg` (1024px, matching this app's own `ReportSectionNav` breakpoint): off-canvas drawer (`-translate-x-full` default), opened via a slim fixed top bar (hamburger + "Elvanis" wordmark), click-to-dismiss backdrop, closes on navigation. At `lg`+: pixel-identical to the prior always-visible fixed sidebar. `AppSidebar`/`ReviewerSidebar` stay real Server Components — only the shell needs client state, and Next.js composition lets a Server Component pass JSX through a Client Component's `children` without that content becoming client-only. Both layouts' content wrappers changed from `ml-[200px]` to `pt-14 lg:ml-[200px] lg:pt-0`. **A real lint bug caught before shipping**: the first version closed the drawer via `useEffect(() => setOpen(false), [pathname])`, correctly flagged by `react-hooks/set-state-in-effect` as an avoidable extra render — fixed using React's own documented pattern for "reset state when a prop changes" (comparing against a `prevPathname` state and adjusting `open` directly during render, not in an effect).
+2. **Services page** — `flex-wrap` (+ `gap-x-4 gap-y-1`) added to the Core Audit card's link row. Confirmed via DOM measurement: `scrollWidth` now equals `clientWidth` (375 = 375).
+3. **`ProgressStepper.tsx`** — "Review" → "Under Review", matching the phrasing `journey-status.ts` already uses internally for the identical concept (`in_review`).
+
+**Loading-indicator question, definitively resolved (was inconclusive in the prior pass)** — monkey-patched `window.fetch` with an artificial 3-second delay to hold the request open long enough to screenshot mid-flight: the "Saving your evidence…" overlay with a real spinner does render, confirmed via a live screenshot capturing it. The earlier "inconclusive" result was purely because the real operation (~1-3s) is fast enough that untimed checks kept missing the window.
+
+**Verified live, both apps, three real widths (375px, 768px, 1280px)**: hamburger opens/closes the drawer, backdrop-click closes it, auto-closes on real navigation (confirmed via a clean click→navigate→drawer-closed cycle, after first catching a testing-tool click-timing artifact that made one earlier attempt look like a real bug — re-verified cleanly), full-width content confirmed at 375px/768px on both Dashboard and Reviewer Queue, zero visual regression confirmed at 1280px against the original always-visible layout. Services page overflow fix confirmed both via DOM measurement and a live screenshot showing the two links correctly stacked. Stepper relabel confirmed live on Evidence Intake.
+
+**One real, unrelated cleanup during verification**: a test submission (all-blank fields, created while checking the loading overlay) was left on Sally's real, kept account — deleted afterward, confirmed via direct DB read that her account is back to its exact original state and her real historical report/proof data was untouched.
+
+`tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean. Temporary debug-session route and all scratch scripts deleted, confirmed via clean `git status --short`.
+
+Committed and pushed (commit `1abdbf6`), per explicit go-ahead.
+
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
 - Don't over-build ahead of proof. Exception: modules built from external research (Tender Readiness, AI Reliability, Data Protection) don't need a live client first — they're sequenced by engine-readiness, not by demand signal.
