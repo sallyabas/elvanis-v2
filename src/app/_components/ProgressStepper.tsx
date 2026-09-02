@@ -8,14 +8,26 @@ import type { JourneyStatus } from "@/lib/reports/journey-status";
  * the overall journey. Deterministic, reuses the same computeJourneyStatus
  * signal NextStepBanner already reads (no separate state to drift).
  *
- * Deliberately just 4 fixed named steps (Profile → Evidence → Review →
+ * Deliberately just 4 fixed named steps (Profile → Evidence → Under Review →
  * Report), not a generic configurable stepper — this app has exactly one
  * core journey to show, not several. "Profile" is always shown as done:
  * every page this renders on already requires a real `companies` row to
  * exist (enforced by the (app) layout), so by construction the visitor has
  * always completed at least the minimal profile step to get here.
+ *
+ * Third step relabeled "Review" -> "Under Review" (confirmed 2026-09-02,
+ * real UX-pass finding) — "Review" alone reads ambiguously as "you review
+ * your own submission" (the far more common meaning of a bare "Review"
+ * step in a multi-step form), when this step actually always means "your
+ * reviewer is looking at it" (this app has no client-facing
+ * confirm-your-answers screen at all — evidence goes straight from Evidence
+ * to a human reviewer once the edit window closes). "Under Review" reads
+ * unambiguously as something happening to the submission, done by someone
+ * else, matching every other place in this file's own history that already
+ * uses that exact phrasing for this same concept (e.g. journey-status.ts's
+ * "in_review" stage name).
  */
-const STEPS = ["Profile", "Evidence", "Review", "Report"] as const;
+const STEPS = ["Profile", "Evidence", "Under Review", "Report"] as const;
 
 function currentStepIndex(stage: JourneyStatus["stage"]): number {
   switch (stage) {

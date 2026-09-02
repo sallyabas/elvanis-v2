@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SidebarLink } from "@/app/_components/ui/SidebarLink";
+import { SidebarShell } from "@/app/_components/ui/SidebarShell";
 import { SignOutButton } from "@/app/(app)/sign-out-button";
 
 /**
@@ -18,10 +19,16 @@ import { SignOutButton } from "@/app/(app)/sign-out-button";
  * shows its own confirm-before-starting screen first (ModuleStartConfirm,
  * item 6), so a direct sidebar click still never silently drops the
  * client into a bare form with zero context.
+ *
+ * Mobile-responsive (confirmed 2026-09-02) — the fixed/always-visible
+ * layout was permanently squeezing every authenticated page below the
+ * `lg` breakpoint (confirmed live at 375px: content left ~185px wide).
+ * Now renders through SidebarShell.tsx, which turns this into an
+ * off-canvas drawer below `lg` and leaves it pixel-identical at `lg`+.
  */
 export function AppSidebar({ displayName, signalsCount }: { displayName: string; signalsCount: number }) {
   return (
-    <aside className="fixed inset-y-0 left-0 flex w-[200px] flex-col border-r border-neutral-200 bg-white">
+    <SidebarShell mobileLabel="Elvanis">
       <div className="px-4 pb-3 pt-5">
         <p className="text-base font-semibold text-neutral-900">ELVANIS</p>
         <p className="text-xs text-neutral-500">AI Business OS</p>
@@ -105,6 +112,6 @@ export function AppSidebar({ displayName, signalsCount }: { displayName: string;
           </div>
         </div>
       </div>
-    </aside>
+    </SidebarShell>
   );
 }

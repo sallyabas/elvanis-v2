@@ -66,10 +66,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div>
       {/* "v2" briefing-document redesign (confirmed 2026-08-31, spec point
           1) — replaces the previous top nav bar with a fixed left sidebar.
-          ml-[200px] on the content wrapper below reserves the sidebar's
-          own width so content never renders underneath it. */}
+          lg:ml-[200px] on the content wrapper below reserves the sidebar's
+          own width at desktop so content never renders underneath it.
+          Below `lg` (confirmed 2026-09-02, mobile-responsiveness fix): no
+          left margin — the sidebar itself becomes an off-canvas drawer
+          (see SidebarShell.tsx) — and pt-14 clears its own fixed mobile
+          top bar instead. */}
       <AppSidebar displayName={displayName} signalsCount={signalsCount} />
-      <div className="ml-[200px] min-h-screen bg-[#f9f9f9]">{children}</div>
+      <div className="min-h-screen bg-[#f9f9f9] pt-14 lg:ml-[200px] lg:pt-0">{children}</div>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { SidebarLink } from "@/app/_components/ui/SidebarLink";
+import { SidebarShell } from "@/app/_components/ui/SidebarShell";
 import { SignOutButton } from "@/app/(reviewer)/sign-out-button";
 
 /**
@@ -17,10 +18,15 @@ import { SignOutButton } from "@/app/(reviewer)/sign-out-button";
  * formatDisplayName() treatment as the client sidebar, resolved by the
  * caller ((reviewer)/layout.tsx) from `users.name`/email, never the raw
  * email shown directly here.
+ *
+ * Mobile-responsive (confirmed 2026-09-02) — same real fix as
+ * AppSidebar.tsx, same SidebarShell.tsx wrapper, same reasoning: this had
+ * the identical unconditional `fixed w-[200px]` gap, squeezing every
+ * reviewer-facing page below `lg` exactly like the client side did.
  */
 export function ReviewerSidebar({ displayName }: { displayName: string }) {
   return (
-    <aside className="fixed inset-y-0 left-0 flex w-[200px] flex-col border-r border-neutral-200 bg-white">
+    <SidebarShell mobileLabel="Elvanis">
       <div className="px-4 pb-3 pt-5">
         <p className="text-base font-semibold text-neutral-900">ELVANIS</p>
         <p className="text-xs text-neutral-500">Reviewer tools</p>
@@ -40,6 +46,6 @@ export function ReviewerSidebar({ displayName }: { displayName: string }) {
         </p>
         <SignOutButton />
       </div>
-    </aside>
+    </SidebarShell>
   );
 }

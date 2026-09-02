@@ -73,7 +73,12 @@ export default async function ServicesPage() {
             <p className="text-sm text-neutral-600">Your goal-driven diagnosis and 30/60/90 roadmap. First audit free; re-audits are paid.</p>
             <span className="shrink-0 text-sm font-medium text-accent">{formatPrice(pricingByKey.get("standard_core_audit") ?? { priceAmount: 0, currency: "GBP" })}</span>
           </div>
-          <div className="mt-3 flex gap-4 text-sm">
+          {/* flex-wrap added (confirmed 2026-09-02, real UX-pass finding)
+              — confirmed via computed styles at 375px that this row's
+              scrollWidth (403px) exceeded its clientWidth (375px):
+              "Submit new evidence" was genuinely clipped, not just
+              wrapped narrow. */}
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
             <Link href="/dashboard" className="font-medium text-accent hover:underline">
               View your dashboard
             </Link>
