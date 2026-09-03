@@ -12,6 +12,7 @@ import { loadGovernanceDimensions } from "@/lib/lenses/benchmarks-repository";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEMO_LIVE_COMPANY_ID, DEMO_LIVE_REPORT_ID } from "@/lib/demo-live/config";
 import { SEVERITY_STYLES } from "@/lib/severity-badge";
+import { LOW_CONFIDENCE_NOTE, shouldShowLowConfidenceNote } from "@/lib/reports/confidence-note";
 import { Alert } from "@/app/_components/ui/Alert";
 
 /**
@@ -364,6 +365,11 @@ export default async function DemoLivePage() {
                       <span className="font-medium">Recommended: </span>
                       {f.recommendedAction}
                     </p>
+                    {/* Client-facing confidence note (confirmed 2026-09-03)
+                        — kept in sync with the real client report page. */}
+                    {shouldShowLowConfidenceNote(f) && (
+                      <p className="mt-1 text-xs italic text-neutral-500 dark:text-neutral-400">{LOW_CONFIDENCE_NOTE}</p>
+                    )}
                   </div>
                 );
               })}

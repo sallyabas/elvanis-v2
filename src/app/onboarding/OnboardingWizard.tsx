@@ -66,6 +66,23 @@ export interface OnboardingWizardProps {
   existingCompanyName?: string;
   /** True only for Path B's fork, where industry/employee count are already known — skips straight to goal selection. */
   skipCompanyDetails?: boolean;
+  /**
+   * Real bug fix (confirmed 2026-09-03, direct founder investigation) —
+   * "Your name" was previously bundled inside the same `mode === "attach"`
+   * conditional as "Company name," so every Hub-bridge-attach render
+   * silently skipped asking for it too, even though the Hub bridge itself
+   * (createCompanyMinimal) never collects it — a real, silent gap, not a
+   * correct skip. Company name is correctly still tied to `mode` (already
+   * known once attached); personal name needs its OWN, independent signal:
+   * true only when the caller already gave the user a chance to answer
+   * this in the SAME flow moments earlier (currently only PathBWizard's
+   * own internal "core_audit fork," which passes true precisely when
+   * PathBWizard itself was in create mode — see that file's own render of
+   * this component for the exact reasoning). Every other render site
+   * (fresh create, and every genuine Hub-bridge attach) omits this, so it
+   * defaults to false and the field correctly shows.
+   */
+  hidePersonalNameField?: boolean;
 }
 
 // Named step keys, not raw indices (confirmed 2026-08-27, fixing a real
@@ -81,7 +98,13 @@ const FULL_STEPS: StepKey[] = ["company", "goal", "refine", "details", "review"]
 const SKIP_COMPANY_STEPS: StepKey[] = ["goal", "refine", "details", "review"];
 const STEP_TITLES: Record<StepKey, string> = { company: "Company", goal: "Goal", refine: "Refine", details: "Details", review: "Review" };
 
-export function OnboardingWizard({ mode = "create", existingCompanyId, existingCompanyName, skipCompanyDetails = false }: OnboardingWizardProps) {
+export function OnboardingWizard({
+  mode = "create",
+  existingCompanyId,
+  existingCompanyName,
+  skipCompanyDetails = false,
+  hidePersonalNameField = false,
+}: OnboardingWizardProps) {
   const router = useRouter();
 
   const stepKeys = skipCompanyDetails ? SKIP_COMPANY_STEPS : FULL_STEPS;
@@ -153,6 +176,7 @@ export function OnboardingWizard({ mode = "create", existingCompanyId, existingC
         ? await addGoalToExistingCompany({
             companyId: existingCompanyId,
             ...(skipCompanyDetails ? {} : { industry: industry.trim() || null, employeeCount: employeeCount.trim() ? Number(employeeCount) : null }),
+            ...(hidePersonalNameField ? {} : { yourName: yourName.trim() || null }),
             ...goalFields,
           })
         : await createCompanyAndGoal({
@@ -204,24 +228,28 @@ export function OnboardingWizard({ mode = "create", existingCompanyId, existingC
               Continuing for <span className="font-medium">{existingCompanyName}</span>
             </p>
           ) : (
-            <>
-              <Input label="Company name" type="text" required autoFocus value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Acme Ltd" />
-              {/* Real gap closed (confirmed 2026-08-31, direct founder
-                  investigation request) — this app never captured a
-                  client's own name anywhere before this; users.name
-                  existed on the schema since the first migration but was
-                  only ever set later, manually, via Account Settings.
-                  Optional — never required to proceed, matching this
-                  step's own "just enough to get started" framing. */}
-              <Input
-                label="Your name"
-                type="text"
-                value={yourName}
-                onChange={(e) => setYourName(e.target.value)}
-                placeholder="e.g. Alex Chen"
-                hint="Optional — how we'll address you."
-              />
-            </>
+            <Input label="Company name" type="text" required autoFocus value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Acme Ltd" />
+          )}
+          {/* Real gap closed (confirmed 2026-08-31, direct founder
+              investigation request) — this app never captured a client's
+              own name anywhere before this; users.name existed on the
+              schema since the first migration but was only ever set
+              later, manually, via Account Settings. Optional — never
+              required to proceed, matching this step's own "just enough
+              to get started" framing.
+              Independent of `mode` (confirmed 2026-09-03) — company name
+              above is correctly gated on mode (already known once
+              attached), but personal name needs its own signal; see
+              `hidePersonalNameField`'s own docblock for why. */}
+          {!hidePersonalNameField && (
+            <Input
+              label="Your name"
+              type="text"
+              value={yourName}
+              onChange={(e) => setYourName(e.target.value)}
+              placeholder="e.g. Alex Chen"
+              hint="Optional — how we'll address you."
+            />
           )}
           <Input label="Industry" type="text" required value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="e.g. B2B SaaS — marketing analytics" />
           <Input label="Employee count" type="number" required value={employeeCount} onChange={(e) => setEmployeeCount(e.target.value)} placeholder="e.g. 45" />

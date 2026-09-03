@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AccountSettingsForm } from "./AccountSettingsForm";
-import type { NotificationPreferences } from "./actions";
-import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/lib/notifications/preferences";
+import { DEFAULT_NOTIFICATION_PREFERENCES, type NotificationPreferences } from "@/lib/notifications/preferences";
 import { Card } from "@/app/_components/ui/Card";
 
 // Account Settings — about the person, not the business (confirmed
@@ -10,6 +9,12 @@ import { Card } from "@/app/_components/ui/Card";
 // sign-in identity, changing it would mean re-verifying a new email, not
 // built here), notification preferences (genuinely gates sending, not
 // just a display toggle — see src/lib/notifications/dispatch.ts).
+//
+// Phone (added 2026-09-03, direct founder request) — optional, profile-
+// level, reused automatically by every session-request type
+// (Discovery/Delivery/Concierge/Training & Advisory/compliance-
+// consultation) rather than re-asked per request; see requestSession()'s
+// own docblock for the snapshot-at-submission-time design.
 //
 // Deliberately NOT built, flagged rather than faked: password management
 // (this app is passwordless throughout, both client and reviewer auth —
@@ -26,7 +31,7 @@ export default async function AccountSettingsPage() {
     redirect("/client-login");
   }
 
-  const { data: profile } = await supabase.from("users").select("name, email, notification_preferences, plan_tier").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("users").select("name, email, phone, notification_preferences, plan_tier").eq("id", user.id).single();
 
   const preferences: NotificationPreferences = {
     ...DEFAULT_NOTIFICATION_PREFERENCES,
@@ -44,7 +49,7 @@ export default async function AccountSettingsPage() {
             <span className="font-medium">Email:</span> {profile?.email ?? user.email}
             <span className="ml-2 text-xs text-neutral-400 dark:text-neutral-500">(sign-in identity — not editable here)</span>
           </p>
-          <AccountSettingsForm initialName={profile?.name ?? ""} initialPreferences={preferences} />
+          <AccountSettingsForm initialName={profile?.name ?? ""} initialPhone={profile?.phone ?? ""} initialPreferences={preferences} />
         </Card>
 
         <Card>

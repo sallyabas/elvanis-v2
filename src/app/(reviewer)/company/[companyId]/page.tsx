@@ -96,7 +96,7 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
   // Core Audit reports and module requests already shown above.
   const { data: sessionRequests } = await admin
     .from("session_requests")
-    .select("id, session_type, status, requested_at, scheduled_at, completed_at")
+    .select("id, session_type, status, requested_at, scheduled_at, completed_at, phone_snapshot")
     .eq("company_id", companyId)
     .order("requested_at", { ascending: false });
 
@@ -105,6 +105,24 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
     .select("id, status, start_date, target_end_date, report_id")
     .eq("company_id", companyId)
     .order("id", { ascending: false });
+
+  // Real basic visibility for "Does this apply to us?" feedback (confirmed
+  // 2026-09-03, direct founder request) — this data was genuinely
+  // write-only before now: submitFindingNotApplicableFeedback() inserts a
+  // row, and the only prior read (loadFlaggedFindingIds()) exists purely
+  // to re-render the SAME client's own button state on reload, never
+  // surfaced to any reviewer. finding_title is stored verbatim on the row
+  // itself (confirmed by reading the migration directly), so this is a
+  // single-table query — no join back to lens_findings/module_findings
+  // needed. Extended here rather than a new standalone page — genuinely
+  // low-volume data, same reasoning already applied to payment records
+  // and regulatory-content-review status living on existing pages instead
+  // of new ones.
+  const { data: findingFeedback } = await admin
+    .from("finding_feedback")
+    .select("id, finding_source, finding_title, created_at")
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: false });
 
   // Payment status (confirmed 2026-08-25) — only paid re-audits carry a
   // real payment record among reports; module requests, sessions, and
@@ -275,12 +293,35 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
                     {s.scheduled_at && <> · scheduled {new Date(s.scheduled_at).toLocaleString()}</>}
                     {s.completed_at && <> · completed {new Date(s.completed_at).toLocaleDateString()}</>}
                   </span>
+                  {/* Phone snapshot (confirmed 2026-09-03) — the number on file at request time, not a live profile reference. */}
+                  {s.phone_snapshot && <p className="text-xs text-neutral-500 dark:text-neutral-400">Phone: {s.phone_snapshot as string}</p>}
                   <PaymentStatusRow companyId={companyId} entityType="session_request" entityId={s.id as string} record={sessionPayments.get(s.id as string)} />
                 </li>
               ))}
             </ul>
           ) : (
             <p className="text-sm text-neutral-500 dark:text-neutral-400">No session or Concierge requests yet.</p>
+          )}
+        </Card>
+
+        {/* Real basic visibility for "Does this apply to us?" feedback
+            (confirmed 2026-09-03) — see the finding_feedback query above
+            for the full "this was write-only before now" context. */}
+        <Card title="Finding feedback" subtitle={'Client-flagged "Does this apply to us?" responses.'}>
+          {findingFeedback && findingFeedback.length > 0 ? (
+            <ul className="space-y-2 text-sm">
+              {findingFeedback.map((row) => (
+                <li key={row.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0 dark:border-neutral-800">
+                  <span className="text-neutral-800 dark:text-neutral-200">{row.finding_title as string}</span>
+                  <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">
+                    ({row.finding_source === "module_finding" ? "module finding" : "core audit finding"}) · flagged{" "}
+                    {new Date(row.created_at as string).toLocaleDateString()}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">No findings flagged &quot;doesn&apos;t apply&quot; yet.</p>
           )}
         </Card>
 

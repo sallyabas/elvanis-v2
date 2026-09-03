@@ -117,7 +117,13 @@ export function PathBWizard({ mode = "create", existingCompanyId, existingCompan
       const result = await submitPathBMinimalProfile({
         existingCompanyId,
         companyName: mode === "attach" ? undefined : companyName,
-        yourName: mode === "attach" ? undefined : yourName.trim() || undefined,
+        // Real bug fix (confirmed 2026-09-03) — this was previously
+        // discarded in attach mode too, alongside companyName, even
+        // though "Your name" is now shown regardless of mode (the Hub
+        // bridge never collects it, so attach mode still needs to ask).
+        // submitPathBMinimalProfile()'s own setUserNameIfUnset() call is
+        // idempotent, so sending it unconditionally is safe.
+        yourName: yourName.trim() || undefined,
         industry,
         employeeCount: Number(employeeCount),
         registrationCountry,
@@ -196,7 +202,20 @@ export function PathBWizard({ mode = "create", existingCompanyId, existingCompan
             assessment as one of its five lenses.
           </Alert>
         </div>
-        <OnboardingWizard mode="attach" existingCompanyId={companyId} existingCompanyName={companyName || existingCompanyName} skipCompanyDetails />
+        {/* hidePersonalNameField: true precisely when THIS wizard was in
+            create mode — meaning ITS OWN profile step (below) already
+            gave the user a chance to answer "Your name" moments ago, so
+            the fork shouldn't re-ask. When this wizard was itself
+            attach mode (the Hub bridge), personal name was never asked
+            anywhere, so the fork correctly still shows it. Confirmed
+            2026-09-03, direct founder investigation. */}
+        <OnboardingWizard
+          mode="attach"
+          existingCompanyId={companyId}
+          existingCompanyName={companyName || existingCompanyName}
+          skipCompanyDetails
+          hidePersonalNameField={mode !== "attach"}
+        />
       </div>
     );
   }
@@ -342,18 +361,22 @@ export function PathBWizard({ mode = "create", existingCompanyId, existingCompan
         </p>
       </div>
       {mode !== "attach" && (
-        <>
-          <Input label="Company name" required autoFocus value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Acme Ltd" />
-          {/* Real gap closed (confirmed 2026-08-31) — same as OnboardingWizard's
-              own equivalent field; see setUserNameIfUnset's docblock. */}
-          <Input label="Your name" value={yourName} onChange={(e) => setYourName(e.target.value)} placeholder="e.g. Alex Chen" hint="Optional — how we'll address you." />
-        </>
+        <Input label="Company name" required autoFocus value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Acme Ltd" />
       )}
       {mode === "attach" && (
         <p className="text-sm text-neutral-700 dark:text-neutral-300">
           Continuing for <span className="font-medium">{existingCompanyName}</span>
         </p>
       )}
+      {/* Real gap closed (confirmed 2026-08-31, extended 2026-09-03) —
+          this was previously bundled inside the `mode !== "attach"`
+          block above alongside company name, so the Hub-bridge attach
+          case (which never collects personal name anywhere) silently
+          never asked either — a real gap, not a correct skip. Now
+          independent of mode; every render site (fresh Path B, and both
+          genuine Hub-bridge attach renders) correctly still needs this,
+          since none of them have collected it yet. */}
+      <Input label="Your name" value={yourName} onChange={(e) => setYourName(e.target.value)} placeholder="e.g. Alex Chen" hint="Optional — how we'll address you." />
       <Input label="Industry" required value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="e.g. B2B SaaS — marketing analytics" />
       <Input label="Employee count" type="number" required value={employeeCount} onChange={(e) => setEmployeeCount(e.target.value)} placeholder="e.g. 45" />
       <div className="grid gap-4 sm:grid-cols-2">

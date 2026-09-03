@@ -162,6 +162,15 @@ export async function addGoalToExistingCompany(input: {
   companyId: string;
   industry?: string | null;
   employeeCount?: number | null;
+  /**
+   * Real gap closed (confirmed 2026-09-03, direct founder investigation)
+   * — this function's own docblock already covers both real callers of
+   * "attach," and both are genuine Hub-bridge cases where personal name
+   * was never asked anywhere before now (createCompanyMinimal() never
+   * collects it) — createCompanyAndGoal() already had this parameter,
+   * this one simply never did.
+   */
+  yourName?: string | null;
   primaryGoal: PrimaryGoal;
   secondaryGoal: PrimaryGoal | null;
   urgencyLevel: string | null;
@@ -205,6 +214,8 @@ export async function addGoalToExistingCompany(input: {
     success_definition: input.successDefinition,
   });
   if (insertGoalError) return { success: false, error: `Couldn't save goal: ${insertGoalError.message}` };
+
+  if (input.yourName) await setUserNameIfUnset(supabase, user.id, input.yourName);
 
   return { success: true, companyId: input.companyId };
 }

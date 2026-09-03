@@ -286,6 +286,9 @@ export default async function ReviewerQueuePage() {
                     </span>
                   </div>
                   {r.client_notes && <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">&quot;{r.client_notes}&quot;</p>}
+                  {/* Phone snapshot (confirmed 2026-09-03) — the number on
+                      file AT REQUEST TIME, not a live profile reference. */}
+                  {r.phone_snapshot && <p className="mb-2 text-xs text-neutral-700 dark:text-neutral-300">Phone: {r.phone_snapshot}</p>}
                   {r.status === "scheduled" && r.scheduled_at && (
                     <p className="mb-2 text-xs text-neutral-700 dark:text-neutral-300">
                       Scheduled for <span className="font-medium">{new Date(r.scheduled_at).toLocaleString()}</span>

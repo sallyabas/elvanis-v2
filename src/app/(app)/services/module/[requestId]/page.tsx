@@ -7,6 +7,8 @@ import { PROCUREMENT_QUESTIONS, type ProcurementCategory } from "@/lib/modules/t
 import { Card } from "@/app/_components/ui/Card";
 import { Alert } from "@/app/_components/ui/Alert";
 import { SEVERITY_STYLES } from "@/lib/severity-badge";
+import { LOW_CONFIDENCE_NOTE, shouldShowLowConfidenceNote } from "@/lib/reports/confidence-note";
+import type { ConfidenceLevel } from "@/lib/lenses/types";
 import { DeliveryFeedbackPrompt } from "@/app/_components/DeliveryFeedbackPrompt";
 import { hasSubmittedFeedbackFor } from "@/lib/reviewer/delivery-feedback";
 
@@ -39,6 +41,11 @@ interface GenericModuleFinding {
   recommendedAction: string;
   severity: "critical" | "high" | "medium" | "low";
   isMissingDataFinding?: boolean;
+  /** Confirmed 2026-09-03 — same shared field every core lens/module
+   *  finding carries; typed explicitly here (previously only reachable
+   *  via the catch-all index signature) so shouldShowLowConfidenceNote()
+   *  can read it safely. */
+  confidenceLevel?: ConfidenceLevel;
   [key: string]: unknown;
 }
 
@@ -167,6 +174,12 @@ export default async function ClientModuleDetailPage({ params }: { params: Promi
                     <span className="font-medium text-neutral-700 dark:text-neutral-300">Recommended: </span>
                     {f.recommendedAction}
                   </p>
+                )}
+                {/* Client-facing confidence note (confirmed 2026-09-03) —
+                    defaults to "medium" for any old/malformed row missing
+                    the field, never treated as artificially low. */}
+                {shouldShowLowConfidenceNote({ isMissingDataFinding: Boolean(f.isMissingDataFinding), confidenceLevel: f.confidenceLevel ?? "medium" }) && (
+                  <p className="mt-2 text-xs italic text-neutral-500 dark:text-neutral-400">{LOW_CONFIDENCE_NOTE}</p>
                 )}
               </div>
             ))}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { requestSession, type SessionType } from "@/lib/service-layer/session-requests";
 import { Alert } from "@/app/_components/ui/Alert";
+import { Textarea } from "@/app/_components/ui/Textarea";
 
 // Framing text + spelled-out F2F wording added 2026-08-06 (honest UX
 // review pass) — the report page previously offered Delivery Session and
@@ -80,11 +81,17 @@ export function SessionRequestButton({
 }) {
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  // Real gap closed (confirmed 2026-09-03, direct founder request) —
+  // every call site of requestSession() previously hardcoded `null` for
+  // clientNotes, since no field existed anywhere to collect one. The
+  // column already existed and was already wired through persistence and
+  // reviewer display — this was purely a missing input.
+  const [notes, setNotes] = useState("");
 
   async function handleRequest() {
     setStatus("sending");
     setError(null);
-    const result = await requestSession(companyId, sessionType, null);
+    const result = await requestSession(companyId, sessionType, notes.trim() || null);
     if (result.success) {
       setStatus("sent");
     } else {
@@ -107,6 +114,13 @@ export function SessionRequestButton({
   return (
     <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
       <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">{LABELS[sessionType].description}</p>
+      <Textarea
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Anything your reviewer should know before reaching out? (optional)"
+        rows={2}
+        className="mb-2 text-xs"
+      />
       <button
         type="button"
         onClick={handleRequest}

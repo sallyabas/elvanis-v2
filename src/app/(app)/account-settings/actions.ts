@@ -3,13 +3,15 @@
 import { createClient } from "@/lib/supabase/server";
 import type { NotificationPreferences } from "@/lib/notifications/preferences";
 
-// Re-exported for existing callers (page.tsx, AccountSettingsForm.tsx) —
-// the real definition now lives in lib/notifications/preferences.ts
-// (confirmed 2026-09-03, email redesign brief), shared with dispatch.ts
-// and the /unsubscribe flow so all three can't independently drift on
-// what the valid keys are.
-export type { NotificationPreferences };
-
+// Real bug found and fixed live (confirmed 2026-09-03) — this file
+// previously also did `export type { NotificationPreferences }` so
+// page.tsx/AccountSettingsForm.tsx could import it from here. Next.js's
+// Server Actions compiler treats every export of a "use server" file as
+// a server-action reference, and a type-only re-export broke that
+// (`ReferenceError: NotificationPreferences is not defined` at module
+// evaluation, a real 500 on every save). Callers now import the type
+// directly from lib/notifications/preferences.ts instead — the actual
+// source of truth — never through this file.
 export interface UpdateAccountSettingsResult {
   success: boolean;
   error?: string;
@@ -33,7 +35,7 @@ export interface UpdateAccountSettingsResult {
  * everything" option sets, so a client who opted out via email can see
  * and reverse it here too, not get permanently stuck.
  */
-export async function updateAccountSettings(name: string, preferences: NotificationPreferences): Promise<UpdateAccountSettingsResult> {
+export async function updateAccountSettings(name: string, phone: string, preferences: NotificationPreferences): Promise<UpdateAccountSettingsResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -42,7 +44,7 @@ export async function updateAccountSettings(name: string, preferences: Notificat
 
   const { error } = await supabase
     .from("users")
-    .update({ name: name.trim() || null, notification_preferences: preferences })
+    .update({ name: name.trim() || null, phone: phone.trim() || null, notification_preferences: preferences })
     .eq("id", user.id);
 
   if (error) return { success: false, error: `Couldn't save: ${error.message}` };

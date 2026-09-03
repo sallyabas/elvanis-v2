@@ -22,6 +22,7 @@ import { listPricing, formatPrice } from "@/lib/pricing";
 import { Card } from "@/app/_components/ui/Card";
 import { Alert } from "@/app/_components/ui/Alert";
 import { SEVERITY_STYLES } from "@/lib/severity-badge";
+import { LOW_CONFIDENCE_NOTE, shouldShowLowConfidenceNote } from "@/lib/reports/confidence-note";
 
 // SourceEvidenceSnapshot renamed to the shared EvidenceSnapshotShape
 // (confirmed 2026-08-12, real bug list item #4) — this type/rendering was
@@ -467,6 +468,12 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
                     <span className="font-medium">Recommended: </span>
                     {f.recommendedAction}
                   </p>
+                  {/* Client-facing confidence note (confirmed 2026-09-03) —
+                      see confidence-note.ts's own docblock for why this
+                      was safe to add with zero query changes. */}
+                  {shouldShowLowConfidenceNote(f) && (
+                    <p className="mt-1 text-xs italic text-neutral-500 dark:text-neutral-400">{LOW_CONFIDENCE_NOTE}</p>
+                  )}
                   {/* Reviewer-authored Concierge note (confirmed 2026-08-24)
                       — deliberately separate from and visually distinct
                       from the AI-drafted fields above: real, personal

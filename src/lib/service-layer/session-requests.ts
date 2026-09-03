@@ -51,6 +51,18 @@ export interface RequestSessionResult {
  * Client-facing — session-scoped, RLS-respecting, verifies the caller owns
  * the company before writing (same discipline as every other client-owned
  * write in this codebase).
+ *
+ * Phone snapshot (confirmed 2026-09-03, direct founder request) — the
+ * client's own profile-level `users.phone` is read here, at the moment of
+ * submission, and copied onto the request row as `phone_snapshot` rather
+ * than left as a live foreign-key-style reference. Same "compute now,
+ * don't recompute later" principle already used for
+ * reports.edit_window_closes_at/review_due_at: a reviewer looking back at
+ * an already-submitted request should see the number that was actually
+ * on file when the client asked to be reached, not whatever the profile
+ * says today if it's since been edited. Optional throughout — a client
+ * who's never set a phone number still gets `null`, same as before this
+ * field existed.
  */
 export async function requestSession(
   companyId: string,
@@ -66,6 +78,9 @@ export async function requestSession(
 
   const { data: company, error: companyError } = await supabase.from("companies").select("id").eq("id", companyId).eq("user_id", user.id).single();
   if (companyError || !company) return { success: false, error: "Company not found." };
+
+  const { data: profile } = await supabase.from("users").select("phone").eq("id", user.id).maybeSingle();
+  const phoneSnapshot = (profile?.phone as string | null) ?? null;
 
   if (sessionType === "delivery" || sessionType === "f2f_workshop") {
     const { data: deliveredReport } = await supabase.from("reports").select("id").eq("company_id", companyId).eq("status", "sent").limit(1).maybeSingle();
@@ -84,6 +99,7 @@ export async function requestSession(
     session_type: sessionType,
     client_notes: clientNotes,
     is_urgent: urgent,
+    phone_snapshot: phoneSnapshot,
   });
   if (insertError) return { success: false, error: `Couldn't submit request: ${insertError.message}` };
 
@@ -116,6 +132,7 @@ export interface SessionRequestRow {
   scheduled_at: string | null;
   completed_at: string | null;
   is_urgent: boolean;
+  phone_snapshot: string | null;
 }
 
 /** Reviewer-facing — lists pending (requested/scheduled) session requests across all companies. */

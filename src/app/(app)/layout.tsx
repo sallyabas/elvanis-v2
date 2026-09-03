@@ -50,8 +50,27 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // signed-in client with no company yet is sent to /onboarding, which is
   // deliberately outside this route group (see onboarding/page.tsx) so
   // this redirect can never loop against itself.
-  const { data: company } = await supabase.from("companies").select("id").eq("user_id", user.id).maybeSingle();
-  if (!company) {
+  //
+  // Real gap closed (confirmed 2026-09-03, direct founder-reproduced bug):
+  // this gate previously only checked "does a company row exist," not
+  // whether it's actually complete. A bare row (name only, entry_path:
+  // 'undecided') gets created early as a side effect of the Hub bridge
+  // step (createCompanyMinimal(), see onboarding/actions.ts) — before
+  // that row existed at all, this gate correctly redirected away, but the
+  // instant it exists, every sidebar link became clickable with zero real
+  // profile data on record. Every OTHER path that sets entry_path writes
+  // it atomically alongside all of that path's own required fields
+  // (createCompanyAndGoal/addGoalToExistingCompany/
+  // submitPathBMinimalProfile all confirmed by direct code read) — so
+  // `entry_path === 'undecided'` is both necessary and sufficient here,
+  // no per-field check needed. Deliberately does NOT touch the separate,
+  // already-correct case of an existing, fully-onboarded client who later
+  // switches focus via chooseEntryPath() and hasn't finished the new
+  // path's fields yet — that's handled by its own dedicated "Finish
+  // setting up" banner (hasCompletedPathBSetup()), a soft nudge, not a
+  // hard block, and stays that way.
+  const { data: company } = await supabase.from("companies").select("id, entry_path").eq("user_id", user.id).maybeSingle();
+  if (!company || !company.entry_path || company.entry_path === "undecided") {
     redirect("/onboarding");
   }
 
