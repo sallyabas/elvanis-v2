@@ -136,6 +136,9 @@ export default async function LandingPage() {
             <a href="#faq" className="hover:text-neutral-900 hover:underline">
               FAQ
             </a>
+            <a href="mailto:info@app.elvanis.com" className="hover:text-neutral-900 hover:underline">
+              Contact
+            </a>
             <Link href="/client-login" className="font-medium text-accent-cta underline hover:text-accent-cta-hover">
               Get started
             </Link>
@@ -809,6 +812,9 @@ export default async function LandingPage() {
         <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-4">
           <span>© {new Date().getFullYear()} Elvanis</span>
           <div className="flex gap-4">
+            <a href="mailto:info@app.elvanis.com" className="hover:underline">
+              Contact us
+            </a>
             <Link href="/privacy" className="hover:underline">
               Privacy
             </Link>
