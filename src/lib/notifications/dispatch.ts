@@ -1,5 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "./send-email";
+import { renderEmail } from "./email-template";
+import { EVENT_TYPE_TO_PREFERENCE_KEY, isOptedOut, type ClientNotificationEventType, type NotificationPreferences } from "./preferences";
 
 /**
  * The "separate, explicit, confirmed step" every notification-creating
@@ -16,20 +18,6 @@ import { sendEmail } from "./send-email";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
-/**
- * Maps client-facing event types to the matching Account Settings
- * preference key (confirmed 2026-08-04, Priority 3) — a real opt-out, not
- * a decorative toggle. Only client-facing events are gated; reviewer
- * notifications (new_submission, regulatory_content_review_due) aren't,
- * since a reviewer opting out could silently break their own reviewing
- * workflow — not asked for, not built.
- */
-const CLIENT_PREFERENCE_KEY: Partial<Record<string, string>> = {
-  report_ready: "reportReady",
-  re_audit_reminder: "reAuditReminder",
-  evidence_incomplete: "evidenceIncomplete",
-};
-
 type Admin = ReturnType<typeof createAdminClient>;
 
 interface FindingTitleLookup {
@@ -38,25 +26,19 @@ interface FindingTitleLookup {
 }
 
 /**
- * Client-facing email templates, expanded 2026-08-06 (honest UX review
- * pass) — real gaps, not polish. Every client-facing template used to be
- * a single generic sentence plus a link to /reports (the list page, not
- * the specific report), with no company name, no hint at what the email
- * was actually about, and no reminder that this app is passwordless
- * (magic-link + code) — a genuine first-time client who submitted
- * evidence days ago may not remember how sign-in works. Now:
- * - company name looked up via companies.user_id = recipient_id (one
- *   company per account in V1, so this is unambiguous)
- * - report_ready and re_audit_reminder use the new related_report_id
- *   column to link directly to the specific report and, for report_ready,
- *   pull the REAL top-3 finding titles rather than generic boilerplate
- *   ("hint at what's inside" is more honestly satisfied by the actual
- *   content than a canned sentence, consistent with this codebase's
- *   standing "never fake content" discipline)
- * - a passwordless-login reminder is appended to every client-facing
- *   template
- * Reviewer-facing templates are untouched — reviewers already know how
- * this app's auth works, that wasn't the finding.
+ * Real, branded template pass (confirmed 2026-09-03, email redesign
+ * brief) — every email in this switch now: (1) uses copy in the
+ * confirmed tone direction (direct, warm-but-not-cutesy, plain English,
+ * names something real and specific whenever the data allows it, rather
+ * than generic phrasing), and (2) returns only the inner {subject,
+ * bodyHtml} pair — the actual wrapping into the shared branded shell
+ * (email-template.ts) happens once, in sendPendingNotifications() below,
+ * so every template automatically gets the same header/footer/
+ * unsubscribe treatment with zero risk of one call site forgetting it.
+ *
+ * Reviewer-facing templates get no greeting/login-reminder/unsubscribe —
+ * unchanged design call from 2026-08-06 (reviewers already know this
+ * app's auth, and opting them out could break their own workflow).
  */
 async function templateFor(
   admin: Admin,
@@ -68,7 +50,7 @@ async function templateFor(
     related_sprint_id: string | null;
     related_module_request_id: string | null;
   },
-): Promise<{ subject: string; html: string }> {
+): Promise<{ subject: string; bodyHtml: string }> {
   const eventType = notification.event_type;
 
   let companyName: string | null = null;
@@ -76,8 +58,8 @@ async function templateFor(
     const { data: company } = await admin.from("companies").select("name").eq("user_id", notification.recipient_id).maybeSingle();
     companyName = (company?.name as string | undefined) ?? null;
   }
-  const greeting = companyName ? `<p>Hi ${companyName} team,</p>` : "";
-  const loginReminder = `<p style="color:#666;font-size:13px;">Sign in at <a href="${SITE_URL}/client-login">${SITE_URL}/client-login</a> with this same email — this app is passwordless, we'll send you a fresh sign-in link and code.</p>`;
+  const greeting = companyName ? `<p style="margin:0 0 16px 0;">Hi ${companyName} team,</p>` : "";
+  const loginReminder = `<p style="margin:20px 0 0 0;font-size:13px;color:#6b6b69;">Sign in at <a href="${SITE_URL}/client-login" style="color:#6b6b69;">${SITE_URL}/client-login</a> with this same email — this app is passwordless, we'll send you a fresh sign-in link and code.</p>`;
 
   switch (eventType) {
     case "report_ready": {
@@ -101,23 +83,23 @@ async function templateFor(
 
       return {
         subject: companyName ? `${companyName}'s Elvanis report is ready` : "Your Elvanis report is ready",
-        html: `${greeting}<p>Your execution audit report is ready, including ${contentsHint}.</p><p><a href="${reportUrl}">View your report</a></p>${loginReminder}`,
+        bodyHtml: `${greeting}<p style="margin:0 0 16px 0;">Your execution audit is done, reviewed, and ready — including ${contentsHint}.</p><p style="margin:0;"><a href="${reportUrl}" style="color:#B87333;font-weight:600;">View your report →</a></p>${loginReminder}`,
       };
     }
     case "new_submission":
       return {
         subject: "New submission ready for review",
-        html: `<p>A new report has cleared its edit window and is ready for reviewer approval.</p><p><a href="${SITE_URL}/queue">Open the reviewer queue</a></p>`,
+        bodyHtml: `<p style="margin:0 0 16px 0;">A new report has cleared its edit window and is ready for your review.</p><p style="margin:0;"><a href="${SITE_URL}/queue" style="color:#B87333;font-weight:600;">Open the reviewer queue →</a></p>`,
       };
     case "evidence_incomplete":
       return notification.recipient_type === "client"
         ? {
-            subject: "Finish submitting your evidence",
-            html: `${greeting}<p>Your evidence submission is still incomplete. Finish it whenever you're ready — there's no rush, but we wanted to check in.</p><p><a href="${SITE_URL}/evidence-intake">Continue your submission</a></p>${loginReminder}`,
+            subject: "Pick up where you left off",
+            bodyHtml: `${greeting}<p style="margin:0 0 16px 0;">Your evidence submission is still in progress — no rush, but whenever you're ready, it's saved and waiting for you.</p><p style="margin:0;"><a href="${SITE_URL}/evidence-intake" style="color:#B87333;font-weight:600;">Continue your submission →</a></p>${loginReminder}`,
           }
         : {
             subject: "A client submission has stalled",
-            html: `<p>A client's evidence submission has had no new activity for a while. You may want to follow up.</p>`,
+            bodyHtml: `<p style="margin:0;">A client's evidence submission has had no new activity for a while — worth a check-in.</p>`,
           };
     case "re_audit_reminder": {
       let sinceText = "your last audit";
@@ -129,78 +111,50 @@ async function templateFor(
       }
       return {
         subject: "Time for your next execution audit",
-        html: `${greeting}<p>It's been a while since ${sinceText} — worth checking in on how things have progressed.</p><p><a href="${SITE_URL}/business-profile">Start a re-audit</a></p>${loginReminder}`,
+        bodyHtml: `${greeting}<p style="margin:0 0 16px 0;">It's been a while since ${sinceText} — a fresh look is usually worth it once things have moved on.</p><p style="margin:0;"><a href="${SITE_URL}/business-profile" style="color:#B87333;font-weight:600;">Start a re-audit →</a></p>${loginReminder}`,
       };
     }
     case "regulatory_content_review_due":
       return {
         subject: "Regulatory content review is overdue",
-        html: `<p>One or more jurisdictions' regulatory reference content is overdue for a manual re-check.</p><p><a href="${SITE_URL}/queue">Review status on the reviewer queue</a></p>`,
+        bodyHtml: `<p style="margin:0 0 16px 0;">One or more jurisdictions' regulatory reference content is overdue for a manual re-check.</p><p style="margin:0;"><a href="${SITE_URL}/queue" style="color:#B87333;font-weight:600;">Review status on the reviewer queue →</a></p>`,
       };
     case "session_requested":
-      // Reviewer-facing only (see session-requests.ts) — a client requested
-      // a Discovery/Delivery/F2F Workshop call, not something a client
-      // themselves would receive an email about.
       return {
         subject: "A client requested a live session",
-        html: `<p>A client has requested a Discovery, Delivery, or F2F Workshop session. Follow up to schedule it.</p><p><a href="${SITE_URL}/queue">View on the reviewer queue</a></p>`,
+        bodyHtml: `<p style="margin:0 0 16px 0;">A client has requested a Discovery, Delivery, or F2F Workshop session — worth following up to get it on the calendar.</p><p style="margin:0;"><a href="${SITE_URL}/queue" style="color:#B87333;font-weight:600;">View on the reviewer queue →</a></p>`,
       };
     case "sprint_interest_requested":
-      // Reviewer-facing — a client marked interest in help implementing a
-      // specific high-priority finding (confirmed 2026-08-06, honest UX
-      // review pass). Doesn't create the sprint itself; the reviewer still
-      // starts it from the report workspace's existing "Start an
-      // Execution Sprint" entry point.
       return {
         subject: "A client is interested in an Execution Sprint",
-        html: `<p>A client marked interest in help implementing one of their findings.</p><p><a href="${SITE_URL}/queue">View on the reviewer queue</a></p>`,
+        bodyHtml: `<p style="margin:0 0 16px 0;">A client marked interest in help implementing one of their findings.</p><p style="margin:0;"><a href="${SITE_URL}/queue" style="color:#B87333;font-weight:600;">View on the reviewer queue →</a></p>`,
       };
     case "sprint_queue_item":
-      // Reviewer-facing — a client submitted a plan-change note, or a KPI
-      // actual deviated past the configured threshold on an active
-      // Execution Sprint (confirmed 2026-08-06, "same mechanism, different
-      // trigger").
       return {
         subject: "Execution Sprint needs your attention",
-        html: `<p>A client note or KPI deviation on an active Execution Sprint is waiting for a reply.</p><p><a href="${SITE_URL}/queue">Open the reviewer queue</a></p>`,
+        bodyHtml: `<p style="margin:0 0 16px 0;">A client note or KPI deviation on an active Execution Sprint is waiting on a reply from you.</p><p style="margin:0;"><a href="${SITE_URL}/queue" style="color:#B87333;font-weight:600;">Open the reviewer queue →</a></p>`,
       };
     case "sprint_signed_off":
-      // Reviewer-facing — the client signed off on their Execution Sprint;
-      // a final wrap-up commentary is still owed (addSprintReviewerCommentary).
       return {
         subject: "A client signed off on their Execution Sprint",
-        html: `<p>A client has signed off on their Execution Sprint. Add your final wrap-up commentary when ready.</p><p><a href="${SITE_URL}/queue">Open the reviewer queue</a></p>`,
+        bodyHtml: `<p style="margin:0 0 16px 0;">A client has signed off on their Execution Sprint — a final wrap-up commentary is still owed.</p><p style="margin:0;"><a href="${SITE_URL}/queue" style="color:#B87333;font-weight:600;">Open the reviewer queue →</a></p>`,
       };
     case "session_declined":
-      // Client-facing (confirmed 2026-08-11, live testing pass) — closes a
-      // real gap: declining a session request previously fired no
-      // notification at all. Kept generic (no specific decline reason in
-      // the email body) — there's no related_session_request_id column
-      // yet to look the reason back up, same pattern related_report_id
-      // already solves for report_ready/re_audit_reminder; a real,
-      // deliberately deferred enrichment, not built here to avoid
-      // stretching this pass's scope.
       return {
         subject: "Update on your session request",
-        html: `${greeting}<p>We're not able to schedule the session you requested right now. Feel free to reach back out or submit a new request anytime.</p>${loginReminder}`,
+        bodyHtml: `${greeting}<p style="margin:0;">We can't schedule your session request right now — timing didn't line up on our end, not anything about your submission. Send a new request whenever works, and we'll get it on the calendar.</p>${loginReminder}`,
       };
     case "sprint_reply":
       // Client-facing — normally sent immediately by replyToSprintQueueItem
-      // itself, not via this dispatcher; this template is a fallback only
-      // for the rare case that immediate send failed and the row is
-      // retried on the next cron tick.
+      // itself (its own call site now shares this same shell/preference
+      // logic directly, confirmed 2026-09-03), not via this dispatcher;
+      // this template is a fallback only for the rare case that immediate
+      // send failed and the row is retried on the next cron tick.
       return {
         subject: "Reply to your Execution Sprint question",
-        html: `${greeting}<p>Your reviewer replied to your Execution Sprint note. Check your sprint page for details.</p>${loginReminder}`,
+        bodyHtml: `${greeting}<p style="margin:0;">Your reviewer replied to your Execution Sprint note — check your sprint page for the details.</p>${loginReminder}`,
       };
     case "sprint_proposed": {
-      // Client-facing (confirmed 2026-08-18, closes the real "sprint just
-      // appears already started" gap) — fires the moment a reviewer
-      // proposes a sprint, before any task-scoping happens. Links to the
-      // specific sprint via related_sprint_id (same structured-link
-      // precedent as related_report_id) and names the actual proposed
-      // finding, same "hint at what's inside with real content" standard
-      // already applied to report_ready.
       let sprintUrl = `${SITE_URL}/dashboard`;
       let findingHint = "one of your findings";
       if (notification.related_sprint_id) {
@@ -222,42 +176,19 @@ async function templateFor(
       }
       return {
         subject: "Your reviewer suggests an Execution Sprint",
-        html: `${greeting}<p>Your reviewer suggests starting an Execution Sprint on ${findingHint}. Confirm it, or pick a different finding you'd previously marked "interested in help" on instead.</p><p><a href="${sprintUrl}">Review and confirm</a></p>${loginReminder}`,
+        bodyHtml: `${greeting}<p style="margin:0 0 16px 0;">Your reviewer suggests starting an Execution Sprint on ${findingHint}. Confirm it, or pick a different finding you'd previously marked "interested in help" on instead.</p><p style="margin:0;"><a href="${sprintUrl}" style="color:#B87333;font-weight:600;">Review and confirm →</a></p>${loginReminder}`,
       };
     }
     case "module_new_submission":
-      // Reviewer-facing (confirmed 2026-08-15, module intake/service flow
-      // review) — closes a real gap: a standalone module request
-      // (Tender Readiness / AI Reliability Audit / Data Protection
-      // Compliance) previously logged no notification of any kind at
-      // submission, unlike a core-audit report (new_submission). Kept
-      // generic (no direct link to the specific request — there's no
-      // related_module_request_id column, same disclosed scope limit
-      // already accepted for session_declined) — the reviewer queue
-      // already lists every pending module request.
       return {
         subject: "New module request ready for review",
-        html: `<p>A new standalone module request is ready for reviewer review.</p><p><a href="${SITE_URL}/queue">Open the reviewer queue</a></p>`,
+        bodyHtml: `<p style="margin:0 0 16px 0;">A new standalone module request is ready for your review.</p><p style="margin:0;"><a href="${SITE_URL}/queue" style="color:#B87333;font-weight:600;">Open the reviewer queue →</a></p>`,
       };
     case "module_ready":
-      // Client-facing (confirmed 2026-08-15) — mirrors report_ready exactly:
-      // logged the moment deliverModuleRequest() flips a request to `sent`,
-      // sent on the next dispatch pass. No client-facing module detail view
-      // exists yet (Reports & History shows "Detail view coming soon" for
-      // modules, a real, separately-flagged gap) — links to /reports, the
-      // one place a client can currently see the request listed at all,
-      // rather than a link to a page that doesn't exist.
       return {
         subject: companyName ? `${companyName}'s module results are ready` : "Your module results are ready",
-        html: `${greeting}<p>Your requested module results are ready for review.</p><p><a href="${SITE_URL}/reports">View in Reports &amp; History</a></p>${loginReminder}`,
+        bodyHtml: `${greeting}<p style="margin:0 0 16px 0;">Your requested module results are done, reviewed, and ready.</p><p style="margin:0;"><a href="${SITE_URL}/reports" style="color:#B87333;font-weight:600;">View in Reports &amp; History →</a></p>${loginReminder}`,
       };
-    // Automated post-delivery feedback + pilot testimonial/referral asks
-    // (confirmed 2026-08-24, direct founder request, correcting the
-    // earlier "handle manually" decision) — both reuse
-    // related_report_id/related_module_request_id exactly like
-    // report_ready/module_ready above to link straight to the specific
-    // delivered content, where the real DeliveryFeedbackPrompt component
-    // lives.
     case "report_feedback_request": {
       const url = notification.related_report_id
         ? `${SITE_URL}/reports/${notification.related_report_id}`
@@ -266,7 +197,7 @@ async function templateFor(
           : `${SITE_URL}/reports`;
       return {
         subject: "How was your Elvanis report?",
-        html: `${greeting}<p>We'd love a minute of honest feedback on what you just received — it genuinely shapes what we build next.</p><p><a href="${url}">Leave feedback</a></p>${loginReminder}`,
+        bodyHtml: `${greeting}<p style="margin:0 0 16px 0;">We'd love a minute of honest feedback on what you just received — it genuinely shapes what we build next.</p><p style="margin:0;"><a href="${url}" style="color:#B87333;font-weight:600;">Leave feedback →</a></p>${loginReminder}`,
       };
     }
     case "pilot_testimonial_request": {
@@ -277,13 +208,13 @@ async function templateFor(
           : `${SITE_URL}/reports`;
       return {
         subject: "Would you share a testimonial or referral?",
-        html: `${greeting}<p>As one of our first pilot clients, your experience genuinely helps us reach more founders like you. If it felt valuable, we'd be grateful for a short testimonial, or an introduction to someone else who might benefit.</p><p><a href="${url}">Share a testimonial or referral</a></p>${loginReminder}`,
+        bodyHtml: `${greeting}<p style="margin:0 0 16px 0;">You're one of our first pilot clients, and your experience genuinely shapes where this goes next. If it was worth your time, a short testimonial — or an introduction to another founder who'd get value from it — would mean a lot.</p><p style="margin:0;"><a href="${url}" style="color:#B87333;font-weight:600;">Share a testimonial or referral →</a></p>${loginReminder}`,
       };
     }
     default:
       return {
         subject: "Elvanis notification",
-        html: `<p>You have a new notification.</p>`,
+        bodyHtml: `<p style="margin:0;">You have a new notification.</p>`,
       };
   }
 }
@@ -318,12 +249,15 @@ export async function sendPendingNotifications(): Promise<DispatchResult> {
         .single();
       if (userError || !user?.email) throw new Error(`no email found for recipient ${notification.recipient_id}`);
 
-      const preferenceKey = CLIENT_PREFERENCE_KEY[notification.event_type as string];
+      const eventType = notification.event_type as string;
+      const preferenceKey = EVENT_TYPE_TO_PREFERENCE_KEY[eventType as ClientNotificationEventType];
       if (preferenceKey) {
-        const preferences = (user.notification_preferences as Record<string, boolean>) ?? {};
-        // Defaults to true (send) when the key is unset — an account that
-        // never touched Account Settings shouldn't silently go dark.
-        if (preferences[preferenceKey] === false) {
+        const preferences = (user.notification_preferences as Partial<NotificationPreferences>) ?? {};
+        // isOptedOut() checks the master `optedOutOfAll` switch first, then
+        // the specific per-type key — defaults to "send" (false) when
+        // neither is set, same as before, so an account that never
+        // touched Account Settings doesn't silently go dark.
+        if (isOptedOut(preferences, preferenceKey)) {
           skippedByPreference++;
           // Still stamped as sent — the client chose not to receive it,
           // this isn't a delivery failure to retry.
@@ -332,14 +266,25 @@ export async function sendPendingNotifications(): Promise<DispatchResult> {
         }
       }
 
-      const { subject, html } = await templateFor(supabase, {
-        event_type: notification.event_type as string,
+      const { subject, bodyHtml } = await templateFor(supabase, {
+        event_type: eventType,
         recipient_type: notification.recipient_type as "client" | "reviewer",
         recipient_id: notification.recipient_id as string,
         related_report_id: (notification.related_report_id as string | null) ?? null,
         related_sprint_id: (notification.related_sprint_id as string | null) ?? null,
         related_module_request_id: (notification.related_module_request_id as string | null) ?? null,
       });
+
+      const html = renderEmail({
+        bodyHtml,
+        recipientEmail: user.email as string,
+        siteUrl: SITE_URL,
+        // Unsubscribe links only for client-facing event types that carry
+        // a real preference key — reviewer-facing ones (preferenceKey
+        // undefined here) get no unsubscribe section at all.
+        unsubscribe: preferenceKey ? { recipientId: notification.recipient_id as string, preferenceKey } : undefined,
+      });
+
       await sendEmail({ to: user.email as string, subject, html });
 
       const { error: updateError } = await supabase

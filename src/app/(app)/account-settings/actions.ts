@@ -1,12 +1,14 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import type { NotificationPreferences } from "@/lib/notifications/preferences";
 
-export interface NotificationPreferences {
-  reportReady: boolean;
-  reAuditReminder: boolean;
-  evidenceIncomplete: boolean;
-}
+// Re-exported for existing callers (page.tsx, AccountSettingsForm.tsx) —
+// the real definition now lives in lib/notifications/preferences.ts
+// (confirmed 2026-09-03, email redesign brief), shared with dispatch.ts
+// and the /unsubscribe flow so all three can't independently drift on
+// what the valid keys are.
+export type { NotificationPreferences };
 
 export interface UpdateAccountSettingsResult {
   success: boolean;
@@ -25,7 +27,11 @@ export interface UpdateAccountSettingsResult {
  *
  * `notification_preferences` genuinely gates sending, not just a display
  * toggle — src/lib/notifications/dispatch.ts checks this before sending
- * any client-facing event type.
+ * any client-facing event type. Widened 2026-09-03 from 3 keys to all 9
+ * client-facing event types plus a real `optedOutOfAll` master switch —
+ * the same flag the real /unsubscribe flow's "unsubscribe from
+ * everything" option sets, so a client who opted out via email can see
+ * and reverse it here too, not get permanently stuck.
  */
 export async function updateAccountSettings(name: string, preferences: NotificationPreferences): Promise<UpdateAccountSettingsResult> {
   const supabase = await createClient();

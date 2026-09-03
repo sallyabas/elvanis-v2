@@ -1,8 +1,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/notifications/send-email";
+import { renderEmail } from "@/lib/notifications/email-template";
+import { isOptedOut, type NotificationPreferences } from "@/lib/notifications/preferences";
 import { draftSprintTasks } from "./draft-tasks";
 import { loadCompanyProfileForLens, loadGoalContext } from "@/lib/audit/load-profile";
 import type { LensFinding } from "@/lib/lenses/types";
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 /**
  * Execution Sprint reviewer workspace (confirmed 2026-08-06) — the paid
@@ -437,14 +441,35 @@ export async function replyToSprintQueueItem(queueItemId: string, replyText: str
     .single();
   if (notifError) throw new Error(`replyToSprintQueueItem: failed to log notification: ${notifError.message}`);
 
-  const { data: user } = await supabase.from("users").select("email").eq("id", company.user_id).single();
+  // Preference/opt-out check + shared branded shell (confirmed
+  // 2026-09-03, email redesign brief) — a real, previously-missing gap:
+  // this immediate-send path bypassed BOTH the shared visual shell AND
+  // dispatch.ts's own preference check entirely, meaning a client who'd
+  // opted out of "sprintReply" (or unsubscribed from everything) still
+  // got emailed here regardless. Fixed without touching the one thing
+  // that's genuinely deliberate about this path — the immediate send
+  // itself (see this function's own docblock for why that stays).
+  const { data: user } = await supabase.from("users").select("email, notification_preferences").eq("id", company.user_id).single();
   if (user?.email) {
-    await sendEmail({
-      to: user.email as string,
-      subject: "Reply to your Execution Sprint question",
-      html: `<p>${escapeHtml(replyText)}</p>`,
-    });
-    await supabase.from("notifications").update({ sent_at: new Date().toISOString() }).eq("id", notif.id as string);
+    const preferences = (user.notification_preferences as Partial<NotificationPreferences>) ?? {};
+    if (isOptedOut(preferences, "sprintReply")) {
+      // Opted out — still stamp sent_at (a deliberate skip, not a
+      // delivery failure to retry via the cron's fallback template).
+      await supabase.from("notifications").update({ sent_at: new Date().toISOString() }).eq("id", notif.id as string);
+    } else {
+      const html = renderEmail({
+        bodyHtml: `<p style="margin:0 0 16px 0;">Your reviewer replied to your Execution Sprint note:</p><p style="margin:0;padding:12px 16px;background:#F1EFE8;border-radius:6px;">${escapeHtml(replyText)}</p><p style="margin:20px 0 0 0;font-size:13px;color:#6b6b69;">Sign in at <a href="${SITE_URL}/client-login" style="color:#6b6b69;">${SITE_URL}/client-login</a> with this same email — this app is passwordless, we'll send you a fresh sign-in link and code.</p>`,
+        recipientEmail: user.email as string,
+        siteUrl: SITE_URL,
+        unsubscribe: { recipientId: company.user_id as string, preferenceKey: "sprintReply" },
+      });
+      await sendEmail({
+        to: user.email as string,
+        subject: "Reply to your Execution Sprint question",
+        html,
+      });
+      await supabase.from("notifications").update({ sent_at: new Date().toISOString() }).eq("id", notif.id as string);
+    }
   }
 }
 

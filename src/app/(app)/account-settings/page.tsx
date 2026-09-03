@@ -2,13 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AccountSettingsForm } from "./AccountSettingsForm";
 import type { NotificationPreferences } from "./actions";
+import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/lib/notifications/preferences";
 import { Card } from "@/app/_components/ui/Card";
-
-const DEFAULT_PREFERENCES: NotificationPreferences = {
-  reportReady: true,
-  reAuditReminder: true,
-  evidenceIncomplete: true,
-};
 
 // Account Settings — about the person, not the business (confirmed
 // 2026-08-04, Priority 3). Real: name, email (display only — it's the
@@ -33,8 +28,8 @@ export default async function AccountSettingsPage() {
 
   const { data: profile } = await supabase.from("users").select("name, email, notification_preferences, plan_tier").eq("id", user.id).single();
 
-  const preferences = {
-    ...DEFAULT_PREFERENCES,
+  const preferences: NotificationPreferences = {
+    ...DEFAULT_NOTIFICATION_PREFERENCES,
     ...((profile?.notification_preferences as Partial<NotificationPreferences>) ?? {}),
   };
 
