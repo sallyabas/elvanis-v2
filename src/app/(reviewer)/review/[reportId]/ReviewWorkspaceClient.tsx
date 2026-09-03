@@ -741,8 +741,15 @@ export function ReviewWorkspaceClient({
             {blockedReason}
           </Alert>
         )}
+        {/* "Already approved" text (confirmed 2026-09-03, direct founder
+            feedback) — only swapped in for the reason that actually
+            matters here (the report has moved past pending_review, i.e.
+            genuinely already approved), not for the unrelated `pending`
+            in-flight-click case, which keeps the normal label — a
+            reviewer mid-click doesn't need to be told "already approved"
+            for a report that isn't. */}
         <Button disabled={pending || reportStatus !== "pending_review"} onClick={handleApprove}>
-          Approve report
+          {reportStatus !== "pending_review" ? "Already approved" : "Approve report"}
         </Button>
       </Card>
 
@@ -760,9 +767,18 @@ export function ReviewWorkspaceClient({
         {delivered || reportStatus === "sent" ? (
           <p className="text-sm text-green-700 dark:text-green-400">Delivered — the client can now see this report.</p>
         ) : (
-          <Button disabled={pending || reportStatus !== "approved"} onClick={handleDeliver}>
-            Deliver report
-          </Button>
+          <>
+            <Button disabled={pending || reportStatus !== "approved"} onClick={handleDeliver}>
+              Deliver report
+            </Button>
+            {/* Real, disclosed condition (confirmed 2026-09-03) — only
+                shown for the actual reason the button is inactive here
+                (not yet approved), not for the unrelated in-flight
+                `pending` case. */}
+            {reportStatus !== "approved" && (
+              <p className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">Available after the report is approved.</p>
+            )}
+          </>
         )}
       </Card>
 
@@ -841,8 +857,14 @@ export function ReviewWorkspaceClient({
             )}
           </>
         ) : (
+          // Reviewer-audience copy, confirmed 2026-09-03 — this message
+          // renders inside the reviewer's OWN workspace (there is no
+          // client-facing equivalent of "Re-run analysis" anywhere in the
+          // app; confirmed by grep — the client report page has no such
+          // feature), so the copy directs the reviewer to ask the client
+          // for new evidence, not the other way around.
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            This report predates evidence-snapshot support and can&apos;t be re-run — no stored evidence to re-run against.
+            Re-run analysis is available on new audits. If the client needs updated findings on this one, ask them to submit new evidence.
           </p>
         )}
       </Card>

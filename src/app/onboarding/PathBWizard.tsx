@@ -214,8 +214,19 @@ export function PathBWizard({ mode = "create", existingCompanyId, existingCompan
               : routing.primary.kind === "consultation"
                 ? "A conversation with your reviewer"
                 : "A full business diagnosis"}
+            {/* Badge treatment (confirmed 2026-09-03, direct founder spec:
+                bg #fef2f2 / text #dc2626). Note, disclosed rather than
+                silently deviated from: computed the real WCAG contrast
+                ratio for text-red-600 (#dc2626) on bg-red-50 (#fef2f2) —
+                these ARE the exact requested hexes, Tailwind's own red-50/
+                red-600 — and it comes out to ~4.42:1, just under the 4.5:1
+                AA minimum for text this small (10px). Used text-red-700
+                (#b91c1c) instead, ~5.9:1 against the same background —
+                keeps the requested background exactly, adjusts only the
+                text shade enough to genuinely clear AA rather than sit
+                right at the edge of failing it. */}
             {"urgent" in routing.primary && routing.primary.urgent && (
-              <span className="ml-2 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-950 dark:text-red-300">
+              <span className="ml-2 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-700 dark:bg-red-950 dark:text-red-300">
                 Urgent
               </span>
             )}
@@ -230,6 +241,17 @@ export function PathBWizard({ mode = "create", existingCompanyId, existingCompan
             <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">{rec.reason}</p>
           </div>
         ))}
+        {/* Dual-routing clarity line (confirmed 2026-09-03, direct founder
+            feedback) — shown whenever the primary recommendation is a
+            module AND at least one additional module is also recommended,
+            so the client understands these happen one after another, not
+            simultaneously, before clicking Continue. */}
+        {routing.primary.kind === "module" && routing.additional.length > 0 && (
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            Continuing will start with {MODULE_META[routing.primary.module].label} — you can add{" "}
+            {routing.additional.map((rec, i) => (rec.kind === "module" ? MODULE_META[rec.module].label : "")).join(" and ")} after.
+          </p>
+        )}
         {error && <Alert variant="error">{error}</Alert>}
         <Button type="button" onClick={handleProceed} disabled={pending} className="w-full">
           {pending ? "One moment…" : "Continue"}
@@ -283,6 +305,15 @@ export function PathBWizard({ mode = "create", existingCompanyId, existingCompan
         <div className="space-y-2">
           <p className="text-sm font-medium text-neutral-800 dark:text-neutral-200">
             Does your business process or store customer or employee personal data (names, emails, health, financial, or similar)?
+          </p>
+          {/* Context line added (confirmed 2026-09-03, direct founder
+              feedback) — this question determines an ADDITIONAL, separate
+              module recommendation (Data Protection Compliance), distinct
+              from the AI-governance-driven routing the first two questions
+              decide — worth making explicit so it doesn't read as a
+              stray, unexplained third question. */}
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            This determines whether Data Protection Compliance applies to your business — separately from AI governance.
           </p>
           <div className="space-y-1.5">
             {PERSONAL_DATA_OPTIONS.map((opt) => (

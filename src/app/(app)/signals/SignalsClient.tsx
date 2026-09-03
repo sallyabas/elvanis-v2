@@ -123,24 +123,37 @@ export function SignalsClient({
         filter by where it came from or by severity.
       </p>
 
-      <Card className="mb-6">
-        <div className="mb-3">
-          <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Source</p>
-          <div className="flex flex-wrap gap-1.5">
-            {sources.map(([key, label]) => (
-              <FilterChip key={key} label={label} active={activeSources.has(key)} activeClassName={sourceKeyBadgeStyle(key)} onClick={() => toggleSource(key)} />
-            ))}
+      {/* Real gap closed (confirmed 2026-09-03, direct founder feedback) —
+          `sources` is deliberately data-driven (one chip per genuinely
+          present source, per this file's own docblock), so with zero
+          findings it correctly renders zero chips — but the "Source"
+          label above them rendered unconditionally regardless, showing a
+          heading for an empty control right above the "No delivered
+          findings yet" message below. Adding fixed chips for
+          sources/severities that don't apply yet would be misleading
+          (clicking one would visibly do nothing); hiding the whole filter
+          card until there's something real to filter is the honest fix —
+          matches the second option offered directly. */}
+      {items.length > 0 && (
+        <Card className="mb-6">
+          <div className="mb-3">
+            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Source</p>
+            <div className="flex flex-wrap gap-1.5">
+              {sources.map(([key, label]) => (
+                <FilterChip key={key} label={label} active={activeSources.has(key)} activeClassName={sourceKeyBadgeStyle(key)} onClick={() => toggleSource(key)} />
+              ))}
+            </div>
           </div>
-        </div>
-        <div>
-          <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Severity</p>
-          <div className="flex flex-wrap gap-1.5">
-            {SEVERITY_ORDER.map((s) => (
-              <FilterChip key={s} label={s} active={activeSeverities.has(s)} activeClassName={SEVERITY_STYLES[s]} onClick={() => toggleSeverity(s)} />
-            ))}
+          <div>
+            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Severity</p>
+            <div className="flex flex-wrap gap-1.5">
+              {SEVERITY_ORDER.map((s) => (
+                <FilterChip key={s} label={s} active={activeSeverities.has(s)} activeClassName={SEVERITY_STYLES[s]} onClick={() => toggleSeverity(s)} />
+              ))}
+            </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      )}
 
       {items.length === 0 ? (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">

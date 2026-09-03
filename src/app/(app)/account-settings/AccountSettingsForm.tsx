@@ -26,7 +26,10 @@ export function AccountSettingsForm({ initialName, initialPreferences }: { initi
 
   return (
     <div className="space-y-4">
-      <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} />
+      {/* Placeholder added (confirmed 2026-09-03, direct founder
+          feedback) — same Input component renders identically on desktop
+          and mobile, so one change covers both. */}
+      <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="How we'll address you in emails and reports" />
 
       <div>
         <span className="mb-2 block text-sm font-medium text-neutral-800 dark:text-neutral-200">Notification preferences</span>

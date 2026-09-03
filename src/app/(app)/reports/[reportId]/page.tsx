@@ -595,7 +595,11 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
         {company.is_pilot_client && (
           <DeliveryFeedbackPrompt companyId={company.id} feedbackType="testimonial" relatedReportId={report.id} alreadySubmitted={feedbackStatus.testimonial} />
         )}
-        <SessionRequestButton companyId={company.id} sessionType="delivery" />
+        {/* prominent (confirmed 2026-09-03, direct founder feedback) —
+            scoped to just this call site via the component's own opt-in
+            prop, not a change to SessionRequestButton's default
+            everywhere else it's used. */}
+        <SessionRequestButton companyId={company.id} sessionType="delivery" prominent />
         {hasRequestedDelivery && <SessionRequestButton companyId={company.id} sessionType="f2f_workshop" />}
 
         {/* Real gap found and closed (confirmed 2026-08-12, direct founder
@@ -647,6 +651,14 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
           </ul>
         </div>
 
+        {/* Reverted to the original low-weight plain-text link (confirmed
+            2026-09-03) — the 2026-09-03 card-with-CTA version was itself
+            a deliberate, disclosed reversal of the 2026-08-06 UX-review
+            decision below; on reflection that original decision was
+            correct (a founder reading their first report shouldn't be
+            immediately pushed toward a paid re-audit) and stands. The
+            right moment to promote re-audit is a follow-up email, not
+            this page — a separate, future piece, not built here. */}
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
           Have new evidence to add?{" "}
           <Link href="/evidence-intake" className="text-neutral-700 hover:underline dark:text-neutral-300">

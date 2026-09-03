@@ -357,9 +357,36 @@ export function OnboardingWizard({ mode = "create", existingCompanyId, existingC
               <dt className="text-xs font-medium uppercase text-neutral-400">Company</dt>
               <dd>{companyName || existingCompanyName}</dd>
             </div>
+            {/* Industry/Employee count added (confirmed 2026-09-03, direct
+                founder feedback: "the current two-field summary feels
+                incomplete") — conditionally rendered, same pattern as
+                every other field below, since skipCompanyDetails mode
+                (Path B's core_audit fork) never collects them in THIS
+                wizard session at all (already known from before), so an
+                unconditional render would show a blank field for that
+                path. */}
+            {industry.trim() && (
+              <div>
+                <dt className="text-xs font-medium uppercase text-neutral-400">Industry</dt>
+                <dd>{industry}</dd>
+              </div>
+            )}
+            {employeeCount.trim() && (
+              <div>
+                <dt className="text-xs font-medium uppercase text-neutral-400">Employee count</dt>
+                <dd>{employeeCount}</dd>
+              </div>
+            )}
             <div>
               <dt className="text-xs font-medium uppercase text-neutral-400">Primary goal</dt>
-              <dd>{GOAL_LABELS[primaryGoal]}</dd>
+              <dd>
+                {GOAL_LABELS[primaryGoal]}
+                {/* Goal description added (confirmed 2026-09-03) — the
+                    same one-line description shown next to each option on
+                    the Goal step, repeated here so the review card
+                    explains WHAT the goal means, not just its name. */}
+                <p className="mt-0.5 text-xs font-normal text-neutral-500 dark:text-neutral-400">{GOAL_DESCRIPTIONS[primaryGoal]}</p>
+              </dd>
             </div>
             {secondaryGoal && (
               <div>
@@ -411,8 +438,33 @@ export function OnboardingWizard({ mode = "create", existingCompanyId, existingC
       )}
 
       <div className="mt-6 flex gap-2">
+        {/* Grey outline, not the shared secondary variant's copper one
+            (confirmed 2026-09-03, direct founder feedback: "so it
+            doesn't compete visually with the Continue button") — scoped
+            to just this Back button via an override className, not a
+            change to the secondary variant itself (used broadly
+            elsewhere in the app for genuinely secondary ACTIONS, not a
+            step-backward navigation control). */}
         {stepIndex > 0 && (
-          <Button type="button" variant="secondary" onClick={back} disabled={status === "submitting"}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={back}
+            disabled={status === "submitting"}
+            // Real bug found live (confirmed 2026-09-03) — plain override
+            // utility classes (border-[#d1d5db] text-[#4a4a4a]) did NOT
+            // win over the secondary variant's own border-accent/
+            // text-accent: both have equal CSS specificity, and Tailwind's
+            // compiled stylesheet order (determined by first-encounter
+            // order across the WHOLE codebase, not by className string
+            // position on one element) put the variant's classes later,
+            // so they kept winning. Confirmed via getComputedStyle before
+            // concluding — the visual screenshot looked right but the
+            // actual computed border/text color was still copper.
+            // `!` (Tailwind's important modifier) forces this specific
+            // override to actually apply regardless of source order.
+            className="!border-[#d1d5db] !text-[#4a4a4a] hover:!bg-neutral-50"
+          >
             Back
           </Button>
         )}
@@ -427,7 +479,10 @@ export function OnboardingWizard({ mode = "create", existingCompanyId, existingC
           </Button>
         ) : (
           <Button type="button" onClick={handleSubmit} disabled={status === "submitting"} className="flex-1">
-            {status === "submitting" ? "Creating…" : "Get started"}
+            {/* "Start my free audit" (confirmed 2026-09-03, direct founder
+                feedback: "the current label undersells the commitment
+                moment") — replaces the previous generic "Get started". */}
+            {status === "submitting" ? "Creating…" : "Start my free audit"}
           </Button>
         )}
       </div>

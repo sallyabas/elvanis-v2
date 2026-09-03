@@ -20,6 +20,16 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## End-to-end tests
+
+Real Playwright E2E infrastructure lives in [`tests/e2e/`](tests/e2e/README.md) — signup/onboarding flows, the reviewer approval/delivery cycle, SLA/overdue behavior, and session-request lifecycles, run against a real (passwordless) session via a gated test-auth route, not mocks.
+
+```bash
+npm run test:e2e
+```
+
+See [`tests/e2e/README.md`](tests/e2e/README.md) for what's covered, running against a real deployed URL, and the CI scaffold (`.github/workflows/e2e.yml`, manual-trigger only for now — not yet wired to run automatically; see that file for the exact secrets it needs once you're ready to enable it after the first real pilot client).
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

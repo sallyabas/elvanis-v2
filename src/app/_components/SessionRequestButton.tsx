@@ -59,7 +59,25 @@ const LABELS: Record<SessionType, { cta: string; sentLabel: string; description:
  * component per route group" convention, since the three variants are
  * genuinely identical apart from copy.
  */
-export function SessionRequestButton({ companyId, sessionType }: { companyId: string; sessionType: SessionType }) {
+export function SessionRequestButton({
+  companyId,
+  sessionType,
+  prominent = false,
+}: {
+  companyId: string;
+  sessionType: SessionType;
+  /**
+   * Full-width solid CTA with an arrow appended to its label (confirmed
+   * 2026-09-03, direct founder feedback: "Request a Delivery Session"
+   * on the client report page "buries it in descriptive body text").
+   * Opt-in, defaulting to false — every OTHER real usage of this shared
+   * component (Discovery on evidence-intake, Concierge on Services, the
+   * report page's own Delivery/F2F pairing) keeps its existing compact
+   * treatment; this only changes the one call site that asked for more
+   * visual weight, not the component's default everywhere.
+   */
+  prominent?: boolean;
+}) {
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -93,9 +111,13 @@ export function SessionRequestButton({ companyId, sessionType }: { companyId: st
         type="button"
         onClick={handleRequest}
         disabled={status === "sending"}
-        className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+        className={
+          prominent
+            ? "w-full rounded-md bg-accent px-4 py-3 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-40"
+            : "rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+        }
       >
-        {status === "sending" ? "Requesting…" : LABELS[sessionType].cta}
+        {status === "sending" ? "Requesting…" : prominent ? `${LABELS[sessionType].cta} →` : LABELS[sessionType].cta}
       </button>
       {status === "error" && error && (
         <Alert variant="error" className="mt-2 py-2 text-xs">

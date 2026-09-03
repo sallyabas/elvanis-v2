@@ -1083,29 +1083,40 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      <section className="mt-8">
-        <Card title="Services and support" subtitle="Everything Elvanis offers — modules, the Execution Sprint, and reviewer sessions — in one place.">
-          <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">
-            Beyond your Core Audit: {MODULE_ORDER.map((mt) => MODULE_META[mt].label).join(", ")}, a paid implementation sprint for
-            your top priority, and calls with your reviewer.
-          </p>
-          {/* Cross-discovery, AI Audit client -> business diagnosis
-              (confirmed 2026-08-27, Onboarding Architecture & Path Routing
-              brief, Part 6) — a single soft prompt, shown once a module
-              has genuinely been delivered, never a gate or blocker. The
-              opposite direction (diagnosis client discovering AI audit)
-              needs no new mechanism at all — the existing "Interested in
-              help implementing this?" button on each AI & Governance
-              finding already handles it. */}
-          {company.entry_path === "ai_audit" && mostRecentModuleRequest?.status === "sent" && (
-            <p className="mb-3 rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-3 text-sm text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900/50 dark:text-neutral-400">
-              Want to go deeper? A business diagnosis looks at what&apos;s blocking your growth across all five
-              dimensions — not just AI governance.
+      {/* Real, confirmed visibility gate (2026-09-03, direct founder
+          feedback) — this card was previously always shown regardless of
+          journey stage, including while a client is still in their own
+          edit window (evidence submitted, review not yet started) — a
+          confusing moment to be offered MORE things to submit. Gated on
+          journeyStatus.stage === "has_report" (a real report has been
+          delivered), the same signal NextStepBanner/ProgressStepper
+          already use elsewhere on this page — not a new, separately
+          computed condition. */}
+      {journeyStatus.stage === "has_report" && (
+        <section className="mt-8">
+          <Card title="Services and support" subtitle="Everything Elvanis offers — modules, the Execution Sprint, and reviewer sessions — in one place.">
+            <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">
+              Beyond your Core Audit: {MODULE_ORDER.map((mt) => MODULE_META[mt].label).join(", ")}, a paid implementation sprint for
+              your top priority, and calls with your reviewer.
             </p>
-          )}
-          <LinkButton href="/services">View all services</LinkButton>
-        </Card>
-      </section>
+            {/* Cross-discovery, AI Audit client -> business diagnosis
+                (confirmed 2026-08-27, Onboarding Architecture & Path Routing
+                brief, Part 6) — a single soft prompt, shown once a module
+                has genuinely been delivered, never a gate or blocker. The
+                opposite direction (diagnosis client discovering AI audit)
+                needs no new mechanism at all — the existing "Interested in
+                help implementing this?" button on each AI & Governance
+                finding already handles it. */}
+            {company.entry_path === "ai_audit" && mostRecentModuleRequest?.status === "sent" && (
+              <p className="mb-3 rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-3 text-sm text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900/50 dark:text-neutral-400">
+                Want to go deeper? A business diagnosis looks at what&apos;s blocking your growth across all five
+                dimensions — not just AI governance.
+              </p>
+            )}
+            <LinkButton href="/services">View all services</LinkButton>
+          </Card>
+        </section>
+      )}
     </div>
   );
 }

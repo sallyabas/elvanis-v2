@@ -34,7 +34,11 @@ export function HubScreen({ onChoose }: { onChoose: (path: "diagnosis" | "ai_aud
             Start with this one
           </button>
         </div>
-        <div className="rounded-lg border border-neutral-200 bg-white p-5 shadow-card-1 dark:border-neutral-700 dark:bg-neutral-900">
+        {/* Copper left border (confirmed 2026-09-03, same reasoning as the
+            entry-path screen's own matching fix) — this is the primary
+            commercial offer, given visual priority over Business
+            Diagnosis. */}
+        <div className="rounded-lg border border-neutral-200 border-l-[3px] border-l-[#B87333] bg-white p-5 shadow-card-1 dark:border-neutral-700 dark:bg-neutral-900">
           <h2 className="mb-2 text-base font-semibold text-neutral-900 dark:text-neutral-50">AI Compliance Audit</h2>
           <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
             For founders whose AI is already in production, or who&apos;ve received a compliance or procurement request.
