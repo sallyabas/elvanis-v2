@@ -69,7 +69,7 @@ export function SidebarShell({ children, mobileLabel }: { children: ReactNode; m
 
       {open && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/60 lg:hidden"
           onClick={() => setOpen(false)}
           aria-hidden="true"
         />
