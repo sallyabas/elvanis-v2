@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettingNumber } from "@/lib/app-settings";
+import { computeStalenessWarnings } from "@/lib/reviewer/regulatory-staleness";
 import { ModuleReviewWorkspaceClient } from "./ModuleReviewWorkspaceClient";
 
 const MODULE_LABELS: Record<string, string> = {
@@ -69,6 +70,18 @@ export default async function ModuleReviewWorkspacePage({ params }: { params: Pr
     !!applicability &&
     Object.values(applicability).every((v) => v === false);
 
+  // Real, new (confirmed 2026-09-03, direct founder request) — unlike the
+  // core audit's own ambient version of this warning (see that
+  // workspace's page.tsx), this one genuinely IS about the request's own
+  // content: intake_data.applicability is this specific request's real,
+  // frozen jurisdiction determination, made at submission time. Uses the
+  // same real, applicable (true) keys already extracted above for
+  // hasNoApplicableJurisdiction — no separate computation needed. Correctly
+  // produces an empty array for AI Reliability Audit requests (no
+  // applicability field exists for that module) with no special-casing.
+  const applicableJurisdictionKeys = applicability ? Object.entries(applicability).filter(([, v]) => v).map(([k]) => k) : [];
+  const regulatoryStalenessWarnings = await computeStalenessWarnings(applicableJurisdictionKeys);
+
   return (
     <>
       {/* Real navigation-audit fix (confirmed 2026-08-26) — see the
@@ -99,6 +112,7 @@ export default async function ModuleReviewWorkspacePage({ params }: { params: Pr
         }}
         isUrgent={Boolean(request.is_urgent)}
         hasNoApplicableJurisdiction={hasNoApplicableJurisdiction}
+        regulatoryStalenessWarnings={regulatoryStalenessWarnings}
       />
     </>
   );

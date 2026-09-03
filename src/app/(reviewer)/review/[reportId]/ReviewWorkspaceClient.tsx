@@ -93,6 +93,15 @@ interface Props {
    * before the reviewer even tries.
    */
   failedLenses: string[];
+  /**
+   * Real, new (confirmed 2026-09-03, direct founder request) — see
+   * regulatory-staleness.ts's own docblock for the full design: an
+   * AMBIENT signal about the company's current profile, computed in
+   * page.tsx, never a claim about this specific report's own findings
+   * (the core audit never does formal jurisdiction determination — see
+   * the warning's own copy below for the exact framing).
+   */
+  regulatoryStalenessWarnings: { jurisdiction: string; label: string; daysSinceReview: number }[];
   top3FindingIds: string[];
   canRerun: boolean;
   rerunOfReportId: string | null;
@@ -189,6 +198,7 @@ export function ReviewWorkspaceClient({
   planTier,
   reportStatus,
   failedLenses,
+  regulatoryStalenessWarnings,
   top3FindingIds,
   canRerun,
   rerunOfReportId,
@@ -527,6 +537,38 @@ export function ReviewWorkspaceClient({
       {failedLenses.length === 0 && findings.length === 0 && (
         <Alert variant="warning" className="mb-6">
           No findings were generated — all lenses ran successfully. Confirm this is genuinely correct before approving.
+        </Alert>
+      )}
+
+      {/* Real, new (confirmed 2026-09-03, direct founder request) — a
+          90-day (admin-adjustable) staleness warning, genuinely distinct
+          from the pre-existing /queue "Regulatory content status" panel
+          (that one tracks the maintenance cadence for the content
+          itself; this one is a per-decision nudge). Deliberately framed
+          as an AMBIENT signal about the company's profile, never a claim
+          that this report's own findings address these frameworks — the
+          core audit doesn't do formal jurisdiction determination, that's
+          the standalone modules' job. Reviewer-only, never client-facing. */}
+      {regulatoryStalenessWarnings.length > 0 && (
+        <Alert variant="warning" className="mb-6">
+          <div>
+            <p className="font-medium">
+              This company&apos;s profile touches {regulatoryStalenessWarnings.length === 1 ? "a regulatory framework" : "regulatory frameworks"}{" "}
+              whose reference content hasn&apos;t been checked recently:
+            </p>
+            <ul className="mt-1 list-disc pl-5">
+              {regulatoryStalenessWarnings.map((w) => (
+                <li key={w.jurisdiction}>
+                  {w.label} last reviewed {w.daysSinceReview} days ago — consider checking for updates before approving this report.
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs italic">
+              This is an ambient signal from the company&apos;s current registration/customer-market profile, not a claim that this
+              report&apos;s own findings specifically address these frameworks — this audit doesn&apos;t perform formal jurisdiction
+              determination (that&apos;s Tender Readiness&apos;s and Data Protection Compliance&apos;s job).
+            </p>
+          </div>
         </Alert>
       )}
 

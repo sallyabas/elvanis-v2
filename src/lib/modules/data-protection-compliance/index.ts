@@ -42,6 +42,8 @@ function applicableRegulationsList(applicability: ReturnType<typeof computeJuris
   if (applicability.ukGdpr) regs.push("uk_gdpr");
   if (applicability.euGdpr) regs.push("eu_gdpr");
   if (applicability.saudiPdpl) regs.push("saudi_pdpl");
+  if (applicability.uaePdpl) regs.push("uae_pdpl");
+  if (applicability.adgmDpr) regs.push("adgm_dpr");
   return regs;
 }
 
@@ -90,6 +92,25 @@ function buildDivergenceNote(applicableRegulations: DataProtectionRegulation[]):
     );
   }
 
+  // UAE federal PDPL and ADGM DPR 2021 divergence notes (added 2026-09-03,
+  // real research — see jurisdiction.ts's own docblock for sources) — both
+  // regimes have a genuinely separate regulator AND a genuinely separate
+  // cross-border transfer mechanism from every other regime this module
+  // covers, and both use the same 72-hour breach window as everything
+  // else here, so the same "do not call it stricter" rule already applied
+  // to Saudi PDPL applies to these too.
+  if (has("uae_pdpl") && (has("uk_gdpr") || has("eu_gdpr") || has("saudi_pdpl"))) {
+    notes.push(
+      `UAE federal PDPL (Federal Decree-Law No. 45 of 2021) applies alongside GDPR/Saudi PDPL. It is enforced by the UAE Data Office, a distinct regulator from the ICO/EU supervisory authorities/SDAIA. Its "cross_border_transfer" mechanism is its own — the UAE Data Office recognizes transfers to countries it designates as adequate (as of this system's knowledge, no such adequacy list has yet been published), with standard contractual clauses, binding corporate rules, explicit consent, or contractual necessity as alternative pathways where no adequacy decision applies — genuinely separate machinery from GDPR's SCC/adequacy-decision framework or PDPL's SDAIA-sanctioned mechanisms. For "breach_response": UAE federal PDPL also uses a 72-hour notification window (Article 33) — do not describe it as "stricter" or "different in speed" than GDPR/Saudi PDPL, the real difference is which regulator is notified.`,
+    );
+  }
+
+  if (has("adgm_dpr")) {
+    notes.push(
+      `ADGM Data Protection Regulations 2021 applies. This is a THIRD, separate regulator from both UAE federal PDPL's UAE Data Office and SDAIA/ICO/EU supervisory authorities — ADGM's own Office of Data Protection (Commissioner of Data Protection) — even when UAE federal PDPL also applies to the same company via its extraterritorial reach (the two regimes can coexist on one company without being the same law). Its "cross_border_transfer" mechanism is its own: ADGM recognizes all jurisdictions the European Commission deems adequate, plus DIFC, plus a mutual adequacy-recognition arrangement between ADGM/DIFC/the Qatar Financial Centre — genuinely distinct from GDPR's, Saudi PDPL's, or UAE federal PDPL's own transfer machinery, though structurally GDPR-like (adequacy plus binding corporate rules/appropriate-safeguard mechanisms). For "breach_response": ADGM also uses a 72-hour notification window to its Commissioner — same non-"stricter" framing applies. Note also that ADGM DPR is establishment-only (no extraterritorial trigger) — if it's listed as applicable here, this company is genuinely established in ADGM.`,
+    );
+  }
+
   return notes.length > 0 ? `\n\n${notes.join("\n\n")}\n\nReflect these distinctions in "applicableRegulations" per finding rather than assuming all applicable regimes are interchangeable.` : "";
 }
 
@@ -129,7 +150,7 @@ function buildPrompt(
   // evidence, exactly as before this feature.
   const allowedCategoriesForSchema = hasSharedDocument ? categoriesWithEvidence.concat(categoriesWithoutEvidence) : categoriesWithEvidence;
 
-  return `You are the Data Protection Compliance module of an AI execution audit. You assess data-protection compliance readiness — consent flows, data-subject-rights handling, retention policy, breach-response readiness, and cross-border transfer safeguards — ONLY within the regulations listed below as applicable (GDPR variants and/or Saudi PDPL). This is a general, AI-agnostic data-protection assessment, not an AI-specific governance review (that's a separate module's job) — do not discuss AI risk classification or AI governance maturity here. You do not write prose reports.
+  return `You are the Data Protection Compliance module of an AI execution audit. You assess data-protection compliance readiness — consent flows, data-subject-rights handling, retention policy, breach-response readiness, and cross-border transfer safeguards — ONLY within the regulations listed below as applicable (GDPR variants, Saudi PDPL, UAE federal PDPL, and/or ADGM DPR, whichever apply). This is a general, AI-agnostic data-protection assessment, not an AI-specific governance review (that's a separate module's job) — do not discuss AI risk classification or AI governance maturity here. You do not write prose reports.
 
 HARD RULES — violating any of these makes your output unusable:
 1. The applicable regulations below were already determined by code from the company's registration/customer-market data — you do not decide applicability, and you must NEVER produce a finding tagged with a regulation not listed as applicable.

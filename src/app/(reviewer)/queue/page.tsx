@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listRegulatoryContentReviewStatus } from "@/lib/reviewer/regulatory-content-review";
+import { JURISDICTION_LABELS } from "@/lib/reviewer/regulatory-staleness";
 import { listPendingSessionRequests } from "@/lib/service-layer/session-requests";
 import { listPricing } from "@/lib/pricing";
 import { listOpenSprintQueueItems, listAllSprints } from "@/lib/execution-sprint/workspace";
@@ -23,15 +24,6 @@ import { Card } from "@/app/_components/ui/Card";
 import { Input } from "@/app/_components/ui/Input";
 import { Button } from "@/app/_components/ui/Button";
 import { LinkButton } from "@/app/_components/ui/LinkButton";
-
-const JURISDICTION_LABELS: Record<string, string> = {
-  eu_ai_act: "EU AI Act",
-  uae_difc_reg10: "UAE DIFC Regulation 10",
-  saudi_ai_governance: "Saudi AI governance (SDAIA)",
-  uk_gdpr: "UK GDPR",
-  eu_gdpr: "EU GDPR",
-  saudi_pdpl: "Saudi PDPL",
-};
 
 // Reviewer Queue — everything actually ready for review, oldest first. One
 // unified queue across the core audit AND every standalone module

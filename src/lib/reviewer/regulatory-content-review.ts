@@ -4,15 +4,18 @@ import { getSettingNumber } from "@/lib/app-settings";
 /**
  * Periodic regulatory-content-review flag (spec §1.8b, confirmed
  * 2026-08-02; extended 2026-08-03 to cover Data Protection Compliance's
- * regulations, not just Tender Readiness's) — a distinct concern from
- * re-audit reminders. Re-audit reminders are about a client's data going
- * stale; this is about the REGULATORY REFERENCE CONTENT itself going stale
- * (Saudi's Responsible AI Policy is still in draft, the UAE's Federal
- * Authority for AI and Data could issue binding rules at any time). Fully
- * generic against whatever rows exist in `regulatory_content_reviews` —
- * covers eu_ai_act/uae_difc_reg10/saudi_ai_governance (Tender Readiness)
- * and uk_gdpr/eu_gdpr/saudi_pdpl (Data Protection Compliance) with no code
- * change, only seed-data additions. Notifies every reviewer — this is a
+ * regulations, not just Tender Readiness's; extended again 2026-09-03
+ * with uae_pdpl/adgm_dpr) — a distinct concern from re-audit reminders.
+ * Re-audit reminders are about a client's data going stale; this is about
+ * the REGULATORY REFERENCE CONTENT itself going stale (Saudi's Responsible
+ * AI Policy is still in draft, the UAE's Federal Authority for AI and Data
+ * could issue binding rules at any time; the UAE Data Office has not yet
+ * published its own adequacy list for federal PDPL cross-border
+ * transfers). Fully generic against whatever rows exist in
+ * `regulatory_content_reviews` — covers eu_ai_act/uae_difc_reg10/
+ * saudi_ai_governance (Tender Readiness) and uk_gdpr/eu_gdpr/saudi_pdpl/
+ * uae_pdpl/adgm_dpr (Data Protection Compliance) with no code change, only
+ * seed-data additions. Notifies every reviewer — this is a
  * content-maintenance task, not something a client sees.
  */
 export interface RegulatoryContentReviewDue {

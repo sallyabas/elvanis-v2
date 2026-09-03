@@ -4,6 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { findSimilarPatterns } from "@/lib/synthesis/case-library";
 import { loadRecommendationLibrary } from "@/lib/recommendations/repository";
 import { loadFindingConciergeNotes } from "@/lib/reviewer/finding-notes";
+import { computeStalenessWarnings } from "@/lib/reviewer/regulatory-staleness";
+import { computeJurisdictionApplicability as computeTenderReadinessApplicability } from "@/lib/modules/tender-readiness/jurisdiction";
+import { computeJurisdictionApplicability as computeDataProtectionApplicability } from "@/lib/modules/data-protection-compliance/jurisdiction";
 import { ReviewWorkspaceClient } from "./ReviewWorkspaceClient";
 
 export default async function ReviewWorkspacePage({ params }: { params: Promise<{ reportId: string }> }) {
@@ -13,7 +16,7 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
   const { data: report, error: reportError } = await supabase
     .from("reports")
     .select(
-      "id, status, company_id, top_3_finding_ids, created_at, submitted_at, edit_window_closes_at, approved_at, source_evidence_snapshot, rerun_of_report_id, failed_lenses, companies(name, user_id, users(plan_tier))",
+      "id, status, company_id, top_3_finding_ids, created_at, submitted_at, edit_window_closes_at, approved_at, source_evidence_snapshot, rerun_of_report_id, failed_lenses, companies(name, user_id, registration_country, uae_free_zone, customer_market_countries, users(plan_tier))",
     )
     .eq("id", reportId)
     .single();
@@ -47,8 +50,40 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
     return <div className="p-6 text-sm text-red-600">Failed to load conflicts: {conflictsError.message}</div>;
   }
 
-  const company = report.companies as unknown as { name: string; user_id: string; users: { plan_tier: string } | { plan_tier: string }[] | null } | null;
+  const company = report.companies as unknown as {
+    name: string;
+    user_id: string;
+    registration_country: string | null;
+    uae_free_zone: "mainland" | "difc" | "adgm" | null;
+    customer_market_countries: string[] | null;
+    users: { plan_tier: string } | { plan_tier: string }[] | null;
+  } | null;
   const ownerUsersRow = Array.isArray(company?.users) ? company?.users[0] : company?.users;
+
+  // Real, new (confirmed 2026-09-03, direct founder request) — an AMBIENT
+  // signal about the company's own current profile, not a claim that this
+  // report's own content addresses any of these frameworks (the core
+  // audit never does formal jurisdiction determination — that's the
+  // standalone modules' job). Computed from the company's CURRENT
+  // registration/uae-free-zone/customer-market data by reusing both
+  // modules' own real, already-tested computeJurisdictionApplicability()
+  // functions directly, rather than re-deriving the logic a third time.
+  const jurisdictionProfileInput = {
+    registrationCountry: company?.registration_country ?? null,
+    uaeFreeZone: company?.uae_free_zone ?? null,
+    customerMarketCountries: company?.customer_market_countries ?? [],
+  };
+  const tenderReadinessApplicability = computeTenderReadinessApplicability(jurisdictionProfileInput);
+  const dataProtectionApplicability = computeDataProtectionApplicability(jurisdictionProfileInput);
+  const applicableJurisdictionKeys = [
+    ...Object.entries(tenderReadinessApplicability)
+      .filter(([, v]) => v)
+      .map(([k]) => k),
+    ...Object.entries(dataProtectionApplicability)
+      .filter(([, v]) => v)
+      .map(([k]) => k),
+  ];
+  const regulatoryStalenessWarnings = await computeStalenessWarnings(applicableJurisdictionKeys);
 
   // Dormant similar-patterns infrastructure, now surfaced in the reviewer
   // workspace (confirmed 2026-08-06) — genuinely returns [] until real case
@@ -113,6 +148,7 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
         planTier={ownerUsersRow?.plan_tier ?? "free"}
         reportStatus={report.status}
         failedLenses={(report.failed_lenses as string[] | null) ?? []}
+        regulatoryStalenessWarnings={regulatoryStalenessWarnings}
         top3FindingIds={(report.top_3_finding_ids as string[]) ?? []}
         canRerun={report.source_evidence_snapshot !== null}
         rerunOfReportId={report.rerun_of_report_id as string | null}

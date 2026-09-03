@@ -20,16 +20,19 @@ const REGIME_LABELS: Record<string, ApplicableRegulationItem> = {
   ukGdpr: { label: "UK GDPR" },
   euGdpr: { label: "EU GDPR" },
   saudiPdpl: { label: "Saudi PDPL" },
+  uaePdpl: { label: "UAE federal PDPL" },
+  adgmDpr: { label: "ADGM DPR 2021" },
 };
 
 // Data Protection Compliance — standalone entry page, sellable independent
 // of the core audit. See spec §1.8d for the confirmed design (GDPR-first
-// build order, extended 2026-08-03 with a real Saudi PDPL branch — broader,
+// build order, extended 2026-08-03 with a real Saudi PDPL branch, extended
+// again 2026-09-03 with UAE federal PDPL + ADGM DPR 2021 — broader,
 // AI-agnostic data protection; AI-specific governance/risk classification
 // is Tender Readiness's job). Applicability is computed here,
 // deterministically, from the company's already-stored
-// registration/customer-market data — never re-asked of the client and
-// never decided by the AI.
+// registration/uae-free-zone/customer-market data — never re-asked of the
+// client and never decided by the AI.
 //
 // Moved into the (app) route group 2026-08-15 (real bug found and fixed,
 // module intake/service flow review) — same fix, same reasoning as Tender
@@ -49,7 +52,7 @@ export default async function DataProtectionCompliancePage() {
 
   const { data: company } = await supabase
     .from("companies")
-    .select("id, name, registration_country, customer_market_countries")
+    .select("id, name, registration_country, uae_free_zone, customer_market_countries")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -61,6 +64,7 @@ export default async function DataProtectionCompliancePage() {
 
   const jurisdictionInput = {
     registrationCountry: company.registration_country as string | null,
+    uaeFreeZone: company.uae_free_zone as "mainland" | "difc" | "adgm" | null,
     customerMarketCountries: (company.customer_market_countries as string[]) ?? [],
   };
   const applicability = computeJurisdictionApplicability(jurisdictionInput);
@@ -82,8 +86,10 @@ export default async function DataProtectionCompliancePage() {
         noneContent={
           <div>
             <p>
-              None of UK GDPR, EU GDPR, or Saudi PDPL currently apply, based on registration ({company.registration_country ?? "not set"}) and
-              customer markets ({jurisdictionInput.customerMarketCountries.join(", ") || "none set"}).
+              None of UK GDPR, EU GDPR, Saudi PDPL, UAE federal PDPL, or ADGM DPR 2021 currently apply, based on
+              registration ({company.registration_country ?? "not set"}
+              {company.uae_free_zone ? `, ${company.uae_free_zone}` : ""}) and customer markets (
+              {jurisdictionInput.customerMarketCountries.join(", ") || "none set"}).
             </p>
             {/* Real gap found and closed 2026-08-15 (module intake/service
                 flow review) — if these fields were genuinely never filled
@@ -100,7 +106,7 @@ export default async function DataProtectionCompliancePage() {
             </p>
           </div>
         }
-        footnote="The UAE's data-protection regime (federal PDPL, ADGM DPR 2021) isn't assessed by this module yet — it's a planned extension for once Gulf market entry is real."
+        footnote="DIFC's own separate Data Protection Law No. 5 of 2020 isn't assessed by this module yet — UAE federal PDPL and ADGM DPR 2021 are both real, built regimes now, but DIFC's own distinct law remains a genuine, deliberately deferred gap."
       />
 
       <DataProtectionIntakeForm companyId={company.id as string} jurisdictionInput={jurisdictionInput} reviewPeriodHours={reviewPeriodHours} />

@@ -15,7 +15,7 @@ import type { CompanyJurisdictionInput, JurisdictionApplicability } from "./juri
  * UAE's data-protection regime (federal PDPL, ADGM DPR 2021) remains out
  * of scope, genuinely gated on Gulf entry.
  */
-export type DataProtectionRegulation = "uk_gdpr" | "eu_gdpr" | "saudi_pdpl";
+export type DataProtectionRegulation = "uk_gdpr" | "eu_gdpr" | "saudi_pdpl" | "uae_pdpl" | "adgm_dpr";
 
 /** The five core checklist areas (spec §1.8a/§5 task breakdown) — every applicable regulation (GDPR variants and PDPL alike) is assessed across all five, not a per-regulation subset. */
 export type DataProtectionCategory =

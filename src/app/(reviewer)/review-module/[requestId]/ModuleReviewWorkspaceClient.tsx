@@ -92,6 +92,14 @@ interface Props {
    * currently trigger any covered jurisdiction), not a broken pipeline.
    */
   hasNoApplicableJurisdiction: boolean;
+  /**
+   * Real, new (confirmed 2026-09-03, direct founder request) — unlike the
+   * core audit's own ambient version, this one genuinely reflects this
+   * specific request's own frozen jurisdiction determination (see
+   * page.tsx). Empty for AI Reliability Audit requests, which have no
+   * applicability concept at all.
+   */
+  regulatoryStalenessWarnings: { jurisdiction: string; label: string; daysSinceReview: number }[];
 }
 
 /**
@@ -172,6 +180,7 @@ export function ModuleReviewWorkspaceClient({
   timing,
   isUrgent,
   hasNoApplicableJurisdiction,
+  regulatoryStalenessWarnings,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingAnswerId, setEditingAnswerId] = useState<string | null>(null);
@@ -332,6 +341,31 @@ export function ModuleReviewWorkspaceClient({
       <Alert variant="warning" className="mb-6">
         {MODULE_LEGAL_DISCLAIMER}
       </Alert>
+
+      {/* Real, new (confirmed 2026-09-03, direct founder request) —
+          genuinely distinct from the pre-existing /queue "Regulatory
+          content status" panel (that tracks the content's own maintenance
+          cadence; this is a per-decision nudge before approval). Unlike
+          the core audit's own ambient version of this warning, this one
+          reflects this request's own real, frozen jurisdiction
+          determination — reviewer-only, never shown to the client. */}
+      {regulatoryStalenessWarnings.length > 0 && (
+        <Alert variant="warning" className="mb-6">
+          <div>
+            <p className="font-medium">
+              This request touches {regulatoryStalenessWarnings.length === 1 ? "a regulatory framework" : "regulatory frameworks"} whose{" "}
+              reference content hasn&apos;t been checked recently:
+            </p>
+            <ul className="mt-1 list-disc pl-5">
+              {regulatoryStalenessWarnings.map((w) => (
+                <li key={w.jurisdiction}>
+                  {w.label} last reviewed {w.daysSinceReview} days ago — consider checking for updates before approving this request.
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Alert>
+      )}
 
       {actionError && (
         <Alert variant="error" className="mb-4">
