@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { findSimilarPatterns } from "@/lib/synthesis/case-library";
 import { loadRecommendationLibrary } from "@/lib/recommendations/repository";
 import { loadFindingConciergeNotes } from "@/lib/reviewer/finding-notes";
+import { loadLatestSecondOpinions } from "@/lib/reviewer/second-opinion-workspace";
+import { loadLatestReportSecondOpinion } from "@/lib/reviewer/report-second-opinion-workspace";
 import { computeStalenessWarnings } from "@/lib/reviewer/regulatory-staleness";
 import { computeJurisdictionApplicability as computeTenderReadinessApplicability } from "@/lib/modules/tender-readiness/jurisdiction";
 import { computeJurisdictionApplicability as computeDataProtectionApplicability } from "@/lib/modules/data-protection-compliance/jurisdiction";
@@ -109,6 +111,15 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
   // similarPatterns/patternCompanyNames.
   const conciergeNotes = await loadFindingConciergeNotes(findingIds);
 
+  // Reviewer second opinion (confirmed 2026-09-04) — one query for the
+  // whole report's findings, keyed by findingId, same pattern as
+  // conciergeNotes above.
+  const secondOpinions = await loadLatestSecondOpinions(findingIds);
+
+  // Reviewer report-level second opinion (confirmed 2026-09-04) — a real,
+  // separate feature from the per-finding one above.
+  const reportSecondOpinion = await loadLatestReportSecondOpinion(reportId);
+
   // Current reviewer's own name (confirmed 2026-08-24), used only to
   // prefill the "Your name" field when adding/editing a note — real
   // session-scoped lookup, not the admin client this page otherwise uses
@@ -158,6 +169,17 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
         recommendationLibrary={recommendationLibrary}
         conciergeNotesByFindingId={Object.fromEntries(conciergeNotes)}
         currentReviewerName={(currentReviewerProfile?.name as string | null) ?? ""}
+        secondOpinionsByFindingId={Object.fromEntries(
+          [...secondOpinions.entries()].map(([findingId, o]) => [
+            findingId,
+            { concern: o.concern, category: o.category, reasoning: o.reasoning, model: o.model },
+          ]),
+        )}
+        reportSecondOpinion={
+          reportSecondOpinion
+            ? { concerns: reportSecondOpinion.concerns, overallAssessment: reportSecondOpinion.overallAssessment, model: reportSecondOpinion.model }
+            : null
+        }
         timing={{
           createdAt: report.created_at,
           submittedAt: report.submitted_at,

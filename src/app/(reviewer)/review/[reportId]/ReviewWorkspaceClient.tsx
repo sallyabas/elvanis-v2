@@ -17,6 +17,8 @@ import {
   setPlanTierAction,
   startExecutionSprintAction,
   saveFindingConciergeNoteAction,
+  requestSecondOpinionAction,
+  requestReportSecondOpinionAction,
 } from "./actions";
 import type { DisputeResolution } from "@/lib/reviewer/workspace";
 import { matchRecommendationLibraryEntries, type RecommendationLibraryEntry } from "@/lib/recommendations/recommendation-library";
@@ -78,6 +80,71 @@ interface ConciergeNote {
   updatedAt: string;
 }
 
+/**
+ * Reviewer second opinion (confirmed 2026-09-04) — a lightweight local
+ * shape, same reasoning as ConciergeNote above (the server-only
+ * second-opinion-workspace.ts module has no business in a client bundle).
+ * v1 scope: Financial lens only — real, server-side enforcement lives in
+ * requestFinancialLensSecondOpinion(), not just this component only
+ * rendering the button for that lens.
+ */
+type SecondOpinionCategory =
+  | "possible_duplicate"
+  | "unsupported_confidence"
+  | "healthy_finding_miscategorized"
+  | "goal_relevance_mismatch"
+  | "unactionable_recommendation"
+  | "other";
+
+interface SecondOpinionDisplay {
+  concern: boolean;
+  category: SecondOpinionCategory | null;
+  reasoning: string;
+  model: string;
+}
+
+const SECOND_OPINION_CATEGORY_LABELS: Record<SecondOpinionCategory, string> = {
+  possible_duplicate: "Possible duplicate",
+  unsupported_confidence: "Unsupported confidence",
+  healthy_finding_miscategorized: "Healthy finding miscategorized",
+  goal_relevance_mismatch: "Goal-relevance mismatch",
+  unactionable_recommendation: "Unactionable recommendation",
+  other: "Other concern",
+};
+
+/**
+ * Reviewer report-level second opinion (confirmed 2026-09-04) — a real,
+ * separate feature from the per-finding one above, checking the report's
+ * actual Top 3 selection against the client's stated goal. Same
+ * lightweight local-shape reasoning as SecondOpinionDisplay.
+ */
+type ReportSecondOpinionCategory =
+  | "missing_fix_first_finding"
+  | "healthy_finding_in_top3"
+  | "top3_misaligned_with_goal"
+  | "recommendations_dont_match_goal"
+  | "other";
+
+interface ReportSecondOpinionConcernDisplay {
+  category: ReportSecondOpinionCategory;
+  findingIds: string[];
+  reasoning: string;
+}
+
+interface ReportSecondOpinionDisplay {
+  concerns: ReportSecondOpinionConcernDisplay[];
+  overallAssessment: string;
+  model: string;
+}
+
+const REPORT_SECOND_OPINION_CATEGORY_LABELS: Record<ReportSecondOpinionCategory, string> = {
+  missing_fix_first_finding: "Missing fix-first finding",
+  healthy_finding_in_top3: "Healthy finding in Top 3",
+  top3_misaligned_with_goal: "Top 3 misaligned with goal",
+  recommendations_dont_match_goal: "Recommendations don't match goal",
+  other: "Other concern",
+};
+
 interface Props {
   reportId: string;
   companyName: string;
@@ -122,6 +189,10 @@ interface Props {
   conciergeNotesByFindingId: Record<string, ConciergeNote>;
   /** Prefills the "Your name" field when adding a note — real session lookup in page.tsx, may be blank. */
   currentReviewerName: string;
+  /** Reviewer second opinion (confirmed 2026-09-04) — keyed by findingId, one query in page.tsx, not N. Only ever populated for Financial-lens findings in v1. */
+  secondOpinionsByFindingId: Record<string, SecondOpinionDisplay>;
+  /** Reviewer report-level second opinion (confirmed 2026-09-04) — the most recent one for this report, or null if never requested. */
+  reportSecondOpinion: ReportSecondOpinionDisplay | null;
 }
 
 function displayedContent(f: FindingRow): LensFinding {
@@ -209,6 +280,8 @@ export function ReviewWorkspaceClient({
   recommendationLibrary,
   conciergeNotesByFindingId,
   currentReviewerName,
+  secondOpinionsByFindingId,
+  reportSecondOpinion: initialReportSecondOpinion,
 }: Props) {
   const router = useRouter();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -614,6 +687,7 @@ export function ReviewWorkspaceClient({
               );
             })}
           </ol>
+          <ReportSecondOpinionPanel reportId={reportId} findingById={findingById} initialOpinion={initialReportSecondOpinion} />
         </Card>
       )}
 
@@ -750,6 +824,13 @@ export function ReviewWorkspaceClient({
                     existingNote={conciergeNotesByFindingId[f.id]}
                     defaultAuthorName={currentReviewerName}
                   />
+                  {/* Reviewer second opinion (confirmed 2026-09-04) — v1
+                      scope is Financial lens only; real enforcement is
+                      server-side, this condition is just where the
+                      button appears. */}
+                  {f.lens === "financial" && (
+                    <SecondOpinionPanel reportId={reportId} findingId={f.id} existingOpinion={secondOpinionsByFindingId[f.id]} />
+                  )}
                   {editingId === f.id ? (
                     <EditForm
                       lens={f.lens}
@@ -1059,6 +1140,188 @@ function ConciergeNoteEditor({
           {saving ? "Saving…" : "Save note"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Reviewer "second opinion" (confirmed 2026-09-04) — reviewer-triggered on
+ * demand, from a genuinely different model (Claude) than whatever drafted
+ * the finding. Purely advisory display: a concern flag with a category and
+ * reasoning, or an honest clean-pass confirmation — never a gate, never an
+ * action this component can take on the finding itself. v1 scope
+ * (Financial lens only) is enforced server-side in
+ * requestFinancialLensSecondOpinion(), not here — this component would
+ * simply surface whatever error that throws for any other lens.
+ *
+ * Until a real ANTHROPIC_API_KEY is configured, clicking this button
+ * surfaces a clear "Something went wrong reaching the server" error (the
+ * same honest failure path this codebase already uses everywhere else for
+ * an uncaught RPC/provider failure) — expected and correct, not a bug,
+ * same as GroqProvider's own "GROQ_API_KEY is not set" pattern.
+ */
+function SecondOpinionPanel({
+  reportId,
+  findingId,
+  existingOpinion,
+}: {
+  reportId: string;
+  findingId: string;
+  existingOpinion: SecondOpinionDisplay | undefined;
+}) {
+  const [opinion, setOpinion] = useState(existingOpinion);
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleRequest() {
+    setStatus("loading");
+    setError(null);
+    try {
+      const result = await requestSecondOpinionAction(reportId, findingId);
+      setOpinion(result);
+      setStatus("idle");
+    } catch {
+      setStatus("error");
+      setError("Something went wrong reaching the server — please try again.");
+    }
+  }
+
+  return (
+    <div className="mt-2">
+      {opinion ? (
+        <div
+          className={`rounded-md border p-2 text-xs ${
+            opinion.concern
+              ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950"
+              : "border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800"
+          }`}
+        >
+          <p className="font-medium text-neutral-800 dark:text-neutral-200">
+            {opinion.concern ? `⚠ Second opinion: ${SECOND_OPINION_CATEGORY_LABELS[opinion.category!]}` : "✓ Second opinion: no concerns"}
+            <span className="ml-2 font-normal text-neutral-400 dark:text-neutral-500">({opinion.model})</span>
+          </p>
+          <p className="mt-1 text-neutral-600 dark:text-neutral-400">{opinion.reasoning}</p>
+          <button
+            type="button"
+            onClick={handleRequest}
+            disabled={status === "loading"}
+            className="mt-1 text-neutral-400 hover:text-neutral-600 hover:underline dark:text-neutral-500 dark:hover:text-neutral-300"
+          >
+            {status === "loading" ? "Asking again…" : "Ask again"}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={handleRequest}
+          disabled={status === "loading"}
+          className="text-xs text-neutral-500 hover:text-neutral-700 hover:underline dark:text-neutral-400"
+        >
+          {status === "loading" ? "Getting a second opinion…" : "Get a second opinion"}
+        </button>
+      )}
+      {status === "error" && error && (
+        <Alert variant="error" className="mt-1 py-1 text-xs">
+          {error}
+        </Alert>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Reviewer report-level second opinion (confirmed 2026-09-04) — a real,
+ * separate feature from SecondOpinionPanel above: checks the report's
+ * ACTUAL Top 3 selection against the client's stated goal, using the Goal
+ * Relevance Ranking Rubric, rather than one finding's own internal
+ * quality. Same self-contained-component/try-catch-finally pattern. The
+ * response is a real array of concerns (a multi-finding selection can
+ * have more than one thing wrong with it at once) plus a required overall
+ * assessment — richer than the per-finding version's single concern/
+ * category/reasoning triple, reflecting what's actually being checked.
+ */
+function ReportSecondOpinionPanel({
+  reportId,
+  findingById,
+  initialOpinion,
+}: {
+  reportId: string;
+  findingById: Map<string, FindingRow>;
+  initialOpinion: ReportSecondOpinionDisplay | null;
+}) {
+  const [opinion, setOpinion] = useState(initialOpinion);
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleRequest() {
+    setStatus("loading");
+    setError(null);
+    try {
+      const result = await requestReportSecondOpinionAction(reportId);
+      setOpinion(result);
+      setStatus("idle");
+    } catch {
+      setStatus("error");
+      setError("Something went wrong reaching the server — please try again.");
+    }
+  }
+
+  function findingTitle(id: string): string {
+    const f = findingById.get(id);
+    return f ? displayedContent(f).title : id;
+  }
+
+  return (
+    <div className="mt-4 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+      {opinion ? (
+        <div className="space-y-2">
+          <p className="text-xs text-neutral-600 dark:text-neutral-400">
+            {opinion.overallAssessment} <span className="text-neutral-400 dark:text-neutral-500">({opinion.model})</span>
+          </p>
+          {opinion.concerns.length > 0 && (
+            <ul className="space-y-2">
+              {opinion.concerns.map((c, i) => (
+                <li
+                  key={i}
+                  className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs dark:border-amber-800 dark:bg-amber-950"
+                >
+                  <p className="font-medium text-neutral-800 dark:text-neutral-200">
+                    ⚠ {REPORT_SECOND_OPINION_CATEGORY_LABELS[c.category]}
+                    {c.findingIds.length > 0 && (
+                      <span className="ml-1 font-normal text-neutral-500 dark:text-neutral-400">
+                        — {c.findingIds.map(findingTitle).join(", ")}
+                      </span>
+                    )}
+                  </p>
+                  <p className="mt-1 text-neutral-600 dark:text-neutral-400">{c.reasoning}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button
+            type="button"
+            onClick={handleRequest}
+            disabled={status === "loading"}
+            className="text-xs text-neutral-400 hover:text-neutral-600 hover:underline dark:text-neutral-500 dark:hover:text-neutral-300"
+          >
+            {status === "loading" ? "Asking again…" : "Ask again"}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={handleRequest}
+          disabled={status === "loading"}
+          className="text-xs text-neutral-500 hover:text-neutral-700 hover:underline dark:text-neutral-400"
+        >
+          {status === "loading" ? "Getting a second opinion…" : "Get a second opinion on Top 3"}
+        </button>
+      )}
+      {status === "error" && error && (
+        <Alert variant="error" className="mt-1 py-1 text-xs">
+          {error}
+        </Alert>
+      )}
     </div>
   );
 }

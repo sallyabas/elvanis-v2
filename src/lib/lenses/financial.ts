@@ -14,17 +14,17 @@ import {
 import type { EvidenceFieldInput, LensDraftInput, LensDraftResult, LensFinding, LensModule } from "./types";
 
 /**
- * Built per-call, not a module-level const (confirmed 2026-08-06) — now
- * that benchmarks are DB-loaded (loadFinancialBenchmarks(), see
- * benchmarks-repository.ts), the prompt can no longer be pre-computed once
- * at import time; it must reflect whatever's currently in the DB, same
- * "living record, never a cached copy" principle already applied to the
- * company profile.
+ * The Financial lens's own HARD RULES + FINDING STRUCTURE block, extracted
+ * as a real, standalone constant (confirmed 2026-09-04, reviewer
+ * second-opinion v1) — this is the exact rubric text the finding was
+ * drafted against, now reused verbatim as the reviewer second-opinion
+ * feature's own review instructions (src/lib/reviewer/second-opinion.ts),
+ * so the two can never drift into judging a finding by a different
+ * standard than the one it was actually written to. Zero behavior change
+ * to the live lens itself — buildSystemPrompt() below interpolates this
+ * same string it always contained inline.
  */
-function buildSystemPrompt(benchmarks: FinancialBenchmarks): string {
-  return `You are the Financial lens of an AI execution audit for founder-led B2B SaaS and tech-enabled SMEs (20-200 employees, UK/NL first). You analyze submitted financial evidence and produce a structured set of findings — you do not write prose reports.
-
-HARD RULES — violating any of these makes your output unusable:
+export const FINANCIAL_LENS_RUBRIC = `HARD RULES — violating any of these makes your output unusable:
 1. Never fabricate a number that isn't present in the submitted evidence. Every quantified claim must name the specific evidence field(s) it came from in "evidenceCited".
 2. Financial impact is always a range (impactBandLow/impactBandHigh) with a confidence level and stated assumptions — never a single fake-precise number. If you cannot responsibly estimate a range, set financialImpact to null rather than inventing one.
 3. If evidence for a specific check is missing or too sparse to analyze, do not guess. Reflect that in evidenceSufficiency and isMissingDataFinding, and lower confidenceLevel to "insufficient" — do not manufacture a finding to fill the gap. Vague qualitative claims (e.g. "margins are healthy I believe") are not evidence — treat unverifiable anecdotes the same as missing data, not as grounds for a confident finding.
@@ -37,7 +37,20 @@ FINDING STRUCTURE — four fields must stay distinct, never folded together:
 - "diagnosis": the observation itself — what was actually found, in full (including any factual benchmark comparison from rule 6). This is the WHAT.
 - "rootCause": the underlying mechanism — WHY this is happening. Must be genuinely causal, not a restatement of the diagnosis or a benchmark comparison. If you don't have enough evidence to explain why, say so honestly rather than inventing a cause.
 - "recommendedAction": the concrete fix — WHAT TO DO about it. Ground it in the actual finding; don't recommend something the evidence doesn't support.
-- "severity": "critical" | "high" | "medium" | "low" — how much this matters to the business if left unaddressed. Independent of confidenceLevel (how sure you are) and independent of goalRelevance (how tied to the stated goal it is) — a finding can be low-confidence and still critical severity, or high-confidence and low severity.
+- "severity": "critical" | "high" | "medium" | "low" — how much this matters to the business if left unaddressed. Independent of confidenceLevel (how sure you are) and independent of goalRelevance (how tied to the stated goal it is) — a finding can be low-confidence and still critical severity, or high-confidence and low severity.`;
+
+/**
+ * Built per-call, not a module-level const (confirmed 2026-08-06) — now
+ * that benchmarks are DB-loaded (loadFinancialBenchmarks(), see
+ * benchmarks-repository.ts), the prompt can no longer be pre-computed once
+ * at import time; it must reflect whatever's currently in the DB, same
+ * "living record, never a cached copy" principle already applied to the
+ * company profile.
+ */
+function buildSystemPrompt(benchmarks: FinancialBenchmarks): string {
+  return `You are the Financial lens of an AI execution audit for founder-led B2B SaaS and tech-enabled SMEs (20-200 employees, UK/NL first). You analyze submitted financial evidence and produce a structured set of findings — you do not write prose reports.
+
+${FINANCIAL_LENS_RUBRIC}
 
 REFERENCE BENCHMARKS (general context on the scale involved — the COMPUTED BENCHMARK COMPARISONS section below is what decides each finding's tier, not this):
 ${formatBenchmarksForPrompt(benchmarks)}

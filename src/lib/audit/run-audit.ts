@@ -17,6 +17,7 @@ import type {
   LensType,
 } from "@/lib/lenses/types";
 import type { MetricInput } from "@/lib/lenses/metrics";
+import { computeDefaultRankingScore } from "@/lib/reports/ranking-rubric";
 
 /**
  * Orchestrates one full audit run (spec §2.3 steps 4-5, 8 setup): all five
@@ -89,18 +90,14 @@ export interface RunAuditResult {
   failedLenses: LensType[];
 }
 
-function scoreForDefaultRanking(f: LensFinding): number {
-  // directly_blocks outranks directly_affects outranks directly_supports,
-  // even though all three are "directly" tied to the goal — top-3 is about
-  // what needs ACTION. directly_blocks and directly_affects are both real
-  // problems (the primary obstruction vs. a direct, material cost/drag that
-  // isn't the primary cause); directly_supports is healthy/positive and
-  // isn't a fix-first candidate the way either problem-finding is, however
-  // directly relevant it is. See GoalRelevance docblock in types.ts.
-  const goalWeight = { directly_blocks: 4, directly_affects: 3, directly_supports: 2, indirectly_affects: 1, unrelated: 0 }[f.goalRelevance];
-  const confidenceWeight = { high: 3, medium: 2, low: 1, insufficient: 0 }[f.confidenceLevel];
-  return goalWeight * 2 + confidenceWeight;
-}
+/**
+ * The default-ranking formula itself now lives in
+ * src/lib/reports/ranking-rubric.ts (extracted 2026-09-04, reviewer
+ * report-level second opinion) — reused verbatim here, and by the second
+ * opinion's own rubric text, so the two can never silently diverge. See
+ * that file's own docblock for the full reasoning (previously duplicated
+ * here as an inline function).
+ */
 
 export async function runAudit(input: RunAuditInput): Promise<RunAuditResult> {
   const supabase = createAdminClient();
@@ -304,7 +301,7 @@ export async function runAudit(input: RunAuditInput): Promise<RunAuditResult> {
   }
 
   const defaultTop3 = [...persistedFindings]
-    .sort((a, b) => scoreForDefaultRanking(b.finding) - scoreForDefaultRanking(a.finding))
+    .sort((a, b) => computeDefaultRankingScore(b.finding) - computeDefaultRankingScore(a.finding))
     .slice(0, 3)
     .map((f) => f.finding.findingId);
 

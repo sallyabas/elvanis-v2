@@ -18,6 +18,8 @@ import { rerunAudit } from "@/lib/audit/rerun-audit";
 import { setPlanTier, type PlanTier } from "@/lib/service-layer/plan-tier";
 import { proposeSprintFinding } from "@/lib/execution-sprint/workspace";
 import { saveFindingConciergeNote } from "@/lib/reviewer/finding-notes";
+import { requestFinancialLensSecondOpinion } from "@/lib/reviewer/second-opinion-workspace";
+import { requestReportTop3SecondOpinion } from "@/lib/reviewer/report-second-opinion-workspace";
 
 // reviewed_by is a real FK to users.id. Now sourced from the real
 // authenticated session (confirmed 2026-08-02), not a REVIEWER_USER_ID env
@@ -74,6 +76,32 @@ export async function saveFindingConciergeNoteAction(reportId: string, findingId
   const reviewerId = await getReviewerId();
   await saveFindingConciergeNote(findingId, reviewerId, authorName, note);
   revalidatePath(`/review/${reportId}`);
+}
+
+/**
+ * Reviewer "second opinion" (confirmed 2026-09-04) — purely advisory, no
+ * interaction with the mandatory review gate. v1 scope (Financial lens
+ * only) is enforced server-side inside requestFinancialLensSecondOpinion(),
+ * not just by the UI only offering the button on Financial findings.
+ */
+export async function requestSecondOpinionAction(reportId: string, findingId: string) {
+  const reviewerId = await getReviewerId();
+  const result = await requestFinancialLensSecondOpinion(reportId, findingId, reviewerId);
+  revalidatePath(`/review/${reportId}`);
+  return result;
+}
+
+/**
+ * Reviewer report-level "second opinion" (confirmed 2026-09-04) — a real,
+ * separate feature from requestSecondOpinionAction above, checking the
+ * report's actual Top 3 selection against the client's stated goal.
+ * Purely advisory, no interaction with the mandatory review gate.
+ */
+export async function requestReportSecondOpinionAction(reportId: string) {
+  const reviewerId = await getReviewerId();
+  const result = await requestReportTop3SecondOpinion(reportId, reviewerId);
+  revalidatePath(`/review/${reportId}`);
+  return result;
 }
 
 export async function resolveConflictAction(reportId: string, conflictId: string, notes: string) {
