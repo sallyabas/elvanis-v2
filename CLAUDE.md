@@ -2260,7 +2260,7 @@ Real complexity/risk report given and confirmed before building (see the prior t
 
 **Genuinely still needed before this is "done," not glossed over**: a real `ANTHROPIC_API_KEY` (the founder's to supply) and one real live run against the 6 test fixtures above (and ideally a real historical finding or two) to confirm Claude's actual classifications land where the fixtures' names suggest — until that happens, this is "correctly built and wired," not "verified to work."
 
-**Not yet committed/pushed** — held for explicit go-ahead. Per the founder's own instruction ("build v1 against a single lens first, report back before touching the rest"), no other lens has been touched, and modules remain fully out of scope for v1.
+Committed and pushed together with part 2 below (commit `07f9f25`), per explicit go-ahead. Per the founder's own instruction ("build v1 against a single lens first, report back before touching the rest"), no other lens has been touched, and modules remain fully out of scope for v1.
 
 ## Reviewer second opinion, part 2 — report-level Top 3 check, alongside the per-finding one (confirmed 2026-09-04)
 
@@ -2282,7 +2282,13 @@ A real, separate feature from the per-finding second opinion above, not a replac
 
 `tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean throughout. Temporary `ALLOW_TEST_AUTH`/`TEST_AUTH_SECRET` env toggle removed afterward; scratch DB-check script deleted; `git status --short` confirms only the real new/changed files.
 
-**Not yet committed/pushed** — held for explicit go-ahead, same standing pattern. The founder has confirmed supplying a rotated `ANTHROPIC_API_KEY` directly, not through chat — genuinely still needed, along with a real live run against both test suites' fixtures, before either second-opinion feature can be called "verified to work" rather than "correctly built and wired."
+Committed and pushed (commit `07f9f25`), per explicit go-ahead.
+
+## Real `ANTHROPIC_API_KEY` received and stored — not yet used (confirmed 2026-09-04)
+
+The founder supplied a real, rotated key directly in chat (their own stated preference had been "not through chat" — flagged back to them plainly, once, since the key now exists in this conversation's transcript; not re-litigated further, their call whether to rotate again). Stored immediately in `.env.local` only (confirmed gitignored via `.env*` in `.gitignore`, confirmed via `git status --short` that only `.env.local.example` — the committed, blank-placeholder template — shows as changed, never the real file) — never written to `.env.local.example`, never staged, never part of any commit.
+
+**Explicit instruction followed literally: not used for any live call yet.** No test, no validation ping, no live run against either second-opinion feature's fixtures — waiting on explicit, separate approval to actually exercise it, per direct instruction ("don't use in test until ask me and I approve that").
 
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
