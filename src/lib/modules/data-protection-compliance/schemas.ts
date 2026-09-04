@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { confidenceLevelSchema, severitySchema } from "@/lib/lenses/schemas";
 
-export const dataProtectionRegulationSchema = z.enum(["uk_gdpr", "eu_gdpr", "saudi_pdpl", "uae_pdpl", "adgm_dpr"]);
+export const dataProtectionRegulationSchema = z.enum(["uk_gdpr", "eu_gdpr", "saudi_pdpl", "uae_pdpl", "adgm_dpr", "difc_dpl"]);
 export const dataProtectionCategorySchema = z.enum([
   "consent_flow",
   "data_subject_rights",

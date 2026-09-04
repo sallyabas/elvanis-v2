@@ -4,19 +4,27 @@ import { getSettingNumber } from "@/lib/app-settings";
 /**
  * Periodic regulatory-content-review flag (spec §1.8b, confirmed
  * 2026-08-02; extended 2026-08-03 to cover Data Protection Compliance's
- * regulations, not just Tender Readiness's; extended again 2026-09-03
- * with uae_pdpl/adgm_dpr) — a distinct concern from re-audit reminders.
- * Re-audit reminders are about a client's data going stale; this is about
- * the REGULATORY REFERENCE CONTENT itself going stale (Saudi's Responsible
- * AI Policy is still in draft, the UAE's Federal Authority for AI and Data
- * could issue binding rules at any time; the UAE Data Office has not yet
- * published its own adequacy list for federal PDPL cross-border
- * transfers). Fully generic against whatever rows exist in
- * `regulatory_content_reviews` — covers eu_ai_act/uae_difc_reg10/
+ * regulations, not just Tender Readiness's; extended 2026-09-03 with
+ * uae_pdpl/adgm_dpr; extended again 2026-09-04 with difc_dpl PLUS a real
+ * per-jurisdiction cadence override) — a distinct concern from re-audit
+ * reminders. Re-audit reminders are about a client's data going stale;
+ * this is about the REGULATORY REFERENCE CONTENT itself going stale
+ * (Saudi's Responsible AI Policy is still in draft, the UAE's Federal
+ * Authority for AI and Data could issue binding rules at any time, the UAE
+ * Data Office has not yet published its own adequacy list for federal
+ * PDPL cross-border transfers, and DIFC's own law has seen real,
+ * scope-expanding amendments that may or may not have already taken
+ * effect — confirmed actively in flux, distinct from the more settled
+ * regimes already tracked here). Fully generic against whatever rows
+ * exist in `regulatory_content_reviews` — covers eu_ai_act/uae_difc_reg10/
  * saudi_ai_governance (Tender Readiness) and uk_gdpr/eu_gdpr/saudi_pdpl/
- * uae_pdpl/adgm_dpr (Data Protection Compliance) with no code change, only
- * seed-data additions. Notifies every reviewer — this is a
- * content-maintenance task, not something a client sees.
+ * uae_pdpl/adgm_dpr/difc_dpl (Data Protection Compliance) with no code
+ * change, only seed-data additions. Notifies every reviewer — this is a
+ * content-maintenance task, not something a client sees. This mechanism
+ * ITSELF was already real and fully wired (cron-scheduled, inserts real
+ * `notifications` rows, has a real email template) before DIFC's shorter
+ * cadence was requested — the only change needed was making the cadence
+ * per-jurisdiction rather than one global number for every row.
  */
 export interface RegulatoryContentReviewDue {
   jurisdiction: string;
@@ -24,17 +32,22 @@ export interface RegulatoryContentReviewDue {
 
 export async function checkRegulatoryContentReviewDue(): Promise<RegulatoryContentReviewDue[]> {
   const supabase = createAdminClient();
-  const cadenceDays = await getSettingNumber("regulatory_content_review_days", 180);
-  const cutoffMs = Date.now() - cadenceDays * 24 * 60 * 60 * 1000;
+  const globalCadenceDays = await getSettingNumber("regulatory_content_review_days", 180);
 
-  const { data: rows, error } = await supabase.from("regulatory_content_reviews").select("jurisdiction, last_reviewed_at, notified_at");
+  const { data: rows, error } = await supabase
+    .from("regulatory_content_reviews")
+    .select("jurisdiction, last_reviewed_at, notified_at, review_cadence_days");
   if (error) throw new Error(`checkRegulatoryContentReviewDue: failed to load review rows: ${error.message}`);
 
-  // Overdue AND not already notified since the last actual human review —
-  // idempotent per overdue cycle, not per cron tick (a real bug found live:
-  // without this, a 15-minute cron would re-notify every 15 minutes for as
-  // long as a jurisdiction stayed overdue).
+  // Overdue (per this ROW's own cadence override, or the global default
+  // when it has none — confirmed 2026-09-04, DIFC gets a real 90-day
+  // override) AND not already notified since the last actual human review
+  // — idempotent per overdue cycle, not per cron tick (a real bug found
+  // live: without this, a 15-minute cron would re-notify every 15 minutes
+  // for as long as a jurisdiction stayed overdue).
   const due = (rows ?? []).filter((r) => {
+    const cadenceDays = r.review_cadence_days ?? globalCadenceDays;
+    const cutoffMs = Date.now() - cadenceDays * 24 * 60 * 60 * 1000;
     const overdue = new Date(r.last_reviewed_at).getTime() <= cutoffMs;
     const alreadyNotifiedThisCycle = r.notified_at && new Date(r.notified_at).getTime() >= new Date(r.last_reviewed_at).getTime();
     return overdue && !alreadyNotifiedThisCycle;
@@ -89,23 +102,30 @@ export interface RegulatoryContentReviewStatus {
   lastReviewedAt: string;
   daysSinceReview: number;
   isOverdue: boolean;
+  /** This row's own cadence in days — either its real override, or the global default it's currently falling back to. Shown on /queue so a reviewer can see WHY a jurisdiction like DIFC goes overdue sooner than the rest. */
+  cadenceDays: number;
 }
 
 export async function listRegulatoryContentReviewStatus(): Promise<RegulatoryContentReviewStatus[]> {
   const supabase = createAdminClient();
-  const cadenceDays = await getSettingNumber("regulatory_content_review_days", 180);
+  const globalCadenceDays = await getSettingNumber("regulatory_content_review_days", 180);
 
-  const { data: rows, error } = await supabase.from("regulatory_content_reviews").select("jurisdiction, last_reviewed_at").order("jurisdiction");
+  const { data: rows, error } = await supabase
+    .from("regulatory_content_reviews")
+    .select("jurisdiction, last_reviewed_at, review_cadence_days")
+    .order("jurisdiction");
   if (error) throw new Error(`listRegulatoryContentReviewStatus: failed to load review rows: ${error.message}`);
 
   const now = Date.now();
   return (rows ?? []).map((r) => {
+    const cadenceDays = (r.review_cadence_days as number | null) ?? globalCadenceDays;
     const daysSinceReview = Math.floor((now - new Date(r.last_reviewed_at).getTime()) / (24 * 60 * 60 * 1000));
     return {
       jurisdiction: r.jurisdiction as string,
       lastReviewedAt: r.last_reviewed_at as string,
       daysSinceReview,
       isOverdue: daysSinceReview >= cadenceDays,
+      cadenceDays,
     };
   });
 }

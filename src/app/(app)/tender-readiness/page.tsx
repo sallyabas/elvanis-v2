@@ -2,7 +2,10 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSettingNumber } from "@/lib/app-settings";
 import { computeJurisdictionApplicability } from "@/lib/modules/tender-readiness/jurisdiction";
+import { isKnownJurisdictionCountry } from "@/lib/modules/shared/regions";
 import { ApplicableRegulationsBox, type ApplicableRegulationItem } from "@/app/_components/ApplicableRegulationsBox";
+import { JurisdictionQuickSetup } from "@/app/_components/JurisdictionQuickSetup";
+import { Alert } from "@/app/_components/ui/Alert";
 import { TenderReadinessIntakeForm } from "./TenderReadinessIntakeForm";
 
 /**
@@ -89,6 +92,19 @@ export default async function TenderReadinessPage() {
     .map((k) => SECTION_LABELS[k]);
   const hasNoApplicableJurisdiction = applicableItems.length === 0;
 
+  // Item 5 (confirmed 2026-09-04) — see data-protection-compliance's own
+  // page.tsx for the full reasoning; identical here.
+  const jurisdictionFieldsAreEmpty = !company.registration_country && jurisdictionInput.customerMarketCountries.length === 0;
+
+  // Item 8 (confirmed 2026-09-04) — see data-protection-compliance's own
+  // page.tsx for the full reasoning; identical here, since "does this app
+  // have any logic for this country" is independent of which module's
+  // specific regimes are being checked.
+  const uncoveredCountries = [company.registration_country as string | null, ...jurisdictionInput.customerMarketCountries]
+    .filter((c): c is string => Boolean(c))
+    .filter((c) => !isKnownJurisdictionCountry(c));
+  const uniqueUncoveredCountries = [...new Set(uncoveredCountries)];
+
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold">Tender Readiness</h1>
@@ -105,23 +121,33 @@ export default async function TenderReadinessPage() {
               No AI-specific jurisdiction currently applies, based on registration ({company.registration_country ?? "not set"}) and
               customer markets ({jurisdictionInput.customerMarketCountries.join(", ") || "none set"}).
             </p>
-            {/* Real gap found and closed 2026-08-15 (module intake/service
-                flow review) — if that's because these fields were genuinely
-                never filled in (not a considered "we operate nowhere
-                regulated" answer), the client had no way to know that, or
-                where to fix it. Business Profile now has real fields for
-                both. */}
-            <p className="mt-2">
-              If this doesn&apos;t look right, add your registration country and customer markets on{" "}
-              <a href="/business-profile" className="font-medium text-accent underline hover:text-accent-hover">
-                Business Profile
-              </a>{" "}
-              — you can still submit below without them, but this request likely won&apos;t surface any jurisdiction-specific
-              findings until they&apos;re set.
-            </p>
+            {!jurisdictionFieldsAreEmpty && (
+              <p className="mt-2">
+                If this doesn&apos;t look right, update your registration country and customer markets on{" "}
+                <a href="/business-profile" className="font-medium text-accent underline hover:text-accent-hover">
+                  Business Profile
+                </a>
+                .
+              </p>
+            )}
           </div>
         }
       />
+
+      {/* Item 5 (confirmed 2026-09-04) — real, inline fix, not just a link
+          out to Business Profile, for the genuinely-empty case. */}
+      {jurisdictionFieldsAreEmpty && <JurisdictionQuickSetup companyId={company.id as string} />}
+
+      {/* Item 8 (confirmed 2026-09-04) — plainly discloses a real
+          jurisdiction signal this module has no logic for at all. */}
+      {uniqueUncoveredCountries.length > 0 && (
+        <Alert variant="warning" className="mb-6">
+          Elvanis doesn&apos;t yet have built regulatory coverage for {uniqueUncoveredCountries.join(", ")}. This module
+          currently covers the UK, EU member states, Saudi Arabia, and the UAE — if {uniqueUncoveredCountries.length === 1 ? "this" : "these"}{" "}
+          genuinely describes where you&apos;re registered or where your customers are, this request won&apos;t surface
+          jurisdiction-specific findings for {uniqueUncoveredCountries.length === 1 ? "it" : "them"} yet.
+        </Alert>
+      )}
 
       <TenderReadinessIntakeForm companyId={company.id as string} jurisdictionInput={jurisdictionInput} reviewPeriodHours={reviewPeriodHours} />
     </div>

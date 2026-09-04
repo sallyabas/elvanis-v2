@@ -29,6 +29,7 @@ export const JURISDICTION_LABELS: Record<string, string> = {
   saudi_pdpl: "Saudi PDPL",
   uae_pdpl: "UAE federal PDPL",
   adgm_dpr: "ADGM DPR 2021",
+  difc_dpl: "DIFC Data Protection Law No. 5 of 2020",
 };
 
 /**
@@ -51,6 +52,7 @@ const APPLICABILITY_KEY_TO_JURISDICTION: Record<string, string> = {
   saudiPdpl: "saudi_pdpl",
   uaePdpl: "uae_pdpl",
   adgmDpr: "adgm_dpr",
+  difcDpl: "difc_dpl",
 };
 
 export interface RegulatoryStalenessWarning {

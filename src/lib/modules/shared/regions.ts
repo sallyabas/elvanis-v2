@@ -27,3 +27,20 @@ export const EU_MEMBER_STATES = new Set(
 export const UK_NAMES = new Set(["uk", "united kingdom", "great britain"].map(normalize));
 export const SAUDI_ARABIA_NAMES = new Set(["saudi arabia", "ksa", "kingdom of saudi arabia"].map(normalize));
 export const UAE_NAMES = new Set(["uae", "united arab emirates"].map(normalize));
+
+/**
+ * True if `country` (any casing/whitespace) falls within a jurisdiction
+ * this codebase has real, built regulatory logic for (UK/EU/Saudi
+ * Arabia/UAE) — confirmed 2026-09-04, "jurisdiction not covered" warning.
+ * Distinct from a country genuinely having zero applicable regulations
+ * (e.g. a UK-registered company with only US customers: US customers are
+ * a known-but-inapplicable market, not an unknown one) — this only
+ * answers "does this app have ANY logic at all for this country," which
+ * both Tender Readiness and Data Protection Compliance's own applicability
+ * computations already implicitly assume true for every country they're
+ * ever given, without ever checking or disclosing when it isn't.
+ */
+export function isKnownJurisdictionCountry(country: string): boolean {
+  const normalized = normalize(country);
+  return UK_NAMES.has(normalized) || EU_MEMBER_STATES.has(normalized) || SAUDI_ARABIA_NAMES.has(normalized) || UAE_NAMES.has(normalized);
+}

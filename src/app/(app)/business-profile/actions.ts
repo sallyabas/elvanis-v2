@@ -54,6 +54,15 @@ export interface CompanyProfileFields {
    * to it on submit — see that page's own actions.ts.
    */
   hasAiInProduction: boolean | null;
+  /**
+   * DIFC's own "stable arrangements" question (confirmed 2026-09-04, items
+   * 6+7) — a real, self-reported signal DIFC's registration-based
+   * `difcDpl` flag can't capture (see jurisdiction.ts's own docblock).
+   * Tri-state: null = not yet asked, "not_sure" is itself a real answer
+   * (not an absence of one) that flags the account for reviewer visibility
+   * on /company/[companyId] and reveals a Discovery Session link.
+   */
+  difcStableArrangements: "yes" | "no" | "not_sure" | null;
 }
 
 export interface UpdateCompanyProfileResult {
@@ -96,6 +105,7 @@ export async function updateCompanyProfile(
       uae_free_zone: next.registrationCountry === "United Arab Emirates" ? next.uaeFreeZone : null,
       customer_market_countries: next.customerMarketCountries,
       has_ai_in_production: next.hasAiInProduction,
+      difc_stable_arrangements: next.registrationCountry === "United Arab Emirates" ? next.difcStableArrangements : null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", companyId);
@@ -119,6 +129,7 @@ export async function updateCompanyProfile(
     ["uae_free_zone", "uaeFreeZone"],
     ["customer_market_countries", "customerMarketCountries"],
     ["has_ai_in_production", "hasAiInProduction"],
+    ["difc_stable_arrangements", "difcStableArrangements"],
   ];
   for (const [dbField, key] of compare) {
     const oldStr = fieldToString(previous[key]);

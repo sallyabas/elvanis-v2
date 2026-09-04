@@ -322,6 +322,14 @@ export default async function DemoLivePage() {
         {LENS_ORDER.filter((lens) => byLens.has(lens)).map((lens) => (
           <section key={lens} className="mb-8">
             <h2 className="mb-3 text-lg font-medium">{LENS_LABELS[lens]}</h2>
+            {/* Item 10 (confirmed 2026-09-04) — same permanent restatement
+                as the authenticated report page, kept consistent here. */}
+            {lens === "ai_governance" && (
+              <p className="mb-3 text-xs italic text-neutral-500 dark:text-neutral-400">
+                This section assesses AI governance maturity as a business-readiness signal — it is not a legal jurisdiction
+                determination. See Tender Readiness / Data Protection Compliance for jurisdiction-specific regulatory findings.
+              </p>
+            )}
             {/* Fixed AI-in-production callout (item 8, confirmed
                 2026-08-20) — same real logic as the authenticated report
                 page, so this public demo stays consistent. */}

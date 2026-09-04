@@ -44,8 +44,28 @@ function applicableRegulationsList(applicability: ReturnType<typeof computeJuris
   if (applicability.saudiPdpl) regs.push("saudi_pdpl");
   if (applicability.uaePdpl) regs.push("uae_pdpl");
   if (applicability.adgmDpr) regs.push("adgm_dpr");
+  if (applicability.difcDpl) regs.push("difc_dpl");
   return regs;
 }
+
+/**
+ * Real, small bug found and fixed 2026-09-04 while adding DIFC: the
+ * "nothing applies" notes string used to be a hand-typed literal ("None of
+ * UK GDPR, EU GDPR, or Saudi PDPL currently apply...") that already went
+ * stale the moment UAE federal PDPL/ADGM DPR were added on 2026-09-03 —
+ * neither was ever mentioned. Generated from the same REGULATION_LABELS
+ * map every other regulation-facing string in this file could reuse,
+ * rather than a second hardcoded list that can drift again the next time
+ * a regime is added.
+ */
+const REGULATION_LABELS: Record<DataProtectionRegulation, string> = {
+  uk_gdpr: "UK GDPR",
+  eu_gdpr: "EU GDPR",
+  saudi_pdpl: "Saudi PDPL",
+  uae_pdpl: "UAE federal PDPL",
+  adgm_dpr: "ADGM DPR 2021",
+  difc_dpl: "DIFC Data Protection Law No. 5 of 2020",
+};
 
 /**
  * Same "missing evidence is itself the finding" principle used across
@@ -107,7 +127,25 @@ function buildDivergenceNote(applicableRegulations: DataProtectionRegulation[]):
 
   if (has("adgm_dpr")) {
     notes.push(
-      `ADGM Data Protection Regulations 2021 applies. This is a THIRD, separate regulator from both UAE federal PDPL's UAE Data Office and SDAIA/ICO/EU supervisory authorities — ADGM's own Office of Data Protection (Commissioner of Data Protection) — even when UAE federal PDPL also applies to the same company via its extraterritorial reach (the two regimes can coexist on one company without being the same law). Its "cross_border_transfer" mechanism is its own: ADGM recognizes all jurisdictions the European Commission deems adequate, plus DIFC, plus a mutual adequacy-recognition arrangement between ADGM/DIFC/the Qatar Financial Centre — genuinely distinct from GDPR's, Saudi PDPL's, or UAE federal PDPL's own transfer machinery, though structurally GDPR-like (adequacy plus binding corporate rules/appropriate-safeguard mechanisms). For "breach_response": ADGM also uses a 72-hour notification window to its Commissioner — same non-"stricter" framing applies. Note also that ADGM DPR is establishment-only (no extraterritorial trigger) — if it's listed as applicable here, this company is genuinely established in ADGM.`,
+      `ADGM Data Protection Regulations 2021 applies. This is a separate regulator from UAE federal PDPL's UAE Data Office, DIFC's own Commissioner of Data Protection, and SDAIA/ICO/EU supervisory authorities — ADGM's own Office of Data Protection (Commissioner of Data Protection) — even when UAE federal PDPL also applies to the same company via its extraterritorial reach (the two regimes can coexist on one company without being the same law — see the "federal nexus" note below if DIFC or another combination also applies). Its "cross_border_transfer" mechanism is its own: ADGM recognizes all jurisdictions the European Commission deems adequate, plus DIFC, plus a mutual adequacy-recognition arrangement between ADGM/DIFC/the Qatar Financial Centre — genuinely distinct from GDPR's, Saudi PDPL's, or UAE federal PDPL's own transfer machinery, though structurally GDPR-like (adequacy plus binding corporate rules/appropriate-safeguard mechanisms). For "breach_response": ADGM also uses a 72-hour notification window to its Commissioner — same non-"stricter" framing applies. Note also that ADGM DPR is establishment-only (no extraterritorial trigger) — if it's listed as applicable here, this company is genuinely established in ADGM.`,
+    );
+  }
+
+  // DIFC Data Protection Law No. 5 of 2020 (built 2026-09-04, real
+  // research — see jurisdiction.ts's own docblock for sources). Genuinely
+  // narrower in scope than the other UAE regimes covered here — its own
+  // reach is explicitly "not as expansive as GDPR" (no customer-market-
+  // style extraterritorial trigger the way GDPR/PDPL have; DIFC's own
+  // narrower "stable arrangements" concept is a self-reported client
+  // answer, not part of this deterministic flag — see jurisdiction.ts).
+  // Breach notification: this module's other regimes all confirm a real
+  // 72-hour figure; DIFC's does not have one clearly confirmed by research
+  // (only "without undue delay" for processor→controller, and a
+  // "high risk" trigger for controller→data-subject notification) — the
+  // model is told this explicitly rather than guessing a number.
+  if (has("difc_dpl")) {
+    notes.push(
+      `DIFC Data Protection Law No. 5 of 2020 applies (this company is DIFC-established). Its regulator is the DIFC Commissioner of Data Protection — a separate regulator from UAE federal PDPL's UAE Data Office, ADGM's own Commissioner, and SDAIA/ICO/EU supervisory authorities, even when UAE federal PDPL also applies to the same company via its own extraterritorial reach (both can genuinely apply to one company at once — do not treat DIFC registration as exempting the company from federal PDPL if it also has real UAE customers). Its "cross_border_transfer" mechanism is its own adequacy-jurisdiction list maintained by the DIFC Commissioner, distinct from every other regime's transfer machinery here. For "breach_response": unlike this module's other regimes, do NOT assert a specific numeric notification-hour figure for DIFC — research did not confirm one; describe it only as requiring prompt notification without a stated exact deadline, and never claim it matches or diverges from another regime's 72-hour window.`,
     );
   }
 
@@ -150,7 +188,7 @@ function buildPrompt(
   // evidence, exactly as before this feature.
   const allowedCategoriesForSchema = hasSharedDocument ? categoriesWithEvidence.concat(categoriesWithoutEvidence) : categoriesWithEvidence;
 
-  return `You are the Data Protection Compliance module of an AI execution audit. You assess data-protection compliance readiness — consent flows, data-subject-rights handling, retention policy, breach-response readiness, and cross-border transfer safeguards — ONLY within the regulations listed below as applicable (GDPR variants, Saudi PDPL, UAE federal PDPL, and/or ADGM DPR, whichever apply). This is a general, AI-agnostic data-protection assessment, not an AI-specific governance review (that's a separate module's job) — do not discuss AI risk classification or AI governance maturity here. You do not write prose reports.
+  return `You are the Data Protection Compliance module of an AI execution audit. You assess data-protection compliance readiness — consent flows, data-subject-rights handling, retention policy, breach-response readiness, and cross-border transfer safeguards — ONLY within the regulations listed below as applicable (GDPR variants, Saudi PDPL, UAE federal PDPL, ADGM DPR, and/or DIFC Data Protection Law, whichever apply). This is a general, AI-agnostic data-protection assessment, not an AI-specific governance review (that's a separate module's job) — do not discuss AI risk classification or AI governance maturity here. You do not write prose reports.
 
 HARD RULES — violating any of these makes your output unusable:
 1. The applicable regulations below were already determined by code from the company's registration/customer-market data — you do not decide applicability, and you must NEVER produce a finding tagged with a regulation not listed as applicable.
@@ -244,7 +282,7 @@ export async function runDataProtectionComplianceAudit(input: DataProtectionDraf
     return {
       applicability,
       findings: [],
-      notes: "None of UK GDPR, EU GDPR, or Saudi PDPL currently apply based on this company's registration and customer markets.",
+      notes: `None of ${Object.values(REGULATION_LABELS).join(", ")} currently apply based on this company's registration and customer markets.`,
     };
   }
 

@@ -8,7 +8,8 @@ import { Textarea } from "@/app/_components/ui/Textarea";
 import { TagInput } from "@/app/_components/ui/TagInput";
 import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
-import { EU_COUNTRIES, OTHER_COUNTRY_SENTINEL, KNOWN_COUNTRIES } from "@/lib/onboarding/registration-country-options";
+import { JurisdictionFieldsEditor, type JurisdictionFieldsValue } from "@/app/_components/JurisdictionFieldsEditor";
+import { DifcStableArrangementsQuestion } from "@/app/_components/DifcStableArrangementsQuestion";
 
 /**
  * Real design pass, confirmed 2026-08-07 — Business Profile treated as
@@ -74,6 +75,14 @@ export function BusinessProfileForm({ companyId, initial }: { companyId: string;
     setStatus("idle");
   }
 
+  // JurisdictionFieldsEditor (extracted 2026-09-04, shared with the new
+  // module-intake quick-setup widget) reports all three fields together —
+  // merged in one update rather than three separate update() calls.
+  function updateJurisdiction(next: JurisdictionFieldsValue) {
+    setFields((prev) => ({ ...prev, ...next }));
+    setStatus("idle");
+  }
+
   async function handleSave() {
     setStatus("saving");
     setError(null);
@@ -94,7 +103,6 @@ export function BusinessProfileForm({ companyId, initial }: { companyId: string;
       ? [fields.revenueRangeBand, ...REVENUE_BANDS]
       : REVENUE_BANDS;
 
-  const isKnownCountry = !fields.registrationCountry || KNOWN_COUNTRIES.includes(fields.registrationCountry);
   const isUae = fields.registrationCountry === "United Arab Emirates";
 
   return (
@@ -175,64 +183,26 @@ export function BusinessProfileForm({ companyId, initial }: { companyId: string;
           logic, but had never been settable anywhere in the client-facing
           app until now; a company with these genuinely blank correctly
           computed "no jurisdiction applies," which is honest but was
-          previously the ONLY possible outcome for every real client. */}
-      <div className="grid gap-5 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Select
-            label="Registration country"
-            hint="Where the company is legally registered — used to determine which AI/data-protection regulations apply."
-            value={isKnownCountry ? (fields.registrationCountry ?? "") : OTHER_COUNTRY_SENTINEL}
-            onChange={(e) =>
-              update("registrationCountry", e.target.value === OTHER_COUNTRY_SENTINEL ? "" : e.target.value || null)
-            }
-          >
-            <option value="">Not set</option>
-            <option value="United Kingdom">United Kingdom</option>
-            <optgroup label="European Union">
-              {EU_COUNTRIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="Gulf">
-              <option value="Saudi Arabia">Saudi Arabia</option>
-              <option value="United Arab Emirates">United Arab Emirates</option>
-            </optgroup>
-            <option value={OTHER_COUNTRY_SENTINEL}>Other / not listed</option>
-          </Select>
-          {!isKnownCountry && (
-            <Input
-              placeholder="Type the registration country"
-              value={fields.registrationCountry ?? ""}
-              onChange={(e) => update("registrationCountry", e.target.value || null)}
-            />
-          )}
-        </div>
-        {isUae ? (
-          <Select
-            label="UAE free zone (if applicable)"
-            hint="DIFC has its own AI-specific regulation (Reg. 10); ADGM and mainland don't."
-            value={fields.uaeFreeZone ?? ""}
-            onChange={(e) => update("uaeFreeZone", (e.target.value || null) as "mainland" | "difc" | "adgm" | null)}
-          >
-            <option value="">Not set</option>
-            <option value="mainland">Mainland</option>
-            <option value="difc">DIFC</option>
-            <option value="adgm">ADGM</option>
-          </Select>
-        ) : (
-          <div />
-        )}
-      </div>
-
-      <TagInput
-        label="Customer market countries"
-        hint="Press Enter after each one — where your customers are, not where you're registered. Also drives jurisdiction applicability (e.g. GDPR applies based on EU customers, regardless of registration)."
-        value={fields.customerMarketCountries}
-        onChange={(tags) => update("customerMarketCountries", tags)}
-        placeholder="e.g. United Kingdom, Germany, Saudi Arabia…"
+          previously the ONLY possible outcome for every real client.
+          Extracted into JurisdictionFieldsEditor 2026-09-04 — the module
+          intake pages' own new quick-setup widget (item 5) needs the exact
+          same three fields, so this markup lives in one place now. */}
+      <JurisdictionFieldsEditor
+        value={{ registrationCountry: fields.registrationCountry, uaeFreeZone: fields.uaeFreeZone, customerMarketCountries: fields.customerMarketCountries }}
+        onChange={updateJurisdiction}
       />
+
+      {/* DIFC's own "stable arrangements" question (confirmed 2026-09-04,
+          items 6+7) — see DifcStableArrangementsQuestion.tsx's own
+          docblock. Shown alongside the UAE free zone field above, since
+          both only make sense once registration is UAE. */}
+      {isUae && (
+        <DifcStableArrangementsQuestion
+          companyId={companyId}
+          value={fields.difcStableArrangements}
+          onChange={(next) => update("difcStableArrangements", next)}
+        />
+      )}
 
       <TagInput
         label="Main tools/stack"

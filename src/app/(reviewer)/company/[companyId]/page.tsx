@@ -67,7 +67,7 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
   const { data: company, error: companyError } = await admin
     .from("companies")
     .select(
-      "id, name, industry, business_model, employee_count, stage, website_url, revenue_range_band, customer_type, team_structure_summary, registration_country, customer_market_countries, is_pilot_client",
+      "id, name, industry, business_model, employee_count, stage, website_url, revenue_range_band, customer_type, team_structure_summary, registration_country, uae_free_zone, customer_market_countries, difc_stable_arrangements, is_pilot_client",
     )
     .eq("id", companyId)
     .maybeSingle();
@@ -173,6 +173,7 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
                 ["Customer type", company.customer_type],
                 ["Website", company.website_url],
                 ["Registration country", company.registration_country],
+                ["UAE free zone", company.uae_free_zone],
                 ["Customer markets", (company.customer_market_countries as string[] | null)?.join(", ")],
               ] as const
             ).map(([label, value]) => (
@@ -188,6 +189,15 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
               </div>
             )}
           </dl>
+          {/* DIFC "stable arrangements" reviewer flag (confirmed
+              2026-09-04, items 6+7) — "not sure" is the one answer that
+              needs reviewer attention, so it gets a distinct visual flag
+              rather than blending in with the neutral dl above. */}
+          {company.difc_stable_arrangements && (
+            <div className={`mt-3 rounded-md p-2 text-xs ${company.difc_stable_arrangements === "not_sure" ? "bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200" : "text-neutral-500 dark:text-neutral-400"}`}>
+              DIFC stable arrangements: <span className="font-medium">{company.difc_stable_arrangements === "not_sure" ? "Not sure — flagged for follow-up" : company.difc_stable_arrangements}</span>
+            </div>
+          )}
         </Card>
 
         <Card title="Goal">

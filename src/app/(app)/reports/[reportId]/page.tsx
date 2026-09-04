@@ -407,6 +407,19 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
       {LENS_ORDER.filter((lens) => byLens.has(lens)).map((lens) => (
         <section key={lens} id={lens} className="mb-8 scroll-mt-24">
           <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">{LENS_LABELS[lens]}</h2>
+          {/* Item 10 (confirmed 2026-09-04) — a permanent, unconditional
+              restatement, distinct from the conditional AI-in-production
+              callout below: this lens assesses AI governance MATURITY (how
+              well-prepared the business is), never legal jurisdiction
+              determination (that's Tender Readiness's and Data Protection
+              Compliance's own job) — a finding here should never be
+              mistaken for legal compliance clearance. */}
+          {lens === "ai_governance" && (
+            <p className="mb-3 text-xs italic text-neutral-500 dark:text-neutral-400">
+              This section assesses AI governance maturity as a business-readiness signal — it is not a legal jurisdiction
+              determination. See Tender Readiness / Data Protection Compliance for jurisdiction-specific regulatory findings.
+            </p>
+          )}
           {/* Fixed callout when AI-in-production is confirmed (item 8,
               confirmed 2026-08-20) — deliberately different from the
               "do not build" instruction elsewhere in this same request:

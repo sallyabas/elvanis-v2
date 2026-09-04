@@ -12,10 +12,13 @@ import type { CompanyJurisdictionInput, JurisdictionApplicability } from "./juri
  *
  * Saudi PDPL is a real, built branch, not a placeholder — PDPL is already
  * actively enforced today, not gated on future Gulf market entry. The
- * UAE's data-protection regime (federal PDPL, ADGM DPR 2021) remains out
- * of scope, genuinely gated on Gulf entry.
+ * UAE's data-protection regimes (federal PDPL, ADGM DPR 2021, and DIFC
+ * Data Protection Law No. 5 of 2020) were the one piece still explicitly
+ * gated on real UAE client exposure — that gate was confirmed lifted
+ * 2026-09-03/04, and all three are now real, built branches. See
+ * jurisdiction.ts for the full research and sources.
  */
-export type DataProtectionRegulation = "uk_gdpr" | "eu_gdpr" | "saudi_pdpl" | "uae_pdpl" | "adgm_dpr";
+export type DataProtectionRegulation = "uk_gdpr" | "eu_gdpr" | "saudi_pdpl" | "uae_pdpl" | "adgm_dpr" | "difc_dpl";
 
 /** The five core checklist areas (spec §1.8a/§5 task breakdown) — every applicable regulation (GDPR variants and PDPL alike) is assessed across all five, not a per-regulation subset. */
 export type DataProtectionCategory =

@@ -522,7 +522,7 @@ export default async function ReviewerQueuePage() {
                 <div>
                   <span className="font-medium">{JURISDICTION_LABELS[r.jurisdiction] ?? r.jurisdiction}</span>{" "}
                   <span className={r.isOverdue ? "text-red-600 dark:text-red-400" : "text-neutral-500 dark:text-neutral-400"}>
-                    · last reviewed {new Date(r.lastReviewedAt).toLocaleDateString()} ({r.daysSinceReview}d ago
+                    · last reviewed {new Date(r.lastReviewedAt).toLocaleDateString()} ({r.daysSinceReview}d ago, {r.cadenceDays}d cadence
                     {r.isOverdue ? " · overdue" : ""})
                   </span>
                 </div>
