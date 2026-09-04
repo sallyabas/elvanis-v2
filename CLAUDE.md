@@ -2306,7 +2306,7 @@ Explicit instruction: run the existing Playwright suite plus real coverage for b
 
 **Full suite result: 11/11 passing** (01 through 10, plus the mobile-viewport run of 05) — `tsc --noEmit`, `eslint src/ tests/ --quiet`, and a full `npm run build` all clean. Both `.test-cases.ts` deterministic backstop suites re-confirmed passing (48/48, 39/39) as part of this same pass. One minor, non-blocking, disclosed flake: 2 reviewer test accounts failed to delete on their first `globalTeardown` attempt in two of the three full runs during this pass, but deleted cleanly on an immediate manual retry — looks like a transient Supabase admin-API timing issue, not a real FK/schema block (nothing in this session's own new tables lacks `on delete set null`/`cascade`), not investigated further since it self-resolves and doesn't affect correctness of the actual test results.
 
-**Not yet committed/pushed** — held for explicit go-ahead, same standing pattern. Real, paid corner-case tests (duplicate detection, the `healthy_finding_in_top3` edge case, actual token cost) remain a deliberate, separately-approved next step (`E2E_ALLOW_PAID_AI_CALLS=true`), not run in this pass.
+Committed and pushed (commit `9ddf90a`), per explicit go-ahead. Real, paid corner-case tests (duplicate detection, the `healthy_finding_in_top3` edge case, actual token cost) remain a deliberate, separately-approved next step (`E2E_ALLOW_PAID_AI_CALLS=true`), not run in this pass.
 
 ## Working style
 - Think like a CTO: scalability, dependencies, business impact — not just "does it run."
