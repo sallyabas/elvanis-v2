@@ -253,3 +253,113 @@ export async function seedReviewableReport(): Promise<SeededReviewFixture> {
     },
   };
 }
+
+/**
+ * A genuinely healthy, already-delivered report — confirmed 2026-09-05,
+ * combinatorial coverage pass (the "report health" axis: "at least one
+ * clearly healthy company"). Seeded directly rather than run through a
+ * real reviewer pass — that workspace UI is already proven by
+ * seedReviewableReport()'s own consumer (spec 6); this fixture exists
+ * purely to exercise the CLIENT-facing rendering of a healthy report
+ * (Strengths by lens, no alarm-style top-priority framing), so it's
+ * created already `sent`, with `reviewed_by`/`approved_at`/`delivered_at`
+ * set directly to satisfy the DB's `reports_sent_requires_reviewer` check
+ * constraint without a live reviewer session.
+ */
+export async function seedHealthyDeliveredReport(): Promise<{ clientEmail: string; companyId: string; companyName: string; reportId: string }> {
+  const supabase = createTestAdminClient();
+
+  const clientEmail = freshTestEmail("healthy-client");
+  const reviewerEmail = freshTestEmail("healthy-reviewer");
+  const companyName = `Playwright Healthy Co ${Date.now()}`;
+
+  const { data: clientAuth, error: clientAuthError } = await supabase.auth.admin.createUser({ email: clientEmail, email_confirm: true });
+  if (clientAuthError || !clientAuth.user) throw new Error(`seed: create healthy client auth failed: ${clientAuthError?.message}`);
+  const { data: reviewerAuth, error: reviewerAuthError } = await supabase.auth.admin.createUser({ email: reviewerEmail, email_confirm: true });
+  if (reviewerAuthError || !reviewerAuth.user) throw new Error(`seed: create healthy reviewer auth failed: ${reviewerAuthError?.message}`);
+
+  await supabase.from("users").upsert({ id: clientAuth.user.id, email: clientEmail, role: "client" }, { onConflict: "id" });
+  await supabase.from("users").upsert({ id: reviewerAuth.user.id, email: reviewerEmail, role: "reviewer" }, { onConflict: "id" });
+
+  const { data: company, error: companyError } = await supabase
+    .from("companies")
+    .insert({
+      user_id: clientAuth.user.id,
+      name: companyName,
+      privacy_acknowledged_at: new Date().toISOString(),
+      entry_path: "diagnosis",
+      industry: "B2B SaaS",
+    })
+    .select("id")
+    .single();
+  if (companyError || !company) throw new Error(`seed: create healthy company failed: ${companyError?.message}`);
+
+  const { data: goal, error: goalError } = await supabase
+    .from("goals")
+    .insert({ company_id: company.id, primary_goal: "product_delivery" })
+    .select("id")
+    .single();
+  if (goalError || !goal) throw new Error(`seed: create healthy goal failed: ${goalError?.message}`);
+
+  const now = new Date();
+  const { data: report, error: reportError } = await supabase
+    .from("reports")
+    .insert({
+      company_id: company.id,
+      goal_id: goal.id,
+      status: "sent",
+      submitted_at: now.toISOString(),
+      edit_window_closes_at: now.toISOString(),
+      reviewed_by: reviewerAuth.user.id,
+      approved_at: now.toISOString(),
+      delivered_at: now.toISOString(),
+    })
+    .select("id")
+    .single();
+  if (reportError || !report) throw new Error(`seed: create healthy report failed: ${reportError?.message}`);
+
+  const healthyFindings = [
+    {
+      lens: "financial",
+      title: "Gross Margin Comfortably Above Healthy Range",
+      diagnosis: "Gross margin is 82%, well above the 70-80% healthy range for this business model.",
+    },
+    {
+      lens: "execution",
+      title: "PR Review Pickup Time Well Within Benchmark",
+      diagnosis: "Pull requests are picked up for review within 2 hours on average, against a 4-hour healthy benchmark.",
+    },
+    {
+      lens: "product",
+      title: "Core Feature Adoption Above Top-Quartile Benchmark",
+      diagnosis: "Core feature adoption sits at 58%, above the 45% top-quartile benchmark.",
+    },
+  ];
+
+  const { error: findingsError } = await supabase.from("lens_findings").insert(
+    healthyFindings.map((f) => ({
+      company_id: company.id,
+      report_id: report.id,
+      lens: f.lens,
+      ai_draft: {
+        findingId: "",
+        title: f.title,
+        diagnosis: f.diagnosis,
+        rootCause: "Sustained, deliberate investment in this area over multiple quarters.",
+        recommendedAction: "Maintain current practice; no corrective action needed.",
+        severity: "low",
+        evidenceCited: ["seeded for E2E testing — see tests/e2e/support/seed.ts"],
+        goalRelevance: "directly_supports",
+        financialImpact: null,
+        confidenceLevel: "high",
+        isMissingDataFinding: false,
+      },
+      confidence_level: "high",
+      reviewer_status: "approved",
+      is_missing_data_finding: false,
+    })),
+  );
+  if (findingsError) throw new Error(`seed: insert healthy findings failed: ${findingsError.message}`);
+
+  return { clientEmail, companyId: company.id as string, companyName, reportId: report.id as string };
+}

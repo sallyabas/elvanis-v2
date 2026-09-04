@@ -34,13 +34,30 @@ export function SprintInterestButton({
   async function handleRespond(response: SprintInterestResponse, note: string | null) {
     setStatus("sending");
     setError(null);
-    const result = await requestSprintInterest(companyId, reportId, findingId, response, note);
-    if (result.success) {
-      setSentResponse(response);
-      setStatus("sent");
-    } else {
+    // Real gap found live (confirmed 2026-09-05, combinatorial E2E pass):
+    // no try/catch existed here at all — a genuine RPC-level rejection
+    // (not a resolved {success:false}, which the branch below already
+    // handles) left `status` stuck on "sending" forever, with every
+    // button permanently disabled and no way to retry. The exact same
+    // uncaught-RPC-failure class already found and fixed repeatedly
+    // elsewhere in this codebase (module intake forms, reviewer workspace
+    // action buttons, DocumentUploadField, FindingNotApplicableButton —
+    // which already had this guard) — simply never swept to this
+    // component. Fixed the same way: a real try/catch, matching the
+    // shared "Something went wrong reaching the server" copy this
+    // codebase already uses for this exact failure mode everywhere else.
+    try {
+      const result = await requestSprintInterest(companyId, reportId, findingId, response, note);
+      if (result.success) {
+        setSentResponse(response);
+        setStatus("sent");
+      } else {
+        setStatus("error");
+        setError(result.error ?? "Something went wrong.");
+      }
+    } catch {
       setStatus("error");
-      setError(result.error ?? "Something went wrong.");
+      setError("Something went wrong reaching the server — please try again.");
     }
   }
 
