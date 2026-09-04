@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Select } from "@/app/_components/ui/Select";
 import { Input } from "@/app/_components/ui/Input";
 import { TagInput } from "@/app/_components/ui/TagInput";
@@ -28,7 +29,29 @@ export function JurisdictionFieldsEditor({
   value: JurisdictionFieldsValue;
   onChange: (next: JurisdictionFieldsValue) => void;
 }) {
-  const isKnownCountry = !value.registrationCountry || KNOWN_COUNTRIES.includes(value.registrationCountry);
+  /**
+   * Real bug found and fixed 2026-09-04, not present in the original
+   * BusinessProfileForm.tsx code this was extracted from — pre-existing,
+   * confirmed via `git diff` before this fix. Root cause: selecting
+   * "Other / not listed" used to set `registrationCountry` to `""` (empty
+   * string) as a placeholder for "about to type a free-text country" —
+   * but `""` is ALSO exactly what "no country selected" looks like, and
+   * the old `isKnownCountry = !registrationCountry || KNOWN_COUNTRIES.
+   * includes(...)` check treated an empty string as "known" (the `!`
+   * short-circuit), immediately recomputing `isKnownCountry` back to
+   * `true` the instant "Other" was picked — snapping the dropdown back to
+   * "Not set" and hiding the free-text input before the user could ever
+   * type into it. Fixed with a real, separate boolean tracking "the user
+   * explicitly chose Other," independent of what `registrationCountry`
+   * currently holds — the only way to distinguish "nothing chosen yet"
+   * from "Other chosen, not yet typed," since both states share the same
+   * `""` value. Initializes correctly from a pre-existing free-text value
+   * (e.g. a company already registered somewhere outside the known list)
+   * — unaffected by this fix, same as before.
+   */
+  const [otherMode, setOtherMode] = useState(
+    () => !!value.registrationCountry && !KNOWN_COUNTRIES.includes(value.registrationCountry),
+  );
   const isUae = value.registrationCountry === "United Arab Emirates";
 
   return (
@@ -38,13 +61,16 @@ export function JurisdictionFieldsEditor({
           <Select
             label="Registration country"
             hint="Where the company is legally registered — used to determine which AI/data-protection regulations apply."
-            value={isKnownCountry ? (value.registrationCountry ?? "") : OTHER_COUNTRY_SENTINEL}
-            onChange={(e) =>
-              onChange({
-                ...value,
-                registrationCountry: e.target.value === OTHER_COUNTRY_SENTINEL ? "" : e.target.value || null,
-              })
-            }
+            value={otherMode ? OTHER_COUNTRY_SENTINEL : (value.registrationCountry ?? "")}
+            onChange={(e) => {
+              if (e.target.value === OTHER_COUNTRY_SENTINEL) {
+                setOtherMode(true);
+                onChange({ ...value, registrationCountry: "" });
+              } else {
+                setOtherMode(false);
+                onChange({ ...value, registrationCountry: e.target.value || null });
+              }
+            }}
           >
             <option value="">Not set</option>
             <option value="United Kingdom">United Kingdom</option>
@@ -61,7 +87,7 @@ export function JurisdictionFieldsEditor({
             </optgroup>
             <option value={OTHER_COUNTRY_SENTINEL}>Other / not listed</option>
           </Select>
-          {!isKnownCountry && (
+          {otherMode && (
             <Input
               placeholder="Type the registration country"
               value={value.registrationCountry ?? ""}
