@@ -34,9 +34,12 @@ export async function seedSessionLifecycleFixtures(): Promise<SessionLifecycleFi
   await supabase.from("users").upsert({ id: clientAuth.user.id, email: clientEmail, role: "client" }, { onConflict: "id" });
   await supabase.from("users").upsert({ id: reviewerAuth.user.id, email: reviewerEmail, role: "reviewer" }, { onConflict: "id" });
 
+  // Real redirect-loop fix (confirmed 2026-09-04, full-platform E2E
+  // re-test) — see tests/e2e/support/seed.ts's own equivalent fix for the
+  // full root-cause writeup.
   const { data: company, error: companyError } = await supabase
     .from("companies")
-    .insert({ user_id: clientAuth.user.id, name: companyName, privacy_acknowledged_at: new Date().toISOString() })
+    .insert({ user_id: clientAuth.user.id, name: companyName, privacy_acknowledged_at: new Date().toISOString(), entry_path: "diagnosis" })
     .select("id")
     .single();
   if (companyError || !company) throw new Error(`seedSessionLifecycleFixtures: create company failed: ${companyError?.message}`);

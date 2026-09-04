@@ -50,7 +50,26 @@ export default async function OnboardingPage() {
     .maybeSingle();
 
   if (existingCompany) {
-    if (existingCompany.entry_path === "undecided") {
+    // Real redirect-loop bug found and fixed 2026-09-04 (full-platform
+    // E2E re-test): a company that somehow exists with entry_path
+    // genuinely NULL (neither "undecided" nor "ai_audit" nor "diagnosis")
+    // used to fall through to `redirect("/business-profile")` below —
+    // but (app)/layout.tsx's own gate treats a falsy entry_path as "not
+    // onboarded, redirect to /onboarding," creating an infinite redirect
+    // loop between the two routes. Confirmed this can't happen through
+    // the real onboarding flow (createCompanyAndGoal()/
+    // addGoalToExistingCompany() always set a real entry_path), but it's
+    // exactly what a test-seeding bug (a company inserted directly,
+    // skipping entry_path) produces — and, more importantly, a real
+    // latent risk for any future write path that creates a company row
+    // without this invariant. Treated identically to "undecided" (reuses
+    // HubResume against the EXISTING company, never a fresh
+    // OnboardingFlow, which would try to INSERT a second company and hit
+    // the real one-company-per-account unique constraint) — a null
+    // entry_path is exactly as "haven't picked a path yet" as an explicit
+    // "undecided" is, just without ever having gone through the Hub's own
+    // pick screen.
+    if (existingCompany.entry_path === "undecided" || !existingCompany.entry_path) {
       return (
         <div className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-6 py-12">
           <HubResume companyId={existingCompany.id as string} companyName={existingCompany.name as string} />

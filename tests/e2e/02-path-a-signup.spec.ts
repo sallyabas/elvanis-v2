@@ -70,7 +70,13 @@ test("Path A: signup through onboarding and evidence intake to dashboard", async
   await expect(page.getByText("Step 5 of 5: Review")).toBeVisible();
   await expect(page.getByText("Playwright Path A Co")).toBeVisible();
   await step(page, testInfo, "02-path-a", "04-wizard-review");
-  await page.getByRole("button", { name: "Get started" }).click();
+  // Real, pre-existing drift found and fixed 2026-09-04 (full-platform
+  // E2E re-test) — the wizard's real submit button was renamed from "Get
+  // started" to "Start my free audit" on 2026-09-03 (a real, confirmed
+  // founder decision), one day before this spec was written, but this
+  // assertion was never updated to match — this test had been failing on
+  // every real run since, not something this session's own changes broke.
+  await page.getByRole("button", { name: "Start my free audit" }).click();
 
   await page.waitForURL("**/evidence-intake", { timeout: 15_000 });
   await expect(page.getByRole("heading", { name: "Submit your evidence" })).toBeVisible();

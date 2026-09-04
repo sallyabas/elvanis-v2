@@ -114,6 +114,20 @@ export default defineConfig({
         env: {
           ALLOW_TEST_AUTH: "true",
           TEST_AUTH_SECRET: testAuthSecret,
+          // Reviewer second opinion (confirmed 2026-09-04) — the E2E suite
+          // must NEVER make a real, paid Anthropic call just because a
+          // real ANTHROPIC_API_KEY happens to be sitting in .env.local for
+          // manual use. Explicitly overridden to empty by default here
+          // (this webServer.env entry wins over .env.local's own value,
+          // since it's already present in process.env before Next's own
+          // env-file loading runs) — the second-opinion specs are designed
+          // to exercise the real, deterministic "key not set" error path
+          // on purpose, not to skip second-opinion coverage. Set
+          // E2E_ALLOW_PAID_AI_CALLS=true as an explicit, deliberate opt-in
+          // (a separate, later step, never the default) to let the real
+          // key from .env.local through instead, for genuine live-call
+          // corner-case tests.
+          ANTHROPIC_API_KEY: process.env.E2E_ALLOW_PAID_AI_CALLS === "true" ? (process.env.ANTHROPIC_API_KEY ?? "") : "",
         },
       }
     : undefined,

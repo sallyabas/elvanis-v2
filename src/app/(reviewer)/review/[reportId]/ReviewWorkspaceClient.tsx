@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { ConfidenceLevel, GoalRelevance, LensFinding, LensType, Severity } from "@/lib/lenses/types";
 import { isFixFirstCandidate } from "@/lib/reviewer/prioritization";
@@ -1172,8 +1172,21 @@ function SecondOpinionPanel({
   const [opinion, setOpinion] = useState(existingOpinion);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  // Real reentrancy guard, confirmed 2026-09-04 (full-platform E2E
+  // re-test — first attempted with `if (status === "loading") return;`,
+  // caught by this exact test as insufficient: two click EVENTS
+  // dispatched synchronously in the same JS tick both invoke the SAME
+  // handler closure from the SAME render, so both read the identical,
+  // still-"idle" `status` value — `setStatus("loading")` from the first
+  // invocation hasn't been committed to a new render yet, so the second
+  // invocation's closure never sees it. A ref mutates in place,
+  // synchronously, shared across both invocations regardless of React's
+  // render/commit timing — the actual fix, not the state check.
+  const isRequestingRef = useRef(false);
 
   async function handleRequest() {
+    if (isRequestingRef.current) return;
+    isRequestingRef.current = true;
     setStatus("loading");
     setError(null);
     try {
@@ -1183,6 +1196,8 @@ function SecondOpinionPanel({
     } catch {
       setStatus("error");
       setError("Something went wrong reaching the server — please try again.");
+    } finally {
+      isRequestingRef.current = false;
     }
   }
 
@@ -1252,8 +1267,15 @@ function ReportSecondOpinionPanel({
   const [opinion, setOpinion] = useState(initialOpinion);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  // Real reentrancy guard (confirmed 2026-09-04) — see SecondOpinionPanel's
+  // own equivalent guard for why a plain `status` state check isn't
+  // sufficient (a stale-closure gap under two synchronous click events),
+  // and why a ref is the actual fix.
+  const isRequestingRef = useRef(false);
 
   async function handleRequest() {
+    if (isRequestingRef.current) return;
+    isRequestingRef.current = true;
     setStatus("loading");
     setError(null);
     try {
@@ -1263,6 +1285,8 @@ function ReportSecondOpinionPanel({
     } catch {
       setStatus("error");
       setError("Something went wrong reaching the server — please try again.");
+    } finally {
+      isRequestingRef.current = false;
     }
   }
 

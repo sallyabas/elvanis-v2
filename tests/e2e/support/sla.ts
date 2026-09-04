@@ -56,16 +56,22 @@ export async function seedSlaFixtures(): Promise<SlaFixtures> {
 
   const now = Date.now();
 
+  // Real redirect-loop fix (confirmed 2026-09-04, full-platform E2E
+  // re-test) — entry_path must be set, or the client-facing half of this
+  // fixture (visiting /reports/[id], inside the (app) route group) hits
+  // an infinite redirect loop instead of the real holding page under
+  // test. See tests/e2e/support/seed.ts's own equivalent fix for the full
+  // root-cause writeup.
   const { data: overdueCompany, error: overdueCompanyError } = await supabase
     .from("companies")
-    .insert({ user_id: clientAuth.user.id, name: overdueCompanyName, privacy_acknowledged_at: new Date().toISOString() })
+    .insert({ user_id: clientAuth.user.id, name: overdueCompanyName, privacy_acknowledged_at: new Date().toISOString(), entry_path: "diagnosis" })
     .select("id")
     .single();
   if (overdueCompanyError || !overdueCompany) throw new Error(`seedSlaFixtures: create overdue company failed: ${overdueCompanyError?.message}`);
 
   const { data: controlCompany, error: controlCompanyError } = await supabase
     .from("companies")
-    .insert({ user_id: reviewerAuth.user.id, name: controlCompanyName, privacy_acknowledged_at: new Date().toISOString() })
+    .insert({ user_id: reviewerAuth.user.id, name: controlCompanyName, privacy_acknowledged_at: new Date().toISOString(), entry_path: "diagnosis" })
     .select("id")
     .single();
   if (controlCompanyError || !controlCompany) throw new Error(`seedSlaFixtures: create control company failed: ${controlCompanyError?.message}`);

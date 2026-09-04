@@ -53,9 +53,19 @@ export async function seedMinimalClient(): Promise<{ email: string; companyId: s
   const { error: userRowError } = await supabase.from("users").upsert({ id: auth.user.id, email, role: "client" }, { onConflict: "id" });
   if (userRowError) throw new Error(`seed: upsert users row failed: ${userRowError.message}`);
 
+  // Real redirect-loop bug found and fixed 2026-09-04 (full-platform E2E
+  // re-test): entry_path was never set here, leaving it NULL — a state
+  // the real onboarding flow never produces (createCompanyAndGoal()
+  // always sets a real value), but (app)/layout.tsx's gate treats a
+  // falsy entry_path as "not onboarded" while /onboarding's own fallback
+  // used to treat any existing company as "done," creating an actual
+  // infinite redirect loop between the two routes. Set explicitly here to
+  // match what a genuinely fully-onboarded test company should have —
+  // this fixture is meant to reach Dashboard directly, not the Hub
+  // picker.
   const { data: company, error: companyError } = await supabase
     .from("companies")
-    .insert({ user_id: auth.user.id, name: `Playwright Nav Co ${Date.now()}`, privacy_acknowledged_at: new Date().toISOString() })
+    .insert({ user_id: auth.user.id, name: `Playwright Nav Co ${Date.now()}`, privacy_acknowledged_at: new Date().toISOString(), entry_path: "diagnosis" })
     .select("id")
     .single();
   if (companyError || !company) throw new Error(`seed: create company failed: ${companyError?.message}`);
@@ -98,9 +108,14 @@ export async function seedReviewableReport(): Promise<SeededReviewFixture> {
     .upsert({ id: reviewerAuth.user.id, email: reviewerEmail, role: "reviewer" }, { onConflict: "id" });
   if (reviewerRowError) throw new Error(`seed: upsert reviewer users row failed: ${reviewerRowError.message}`);
 
+  // Same real redirect-loop fix as seedMinimalClient() above — entry_path
+  // must be set, or the client-facing half of this fixture (visiting
+  // /reports/[id], /evidence-intake, etc., all inside the (app) route
+  // group) hits an infinite redirect loop instead of reaching the real
+  // page under test.
   const { data: company, error: companyError } = await supabase
     .from("companies")
-    .insert({ user_id: clientAuth.user.id, name: companyName, privacy_acknowledged_at: new Date().toISOString() })
+    .insert({ user_id: clientAuth.user.id, name: companyName, privacy_acknowledged_at: new Date().toISOString(), entry_path: "diagnosis" })
     .select("id")
     .single();
   if (companyError || !company) throw new Error(`seed: create company failed: ${companyError?.message}`);
