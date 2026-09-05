@@ -106,16 +106,20 @@ export async function requestSession(
   // Notify every reviewer, same pattern as checkEvidenceCompletenessNudges
   // — real personal follow-up is how this actually gets scheduled today,
   // no calendar integration exists to automate it.
+  // Real perf fix (confirmed 2026-09-05, code-quality audit) — batched
+  // insert instead of one per reviewer.
   const admin = createAdminClient();
   const { data: reviewers } = await admin.from("users").select("id").eq("role", "reviewer");
-  for (const reviewer of reviewers ?? []) {
-    await admin.from("notifications").insert({
-      recipient_type: "reviewer",
-      recipient_id: reviewer.id,
-      event_type: "session_requested",
-      channel: "email",
-      sent_at: null,
-    });
+  if ((reviewers ?? []).length > 0) {
+    await admin.from("notifications").insert(
+      (reviewers ?? []).map((reviewer) => ({
+        recipient_type: "reviewer",
+        recipient_id: reviewer.id,
+        event_type: "session_requested",
+        channel: "email",
+        sent_at: null,
+      })),
+    );
   }
 
   return { success: true };

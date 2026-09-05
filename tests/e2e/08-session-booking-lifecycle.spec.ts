@@ -20,10 +20,12 @@ import { step } from "./support/screenshot";
  * Delivery Session can only be requested once a report is genuinely
  * delivered, seeded directly via a real `sent` report row); Concierge
  * inquiry is requested via its own distinct entry point (Services page's
- * "Contact Sales," not the SessionRequestButton wrapper used on
- * evidence-intake/the report page) and also walked through schedule ->
- * complete, since the mechanism is now proven and the marginal cost of
- * covering the third type is low.
+ * "Request Concierge — £{price}" button, real DB-backed pricing unified
+ * with the landing page's own price 2026-09-05 — same SessionRequestButton
+ * wrapper used on evidence-intake/the report page, just with a real
+ * priceLabel passed in) and also walked through schedule -> complete,
+ * since the mechanism is now proven and the marginal cost of covering the
+ * third type is low.
  *
  * Client-side rendering is checked against the real, confirmed split:
  * Discovery never appears on Dashboard (any state) and always appears on
@@ -58,7 +60,7 @@ test("Session requests: Discovery (schedule->complete), Delivery (decline), Conc
   await step(page, testInfo, "08-session-lifecycle", "02-delivery-requested");
 
   await page.goto("/services");
-  await page.getByRole("button", { name: "Contact Sales" }).click();
+  await page.getByRole("button", { name: /Request Concierge/i }).click();
   await expect(page.getByText("Concierge inquiry sent")).toBeVisible();
   await step(page, testInfo, "08-session-lifecycle", "03-concierge-requested");
 

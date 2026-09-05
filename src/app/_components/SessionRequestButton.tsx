@@ -27,11 +27,18 @@ const LABELS: Record<SessionType, { cta: string; sentLabel: string; description:
     sentLabel: "Face-to-Face (F2F) Workshop requested",
     description: "An in-person, multi-stakeholder version of the Delivery Session — for working through priorities with your whole team in the room.",
   },
-  // Concierge "Contact Sales" (confirmed 2026-08-24) — exact founder-
-  // specified copy, reusing this same component/mechanism rather than a
-  // new one.
+  // Real, unified pricing (confirmed 2026-09-05, code-quality audit) —
+  // this used to say "Contact Sales" with no price shown anywhere on this
+  // surface, while the landing page's own Concierge card already showed a
+  // real, DB-backed £300 (see the landing page's own "real, live pricing"
+  // promise) — a genuine inconsistency: a prospect who saw £300 pre-signup
+  // then reached this exact request flow post-signup and saw no price at
+  // all. The `priceLabel` prop (below) carries the same DB-backed price
+  // from `listPricing()`, threaded down from the one real call site
+  // (services/page.tsx) — never a second hardcoded number that could
+  // drift from the landing page's own.
   concierge_inquiry: {
-    cta: "Contact Sales",
+    cta: "Request Concierge",
     sentLabel: "Concierge inquiry sent",
     description:
       "Deeper reviewer attention on your audit, plus your Discovery and Delivery Sessions bundled in — scoped with you personally, not a checkout.",
@@ -64,6 +71,7 @@ export function SessionRequestButton({
   companyId,
   sessionType,
   prominent = false,
+  priceLabel,
 }: {
   companyId: string;
   sessionType: SessionType;
@@ -78,6 +86,14 @@ export function SessionRequestButton({
    * visual weight, not the component's default everywhere.
    */
   prominent?: boolean;
+  /**
+   * Real, formatted price (e.g. "£300") to show alongside the CTA
+   * (confirmed 2026-09-05, Concierge pricing unification) — optional and
+   * currently only ever passed for concierge_inquiry, the one session
+   * type with a real, non-placeholder catalog price; the other four
+   * types are genuinely free consultative calls with nothing to price.
+   */
+  priceLabel?: string;
 }) {
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +129,15 @@ export function SessionRequestButton({
   // not writing one at all).
   return (
     <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
-      <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">{LABELS[sessionType].description}</p>
+      <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">
+        {LABELS[sessionType].description}
+        {priceLabel && (
+          <>
+            {" "}
+            <span className="font-semibold text-neutral-700 dark:text-neutral-300">{priceLabel}.</span>
+          </>
+        )}
+      </p>
       <Textarea
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
@@ -131,7 +155,9 @@ export function SessionRequestButton({
             : "rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
         }
       >
-        {status === "sending" ? "Requesting…" : prominent ? `${LABELS[sessionType].cta} →` : LABELS[sessionType].cta}
+        {status === "sending"
+          ? "Requesting…"
+          : `${LABELS[sessionType].cta}${priceLabel ? ` — ${priceLabel}` : ""}${prominent ? " →" : ""}`}
       </button>
       {status === "error" && error && (
         <Alert variant="error" className="mt-2 py-2 text-xs">

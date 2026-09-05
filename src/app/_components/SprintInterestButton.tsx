@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { requestSprintInterest, type SprintInterestResponse } from "@/lib/execution-sprint/interest-requests";
 import { Alert } from "@/app/_components/ui/Alert";
+import { Button } from "@/app/_components/ui/Button";
 
 /**
  * Client-facing Execution Sprint interest button (confirmed 2026-08-06,
@@ -84,14 +85,18 @@ export function SprintInterestButton({
           className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs text-neutral-900 placeholder:text-neutral-400 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
         />
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => handleRespond("other", otherNote.trim() || null)}
-            disabled={status !== "choosing_other" || otherNote.trim().length === 0}
-            className="rounded-md border border-accent bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-40"
-          >
+          {/* "Send" now uses the shared Button component (confirmed
+              2026-09-05, code-quality audit) — an exact visual match to
+              Button's own primary variant, no design change. "Cancel"
+              below stays raw markup, deliberately — see this file's own
+              docblock note near the "Not now"/"Something else" buttons:
+              its neutral/muted outline style has no equivalent Button
+              variant, and inventing one for this one file's three buttons
+              would either be low-value scope creep or a silent color
+              change from muted-gray to accent-outline. */}
+          <Button type="button" size="sm" onClick={() => handleRespond("other", otherNote.trim() || null)} disabled={status !== "choosing_other" || otherNote.trim().length === 0}>
             Send
-          </button>
+          </Button>
           <button
             type="button"
             onClick={() => setStatus("idle")}
@@ -113,14 +118,14 @@ export function SprintInterestButton({
     <div className="mt-2">
       <p className="mb-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300">Interested in help implementing this?</p>
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => handleRespond("interested", null)}
-          disabled={status === "sending"}
-          className="rounded-md border border-accent bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-40"
-        >
+        {/* "Yes" now uses the shared Button component (confirmed
+            2026-09-05, code-quality audit) — an exact visual match to
+            Button's own primary variant. "Not now"/"Something else"
+            below stay raw markup, deliberately — see this file's own
+            "Send"/"Cancel" note above for the full reasoning. */}
+        <Button type="button" size="sm" onClick={() => handleRespond("interested", null)} disabled={status === "sending"}>
           Yes
-        </button>
+        </Button>
         <button
           type="button"
           onClick={() => handleRespond("not_now", null)}

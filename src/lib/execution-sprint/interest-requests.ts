@@ -61,16 +61,20 @@ export async function requestSprintInterest(
   if (response === "not_now") return { success: true };
 
   // Notify every reviewer, same pattern as session_requests/sprint_queue_items.
+  // Real perf fix (confirmed 2026-09-05, code-quality audit) — batched
+  // insert instead of one per reviewer.
   const admin = createAdminClient();
   const { data: reviewers } = await admin.from("users").select("id").eq("role", "reviewer");
-  for (const reviewer of reviewers ?? []) {
-    await admin.from("notifications").insert({
-      recipient_type: "reviewer",
-      recipient_id: reviewer.id,
-      event_type: "sprint_interest_requested",
-      channel: "email",
-      sent_at: null,
-    });
+  if ((reviewers ?? []).length > 0) {
+    await admin.from("notifications").insert(
+      (reviewers ?? []).map((reviewer) => ({
+        recipient_type: "reviewer",
+        recipient_id: reviewer.id,
+        event_type: "sprint_interest_requested",
+        channel: "email",
+        sent_at: null,
+      })),
+    );
   }
 
   return { success: true };

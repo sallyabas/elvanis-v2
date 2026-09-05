@@ -157,11 +157,19 @@ export default async function ServicesPage() {
             directly to schedule it.
           </p>
           <div className="space-y-4">
-            {/* "Contact Sales," not a price/buy flow (confirmed 2026-08-24)
-                — Concierge is scoped and priced personally with the
-                reviewer, not a self-serve checkout. */}
+            {/* Real, unified price (confirmed 2026-09-05, code-quality
+                audit) — replaces the previous "Contact Sales, no price
+                shown" treatment, which contradicted the landing page's
+                own real £300 for the same tier. Still a real request +
+                personal follow-up, not a self-serve checkout — the price
+                is shown up front, the scoping conversation still happens
+                with the reviewer directly. */}
             <Card title="Concierge tier" subtitle="Deeper reviewer attention, Discovery + Delivery Sessions included by default.">
-              <SessionRequestButton companyId={company.id} sessionType="concierge_inquiry" />
+              <SessionRequestButton
+                companyId={company.id}
+                sessionType="concierge_inquiry"
+                priceLabel={pricingByKey.has("concierge_tier") ? formatPrice(pricingByKey.get("concierge_tier")!) : undefined}
+              />
             </Card>
             <Card>
               <SessionRequestButton companyId={company.id} sessionType="discovery" />

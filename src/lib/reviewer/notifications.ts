@@ -15,14 +15,21 @@ export async function notifyReviewersOfNewSubmission(supabase: SupabaseClient, r
   const { data: reviewers, error: reviewersError } = await supabase.from("users").select("id").eq("role", "reviewer");
   if (reviewersError) throw new Error(`notifyReviewersOfNewSubmission: failed to load reviewers: ${reviewersError.message}`);
 
-  for (const reviewer of reviewers ?? []) {
-    const { error: notifError } = await supabase.from("notifications").insert({
-      recipient_type: "reviewer",
-      recipient_id: reviewer.id,
-      event_type: "new_submission",
-      channel: "email",
-      sent_at: null, // logged, not actually delivered — a separate, explicit, confirmed step (see dispatch.ts)
-    });
+  // Real perf fix (confirmed 2026-09-05, code-quality audit) — one INSERT
+  // per reviewer in a loop, instead of a single batched array insert.
+  // Negligible at today's ~7-reviewer scale, but linearly more DB
+  // round-trips as reviewer headcount grows; Supabase's insert() already
+  // accepts an array of rows in one call.
+  if ((reviewers ?? []).length > 0) {
+    const { error: notifError } = await supabase.from("notifications").insert(
+      (reviewers ?? []).map((reviewer) => ({
+        recipient_type: "reviewer",
+        recipient_id: reviewer.id,
+        event_type: "new_submission",
+        channel: "email",
+        sent_at: null, // logged, not actually delivered — a separate, explicit, confirmed step (see dispatch.ts)
+      })),
+    );
     if (notifError) throw new Error(`notifyReviewersOfNewSubmission: failed to log notification: ${notifError.message}`);
   }
 
@@ -49,14 +56,18 @@ export async function notifyReviewersOfNewModuleRequest(supabase: SupabaseClient
   const { data: reviewers, error: reviewersError } = await supabase.from("users").select("id").eq("role", "reviewer");
   if (reviewersError) throw new Error(`notifyReviewersOfNewModuleRequest: failed to load reviewers: ${reviewersError.message}`);
 
-  for (const reviewer of reviewers ?? []) {
-    const { error: notifError } = await supabase.from("notifications").insert({
-      recipient_type: "reviewer",
-      recipient_id: reviewer.id,
-      event_type: "module_new_submission",
-      channel: "email",
-      sent_at: null, // logged, not actually delivered — a separate, explicit, confirmed step (see dispatch.ts)
-    });
+  // Real perf fix (confirmed 2026-09-05, code-quality audit) — batched
+  // insert, same reasoning as notifyReviewersOfNewSubmission() above.
+  if ((reviewers ?? []).length > 0) {
+    const { error: notifError } = await supabase.from("notifications").insert(
+      (reviewers ?? []).map((reviewer) => ({
+        recipient_type: "reviewer",
+        recipient_id: reviewer.id,
+        event_type: "module_new_submission",
+        channel: "email",
+        sent_at: null, // logged, not actually delivered — a separate, explicit, confirmed step (see dispatch.ts)
+      })),
+    );
     if (notifError) throw new Error(`notifyReviewersOfNewModuleRequest: failed to log notification: ${notifError.message}`);
   }
 }

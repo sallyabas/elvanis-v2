@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@/app/_components/ui/Button";
+
 /**
  * Hub page ("I'm not sure yet") — confirmed 2026-08-27, Onboarding
  * Architecture & Path Routing brief, Part 4. Purely a routing aid, no
@@ -26,13 +28,14 @@ export function HubScreen({ onChoose }: { onChoose: (path: "diagnosis" | "ai_aud
             For founders who know their business should be growing faster but can&apos;t pinpoint why. You&apos;ll get a
             diagnosis across five dimensions, a financial impact estimate, and a prioritised 90-day roadmap.
           </p>
-          <button
-            type="button"
-            onClick={() => onChoose("diagnosis")}
-            className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-          >
+          {/* Converted to the shared Button component (confirmed
+              2026-09-05, code-quality audit) — an exact color/text match
+              to Button's own primary variant, w-full passed via className
+              (a layout utility, not a conflicting padding/size one, so
+              safe to append). */}
+          <Button type="button" className="w-full" onClick={() => onChoose("diagnosis")}>
             Start with this one
-          </button>
+          </Button>
         </div>
         {/* Copper left border (confirmed 2026-09-03, same reasoning as the
             entry-path screen's own matching fix) — this is the primary
@@ -44,13 +47,9 @@ export function HubScreen({ onChoose }: { onChoose: (path: "diagnosis" | "ai_aud
             For founders whose AI is already in production, or who&apos;ve received a compliance or procurement request.
             You&apos;ll get an assessment of your AI&apos;s governance gaps, reliability risks, and documentation readiness.
           </p>
-          <button
-            type="button"
-            onClick={() => onChoose("ai_audit")}
-            className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-          >
+          <Button type="button" className="w-full" onClick={() => onChoose("ai_audit")}>
             Start with this one
-          </button>
+          </Button>
         </div>
       </div>
     </div>

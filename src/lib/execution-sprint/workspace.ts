@@ -312,15 +312,19 @@ export async function createSprintQueueItem(
   });
   if (insertError) throw new Error(`createSprintQueueItem: failed to insert: ${insertError.message}`);
 
+  // Real perf fix (confirmed 2026-09-05, code-quality audit) — batched
+  // insert instead of one per reviewer.
   const { data: reviewers } = await supabase.from("users").select("id").eq("role", "reviewer");
-  for (const reviewer of reviewers ?? []) {
-    await supabase.from("notifications").insert({
-      recipient_type: "reviewer",
-      recipient_id: reviewer.id,
-      event_type: "sprint_queue_item",
-      channel: "email",
-      sent_at: null,
-    });
+  if ((reviewers ?? []).length > 0) {
+    await supabase.from("notifications").insert(
+      (reviewers ?? []).map((reviewer) => ({
+        recipient_type: "reviewer",
+        recipient_id: reviewer.id,
+        event_type: "sprint_queue_item",
+        channel: "email",
+        sent_at: null,
+      })),
+    );
   }
 }
 

@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card } from "@/app/_components/ui/Card";
+import { CompaniesFilterClient, type CompanyDirectoryRow } from "./CompaniesFilterClient";
 
 /**
  * Company directory (confirmed 2026-08-26, navigation audit) — reverses
@@ -10,10 +10,14 @@ import { Card } from "@/app/_components/ui/Card";
  * leave as queue-only for now"). Before this page, `/company/[companyId]`
  * was only ever reachable by clicking through from a request that already
  * named that company — there was no way to browse companies directly.
- * Deliberately kept simple per explicit direction: name, plan tier, last
- * activity, no filtering/search yet — that can be added once real client
- * volume makes it worth it, same "don't build ahead of proof" discipline
- * used throughout this codebase.
+ *
+ * Search/filter added (confirmed 2026-09-05, code-quality audit item 6) —
+ * this page's own docblock originally deferred this explicitly ("no
+ * filtering/search yet — that can be added once real client volume makes
+ * it worth it"); closed now that real testing this session had already
+ * surfaced concrete filter needs (plan tier, activity recency, entry
+ * path) — see CompaniesFilterClient.tsx's own docblock for the reasoning
+ * behind choosing exactly those three.
  *
  * "Last activity" is computed, not a single stored column — the most
  * recent of a few real signals (profile edits, evidence submission
@@ -30,7 +34,7 @@ export default async function CompanyDirectoryPage() {
 
   const { data: companies } = await admin
     .from("companies")
-    .select("id, name, updated_at, user_id, users(plan_tier)")
+    .select("id, name, updated_at, user_id, entry_path, users(plan_tier)")
     .order("name", { ascending: true });
 
   const companyIds = (companies ?? []).map((c) => c.id as string);
@@ -60,7 +64,7 @@ export default async function CompanyDirectoryPage() {
   for (const m of moduleRequests ?? []) considerActivity(m.company_id as string, m.created_at as string | null);
   for (const p of pendingSubmissions ?? []) considerActivity(p.company_id as string, p.updated_at as string | null);
 
-  const rows = (companies ?? [])
+  const rows: CompanyDirectoryRow[] = (companies ?? [])
     .map((c) => {
       const usersRel = c.users as { plan_tier: string } | { plan_tier: string }[] | null;
       const planTier = Array.isArray(usersRel) ? (usersRel[0]?.plan_tier ?? "free") : (usersRel?.plan_tier ?? "free");
@@ -68,6 +72,7 @@ export default async function CompanyDirectoryPage() {
         id: c.id as string,
         name: c.name as string,
         planTier,
+        entryPath: c.entry_path as string | null,
         lastActivity: latestByCompany.get(c.id as string) ?? null,
       };
     })
@@ -81,27 +86,7 @@ export default async function CompanyDirectoryPage() {
       </p>
 
       <Card>
-        {rows.length === 0 ? (
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">No companies yet.</p>
-        ) : (
-          <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
-            {rows.map((r) => (
-              <li key={r.id} className="flex items-center justify-between py-3">
-                <div>
-                  <Link href={`/company/${r.id}`} className="font-medium text-accent underline hover:text-accent-hover">
-                    {r.name}
-                  </Link>
-                  <span className="ml-2 rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium capitalize text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
-                    {r.planTier}
-                  </span>
-                </div>
-                <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                  {r.lastActivity ? `Last activity ${new Date(r.lastActivity).toLocaleDateString()}` : "No activity yet"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+        {rows.length === 0 ? <p className="text-sm text-neutral-500 dark:text-neutral-400">No companies yet.</p> : <CompaniesFilterClient rows={rows} />}
       </Card>
     </div>
   );

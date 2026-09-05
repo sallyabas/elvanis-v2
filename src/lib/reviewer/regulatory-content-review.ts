@@ -59,21 +59,34 @@ export async function checkRegulatoryContentReviewDue(): Promise<RegulatoryConte
 
   const notifiedAt = new Date().toISOString();
 
-  for (const row of due) {
-    for (const reviewer of reviewers ?? []) {
-      const { error: notifError } = await supabase.from("notifications").insert({
-        recipient_type: "reviewer",
+  // Real perf fix (confirmed 2026-09-05, code-quality audit) — this was a
+  // genuine nested loop, O(overdue jurisdictions × reviewers), one INSERT
+  // per pair. Flattened into a single batched insert covering every
+  // (row, reviewer) pair at once, and the per-row `notified_at` updates
+  // (all being set to the identical timestamp) collapsed into one UPDATE
+  // via `.in()` instead of one per due row.
+  if ((reviewers ?? []).length > 0) {
+    const notificationRows = due.flatMap((row) =>
+      (reviewers ?? []).map((reviewer) => ({
+        recipient_type: "reviewer" as const,
         recipient_id: reviewer.id,
         event_type: "regulatory_content_review_due",
-        channel: "email",
+        channel: "email" as const,
         sent_at: null,
-      });
-      if (notifError) throw new Error(`checkRegulatoryContentReviewDue: failed to log notification: ${notifError.message}`);
-    }
-
-    const { error: markError } = await supabase.from("regulatory_content_reviews").update({ notified_at: notifiedAt }).eq("jurisdiction", row.jurisdiction);
-    if (markError) throw new Error(`checkRegulatoryContentReviewDue: failed to mark notified: ${markError.message}`);
+      })),
+    );
+    const { error: notifError } = await supabase.from("notifications").insert(notificationRows);
+    if (notifError) throw new Error(`checkRegulatoryContentReviewDue: failed to log notification: ${notifError.message}`);
   }
+
+  const { error: markError } = await supabase
+    .from("regulatory_content_reviews")
+    .update({ notified_at: notifiedAt })
+    .in(
+      "jurisdiction",
+      due.map((r) => r.jurisdiction),
+    );
+  if (markError) throw new Error(`checkRegulatoryContentReviewDue: failed to mark notified: ${markError.message}`);
 
   return due.map((r) => ({ jurisdiction: r.jurisdiction as string }));
 }

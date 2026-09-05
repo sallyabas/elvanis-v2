@@ -32,3 +32,21 @@ export const VARIANTS: Record<"primary" | "secondary", string> = {
   primary: "bg-accent text-white hover:bg-accent-hover",
   secondary: "border border-accent bg-white text-accent hover:bg-[#fdf6ee]",
 };
+
+/**
+ * Real size variant (confirmed 2026-09-05, code-quality audit) — Button
+ * only ever had one fixed size (px-4 py-2.5 text-sm), which is why several
+ * genuinely small inline actions (SprintInterestButton's Yes/Not now/
+ * Something else, SessionRequestButton's compact placement) hand-rolled
+ * their own className string instead of using the shared component —
+ * forcing them into the full-size button would have been a real visual
+ * regression, not a genuine unification. A real `size` prop, not a
+ * className-string override — Tailwind's compiled stylesheet order isn't
+ * guaranteed to match a component's own className-concatenation order, so
+ * appending conflicting padding/text-size utilities via className is a
+ * documented, fragile pitfall, not a safe way to shrink a button.
+ */
+export const SIZES: Record<"md" | "sm", string> = {
+  md: "px-4 py-2.5 text-sm",
+  sm: "px-2 py-1 text-xs",
+};

@@ -78,14 +78,18 @@ export async function checkEvidenceCompletenessNudges(): Promise<EvidenceNudgeFi
     });
     if (clientNotifError) throw new Error(`checkEvidenceCompletenessNudges: failed to log client notification: ${clientNotifError.message}`);
 
-    for (const reviewer of reviewers ?? []) {
-      const { error: reviewerNotifError } = await supabase.from("notifications").insert({
-        recipient_type: "reviewer",
-        recipient_id: reviewer.id,
-        event_type: "evidence_incomplete",
-        channel: "email",
-        sent_at: null,
-      });
+    // Real perf fix (confirmed 2026-09-05, code-quality audit) — batched
+    // insert instead of one per reviewer.
+    if ((reviewers ?? []).length > 0) {
+      const { error: reviewerNotifError } = await supabase.from("notifications").insert(
+        (reviewers ?? []).map((reviewer) => ({
+          recipient_type: "reviewer",
+          recipient_id: reviewer.id,
+          event_type: "evidence_incomplete",
+          channel: "email",
+          sent_at: null,
+        })),
+      );
       if (reviewerNotifError) throw new Error(`checkEvidenceCompletenessNudges: failed to log reviewer notification: ${reviewerNotifError.message}`);
     }
 

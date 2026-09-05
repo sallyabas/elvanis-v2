@@ -72,81 +72,104 @@ interface QueueItem {
 export default async function ReviewerQueuePage() {
   const supabase = createAdminClient();
 
-  const { data: reports, error: reportsError } = await supabase
-    .from("reports")
-    .select("id, status, edit_window_closes_at, review_due_at, reviewer_notified_at, companies(name)")
-    .eq("status", "pending_review")
-    .lte("edit_window_closes_at", new Date().toISOString());
+  // Real perf fix (confirmed 2026-09-05, code-quality audit) — this page
+  // does 13 independent DB/settings reads across its 8+ panels; none of
+  // them reads another one's result, but every one was previously
+  // awaited one at a time in series, paying a full network round-trip
+  // each. Batched into one Promise.all — every actual query/filter and
+  // the resulting variable names are byte-identical to before, only the
+  // network scheduling changed. Error handling is preserved exactly:
+  // each of the four queries that used to bail out with its own early
+  // return still does, checked in the same order right after the batch
+  // resolves (Supabase queries return {data,error} rather than throwing,
+  // so batching into Promise.all doesn't lose this).
+  const [
+    { data: reports, error: reportsError },
+    { data: pendingSubmissions, error: pendingSubmissionsError },
+    { data: moduleRequests, error: moduleError },
+    moduleTurnaroundHours,
+    { data: awaitingDeliveryModules, error: awaitingDeliveryError },
+    { data: scopedSprints, error: sprintsError },
+    regulatoryStatus,
+    sessionRequests,
+    pricing,
+    deliveryFeedback,
+    sprintQueueItems,
+    sprintInterestRequests,
+    allSprints,
+  ] = await Promise.all([
+    supabase
+      .from("reports")
+      .select("id, status, edit_window_closes_at, review_due_at, reviewer_notified_at, companies(name)")
+      .eq("status", "pending_review")
+      .lte("edit_window_closes_at", new Date().toISOString()),
+    // "Still with client" visibility, rewritten 2026-08-10 for the
+    // delayed-execution architecture — this used to query `reports` for
+    // rows whose edit window hadn't closed yet, but under the new
+    // architecture that query is now permanently dead: a `reports` row
+    // is only ever created AFTER the window closes (see
+    // run-pending-audits.ts), so it could never return anything again.
+    // The real "not ready yet" state now lives in
+    // pending_evidence_submissions instead — and there's a real, third
+    // state to show now beyond "still editing," closing the same
+    // visibility gap this section originally existed for, just against
+    // the right table: Editing / Queued for audit / Audit in progress
+    // (see submission-status.ts). Purely informational — no review
+    // action here, same as before.
+    supabase
+      .from("pending_evidence_submissions")
+      .select("id, status, edit_window_closes_at, submitted_at, companies(name)")
+      .neq("status", "completed"),
+    supabase
+      .from("module_requests")
+      .select("id, module_type, status, created_at, reviewer_notified_at, is_urgent, companies(name)")
+      .eq("status", "pending_review"),
+    // Real gap closed (confirmed 2026-08-19, direct founder request) —
+    // once a reviewer approves a module request, it dropped out of this
+    // queue entirely with no reminder that delivery is still owed.
+    // `created_at` IS the real submission moment here — modules have no
+    // separate client-edit-window step.
+    //
+    // SLA source of truth, corrected 2026-09-03 (direct founder request,
+    // following the Groq-failure investigation) — this used to read
+    // getTotalTurnaroundHours() (edit_window_hours + review_period_hours,
+    // 72h by default), a CORE-AUDIT-specific concept that doesn't
+    // actually apply to modules (they have no client edit window at
+    // all). Meanwhile module_delivery_turnaround_target_hours (48h)
+    // already existed, purpose-built for exactly this, and was already
+    // the number the landing page and the module review workspace's own
+    // "time in review" display used — a real, live inconsistency
+    // between what "on time" meant depending on which page you looked
+    // at. Standardized on the purpose-built setting everywhere modules
+    // are concerned; see dashboard/page.tsx's isModuleOverdue() for the
+    // matching fix on the client-facing side.
+    getSettingNumber("module_delivery_turnaround_target_hours", 48),
+    supabase
+      .from("module_requests")
+      .select("id, module_type, created_at, approved_at, companies(name)")
+      .eq("status", "approved"),
+    supabase.from("execution_sprints").select("id, created_at, companies(name)").eq("status", "scoped"),
+    listRegulatoryContentReviewStatus(),
+    listPendingSessionRequests(),
+    listPricing(),
+    listDeliveryFeedback(),
+    listOpenSprintQueueItems(),
+    listOpenSprintInterestRequests(),
+    listAllSprints(),
+  ]);
 
   if (reportsError) {
     return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {reportsError.message}</div>;
   }
-
-  // "Still with client" visibility, rewritten 2026-08-10 for the delayed-
-  // execution architecture — this used to query `reports` for rows whose
-  // edit window hadn't closed yet, but under the new architecture that
-  // query is now permanently dead: a `reports` row is only ever created
-  // AFTER the window closes (see run-pending-audits.ts), so it could never
-  // return anything again. The real "not ready yet" state now lives in
-  // pending_evidence_submissions instead — and there's a real, third state
-  // to show now beyond "still editing," closing the same visibility gap
-  // this section originally existed for, just against the right table:
-  // Editing / Queued for audit / Audit in progress (see
-  // submission-status.ts). Purely informational — no review action here,
-  // same as before.
-  const { data: pendingSubmissions, error: pendingSubmissionsError } = await supabase
-    .from("pending_evidence_submissions")
-    .select("id, status, edit_window_closes_at, submitted_at, companies(name)")
-    .neq("status", "completed");
-
   if (pendingSubmissionsError) {
     return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {pendingSubmissionsError.message}</div>;
   }
-
-  const { data: moduleRequests, error: moduleError } = await supabase
-    .from("module_requests")
-    .select("id, module_type, status, created_at, reviewer_notified_at, is_urgent, companies(name)")
-    .eq("status", "pending_review");
-
   if (moduleError) {
     return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {moduleError.message}</div>;
   }
-
-  // Real gap closed (confirmed 2026-08-19, direct founder request) — once
-  // a reviewer approves a module request, it dropped out of this queue
-  // entirely with no reminder that delivery is still owed. `created_at` IS
-  // the real submission moment here — modules have no separate client-
-  // edit-window step.
-  //
-  // SLA source of truth, corrected 2026-09-03 (direct founder request,
-  // following the Groq-failure investigation) — this used to read
-  // getTotalTurnaroundHours() (edit_window_hours + review_period_hours,
-  // 72h by default), a CORE-AUDIT-specific concept that doesn't actually
-  // apply to modules (they have no client edit window at all). Meanwhile
-  // module_delivery_turnaround_target_hours (48h) already existed,
-  // purpose-built for exactly this, and was already the number the
-  // landing page and the module review workspace's own "time in review"
-  // display used — a real, live inconsistency between what "on time"
-  // meant depending on which page you looked at. Standardized on the
-  // purpose-built setting everywhere modules are concerned; see
-  // dashboard/page.tsx's isModuleOverdue() for the matching fix on the
-  // client-facing side.
-  const moduleTurnaroundHours = await getSettingNumber("module_delivery_turnaround_target_hours", 48);
-
-  const { data: awaitingDeliveryModules, error: awaitingDeliveryError } = await supabase
-    .from("module_requests")
-    .select("id, module_type, created_at, approved_at, companies(name)")
-    .eq("status", "approved");
-
   if (awaitingDeliveryError) {
     return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {awaitingDeliveryError.message}</div>;
   }
-
-  const { data: scopedSprints, error: sprintsError } = await supabase
-    .from("execution_sprints")
-    .select("id, created_at, companies(name)")
-    .eq("status", "scoped");
-
   if (sprintsError) {
     return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {sprintsError.message}</div>;
   }
@@ -244,13 +267,9 @@ export default async function ReviewerQueuePage() {
   const stillEditing = pendingByCompany.filter((p) => p.stage === "editing");
   const queuedOrProcessing = pendingByCompany.filter((p) => p.stage === "queued_for_audit" || p.stage === "audit_in_progress");
 
-  const regulatoryStatus = await listRegulatoryContentReviewStatus();
-  const sessionRequests = await listPendingSessionRequests();
-  const pricing = await listPricing();
-  const deliveryFeedback = await listDeliveryFeedback();
-  const sprintQueueItems = await listOpenSprintQueueItems();
-  const sprintInterestRequests = await listOpenSprintInterestRequests();
-  const allSprints = await listAllSprints();
+  // regulatoryStatus/sessionRequests/pricing/deliveryFeedback/
+  // sprintQueueItems/sprintInterestRequests/allSprints are all already
+  // available from the batch above.
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">

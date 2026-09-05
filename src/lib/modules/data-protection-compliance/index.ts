@@ -58,7 +58,7 @@ function applicableRegulationsList(applicability: ReturnType<typeof computeJuris
  * rather than a second hardcoded list that can drift again the next time
  * a regime is added.
  */
-const REGULATION_LABELS: Record<DataProtectionRegulation, string> = {
+export const REGULATION_LABELS: Record<DataProtectionRegulation, string> = {
   uk_gdpr: "UK GDPR",
   eu_gdpr: "EU GDPR",
   saudi_pdpl: "Saudi PDPL",

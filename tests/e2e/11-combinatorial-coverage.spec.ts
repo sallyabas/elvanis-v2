@@ -222,7 +222,7 @@ test("Document upload states, all 3 modules on one company, Concierge inquiry (e
 
   // --- Concierge inquiry on the same company (module + Concierge combo, and the "everything at once" modules+Concierge combo since this company now has all 3 modules) ---
   await page.goto("/services");
-  await page.getByRole("button", { name: "Contact Sales" }).click();
+  await page.getByRole("button", { name: /Request Concierge/i }).click();
   await expect(page.getByText(/Concierge inquiry sent/i)).toBeVisible({ timeout: 10_000 });
   await step(page, testInfo, "11-combinatorial", "14-concierge-requested-everything-at-once");
 

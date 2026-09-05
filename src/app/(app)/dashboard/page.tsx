@@ -92,49 +92,114 @@ export default async function DashboardPage() {
     );
   }
 
-  const { data: latestReport } = await supabase
-    .from("reports")
-    .select("id, top_3_finding_ids")
-    .eq("company_id", company.id)
-    .eq("status", "sent")
-    .order("delivered_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const companyId = company.id as string;
+  const admin = createAdminClient();
 
-  const journeyStatus = await computeJourneyStatus(createAdminClient(), company.id as string);
-
-  // Part 5's "AI Audit Status" lead section (entry_path='ai_audit') and
-  // the conditional "AI Status" card (entry_path='diagnosis') both need to
-  // know about this company's module requests — one small, targeted query
-  // covering both rather than reusing/reordering the existing
-  // activeModuleRequestRows query further below, which is scoped
-  // specifically to non-terminal statuses for the "Your active requests"
-  // section and shouldn't be disturbed for this unrelated purpose.
-  //
-  // Real bug found and fixed 2026-08-28 while building the Path B
-  // stranded-dead-end fix below: this query used the session-scoped
-  // `supabase` client, but module_requests' own RLS only lets a client
-  // SELECT `sent` rows (20260806090000_module_requests_rls_fix.sql) — a
-  // company with a real pending_review/approved module request would have
-  // silently shown zero rows here, mis-reporting hasAnyModuleRequest as
-  // false and (before this fix) re-triggering the "no AI audit submitted
-  // yet" fallback for a client who had already submitted one. Switched to
-  // the admin client, same reasoning as computeJourneyStatus() above.
-  const { data: allModuleRequestsForAiStatus } = await createAdminClient()
-    .from("module_requests")
-    .select("id, module_type, status, created_at, delivered_at")
-    .eq("company_id", company.id)
-    .order("created_at", { ascending: false });
+  // Real perf fix (confirmed 2026-09-05, code-quality audit) — the 12
+  // queries below (this block, plus activeModuleRequestRows/
+  // activeSessionRequestRows/sprintRows/the four delivered-count queries
+  // further down) genuinely only depend on companyId/company.entry_path,
+  // never on each other's results, but were previously awaited one at a
+  // time in series — every one of them pays a full network round-trip
+  // before the next one even starts. Batched into Promise.all; the actual
+  // queries, filters, and resulting variables are byte-identical to
+  // before, only the scheduling changed. See queue/page.tsx for the same
+  // fix applied there.
+  const [
+    { data: latestReport },
+    journeyStatus,
+    { data: allModuleRequestsForAiStatus },
+    pathBSetupDone,
+    { data: currentGoal },
+    { data: activeModuleRequestRows },
+    { data: activeSessionRequestRows },
+    { data: sprintRows },
+    { count: deliveredReportsCount },
+    { count: deliveredModulesCount },
+    { count: completedSessionsCount },
+    { count: completeSprintsCount },
+  ] = await Promise.all([
+    supabase
+      .from("reports")
+      .select("id, top_3_finding_ids")
+      .eq("company_id", companyId)
+      .eq("status", "sent")
+      .order("delivered_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    computeJourneyStatus(admin, companyId),
+    // Part 5's "AI Audit Status" lead section (entry_path='ai_audit') and
+    // the conditional "AI Status" card (entry_path='diagnosis') both need
+    // to know about this company's module requests — one small, targeted
+    // query covering both rather than reusing/reordering
+    // activeModuleRequestRows below, which is scoped specifically to
+    // non-terminal statuses for the "Your active requests" section and
+    // shouldn't be disturbed for this unrelated purpose.
+    //
+    // Real bug found and fixed 2026-08-28 while building the Path B
+    // stranded-dead-end fix below: this query used the session-scoped
+    // `supabase` client, but module_requests' own RLS only lets a client
+    // SELECT `sent` rows (20260806090000_module_requests_rls_fix.sql) — a
+    // company with a real pending_review/approved module request would
+    // have silently shown zero rows here, mis-reporting
+    // hasAnyModuleRequest as false and (before this fix) re-triggering
+    // the "no AI audit submitted yet" fallback for a client who had
+    // already submitted one. Switched to the admin client, same reasoning
+    // as computeJourneyStatus() above.
+    admin
+      .from("module_requests")
+      .select("id, module_type, status, created_at, delivered_at")
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false }),
+    // Real, confirmed dead-end fix (2026-08-28) — "no completed
+    // triage/module yet" per the founder's own decision is a superset of
+    // hasAnyModuleRequest below: a client who was routed to human
+    // consultation instead of a module (a real, valid Path B outcome) has
+    // also finished setup and shouldn't keep seeing the "finish setting
+    // up" nag. See hasCompletedPathBSetup()'s own docblock for the full
+    // reasoning.
+    company.entry_path === "ai_audit" ? hasCompletedPathBSetup(admin, companyId) : Promise.resolve(true),
+    // Client's stated goal, pinned (item 3) — moved up into this batch
+    // (was queried much later in the original sequential version, right
+    // before metricTrend) since it doesn't depend on anything above it
+    // either; metricTrend below still correctly awaits it first, since
+    // metricTrend genuinely needs currentGoal's own result.
+    supabase
+      .from("goals")
+      .select("primary_goal, secondary_goal, target_metric_key, target_metric_value")
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from("module_requests")
+      .select("id, module_type, status, created_at, approved_at")
+      .eq("company_id", companyId)
+      .in("status", ["pending_review", "approved"])
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("session_requests")
+      .select("id, session_type, status, requested_at, scheduled_at")
+      .eq("company_id", companyId)
+      .neq("session_type", "discovery")
+      .in("status", ["requested", "scheduled"])
+      .order("requested_at", { ascending: false }),
+    supabase
+      .from("execution_sprints")
+      .select("id, status, target_end_date, selected_finding_id, report_id")
+      .eq("company_id", companyId)
+      // "proposed" added 2026-08-18 — the new leading stage, awaiting the
+      // client's own confirm-or-reselect step, is non-terminal too and
+      // belongs in "active status" same as "scoped"/"in_progress".
+      .in("status", ["proposed", "scoped", "in_progress"])
+      .order("start_date", { ascending: false, nullsFirst: false }),
+    supabase.from("reports").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "sent"),
+    admin.from("module_requests").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "sent"),
+    supabase.from("session_requests").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "completed"),
+    supabase.from("execution_sprints").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "complete"),
+  ]);
   const mostRecentModuleRequest = (allModuleRequestsForAiStatus ?? [])[0] ?? null;
   const hasAnyModuleRequest = (allModuleRequestsForAiStatus ?? []).length > 0;
-
-  // Real, confirmed dead-end fix (2026-08-28) — "no completed triage/module
-  // yet" per the founder's own decision is a superset of hasAnyModuleRequest
-  // above: a client who was routed to human consultation instead of a
-  // module (a real, valid Path B outcome) has also finished setup and
-  // shouldn't keep seeing the "finish setting up" nag. See
-  // hasCompletedPathBSetup()'s own docblock for the full reasoning.
-  const pathBSetupDone = company.entry_path === "ai_audit" ? await hasCompletedPathBSetup(createAdminClient(), company.id as string) : true;
 
   let top3: LensFinding[] = [];
   let allReportFindings: FindingForCascade[] = [];
@@ -155,11 +220,30 @@ export default async function DashboardPage() {
   // deliberately scoped narrower for the signals card). This backs the
   // "Report ready" subtitle's second line (confirmed 2026-08-20).
   let allFindingsFinancialExposure: ReturnType<typeof aggregateFinancialImpact> = null;
+  // "Post-sprint" detection, AI Opportunity Synthesis, and readiness
+  // scores all used to be three separate sequential blocks further down
+  // this function, each re-checking `if (latestReport)` on its own —
+  // merged into this same batch (confirmed 2026-09-05, code-quality
+  // audit) since all four queries here depend on nothing but
+  // latestReport.id, which is already known by this point.
+  let hasCompleteSprintForCurrentReport = false;
+  let opportunities: { id: string; description: string; readinessStatus: "do_now" | "fix_groundwork_first" | null; readinessReasoning: string | null }[] = [];
+  let readiness: { data_quality: number | null; team_skill: number | null; process_maturity: number | null; governance_foundation: number | null } | null = null;
   if (latestReport) {
-    const { data: reportFindings } = await supabase
-      .from("lens_findings")
-      .select("id, lens, ai_draft, reviewer_edited_content, reviewer_status")
-      .eq("report_id", latestReport.id);
+    const [{ data: reportFindings }, { count: sprintCompleteCount }, { data: oppRows }, { data: readinessRow }] = await Promise.all([
+      supabase.from("lens_findings").select("id, lens, ai_draft, reviewer_edited_content, reviewer_status").eq("report_id", latestReport.id),
+      supabase.from("execution_sprints").select("id", { count: "exact", head: true }).eq("report_id", latestReport.id).eq("status", "complete"),
+      supabase.from("ai_opportunity_synthesis").select("id, opportunity_description, readiness_status, readiness_reasoning").eq("report_id", latestReport.id),
+      supabase.from("readiness_scores").select("data_quality, team_skill, process_maturity, governance_foundation").eq("report_id", latestReport.id).maybeSingle(),
+    ]);
+    hasCompleteSprintForCurrentReport = (sprintCompleteCount ?? 0) > 0;
+    opportunities = (oppRows ?? []).map((o) => ({
+      id: o.id as string,
+      description: o.opportunity_description as string,
+      readinessStatus: o.readiness_status as "do_now" | "fix_groundwork_first" | null,
+      readinessReasoning: o.readiness_reasoning as string | null,
+    }));
+    readiness = readinessRow as typeof readiness;
     const visible = (reportFindings ?? []).filter((f) => f.reviewer_status === "approved" || f.reviewer_status === "edited");
     // Real, ranked, capped-at-3 resolution (confirmed 2026-08-19, real
     // data-integrity gap found while building the restored "Top 3" card,
@@ -240,21 +324,14 @@ export default async function DashboardPage() {
   // all in those stages (see journey-status.ts's own docblock). No second
   // query needed.
   //
-  // "Post-sprint" is detected as its own small, targeted query: does the
-  // CURRENT delivered report have a `complete` Execution Sprint attached?
-  // A real, disclosed design decision, not specified by the exact-copy
-  // list: once true, this replaces "Report ready" rather than the two
-  // coexisting, since "here's your progress" is the more relevant framing
-  // once a client has already engaged with implementation on this report.
-  let hasCompleteSprintForCurrentReport = false;
-  if (latestReport) {
-    const { count } = await supabase
-      .from("execution_sprints")
-      .select("id", { count: "exact", head: true })
-      .eq("report_id", latestReport.id)
-      .eq("status", "complete");
-    hasCompleteSprintForCurrentReport = (count ?? 0) > 0;
-  }
+  // "Post-sprint" detection (does the CURRENT delivered report have a
+  // `complete` Execution Sprint attached?) is now computed as part of the
+  // batched latestReport block above — hasCompleteSprintForCurrentReport
+  // is already set by the time we reach here. A real, disclosed design
+  // decision, not specified by the exact-copy list: once true, this
+  // replaces "Report ready" rather than the two coexisting, since "here's
+  // your progress" is the more relevant framing once a client has already
+  // engaged with implementation on this report.
 
   let subtitleLine1: string;
   let subtitleLine2: string | null = null;
@@ -352,53 +429,20 @@ export default async function DashboardPage() {
   const top3FinancialExposure = aggregateFinancialImpact(top3WithIds.map((t) => t.finding));
   const urgentFinancialExposure = aggregateFinancialImpact(urgentFindings.map((f) => f.finding));
 
-  // Client's stated goal, pinned (item 3) — the same `goals` row already
-  // queried for the metric trend below, extended to also select
-  // primary_goal/secondary_goal so this doesn't need a second query.
-  const { data: currentGoal } = await supabase
-    .from("goals")
-    .select("primary_goal, secondary_goal, target_metric_key, target_metric_value")
-    .eq("company_id", company.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // Client's stated goal (item 3) and AI Opportunity/readiness data are
+  // both already available here — both moved into the big batched
+  // Promise.all up top (confirmed 2026-09-05, code-quality audit), since
+  // neither depends on anything queried between here and there. metricTrend
+  // genuinely does need currentGoal's own result first, so it stays a real,
+  // single sequential await.
   const metricTrend: MetricTrend | null = currentGoal
-    ? await loadGoalMetricTrend(supabase, company.id as string, {
+    ? await loadGoalMetricTrend(supabase, companyId, {
         targetMetricKey: currentGoal.target_metric_key as string | null,
         targetMetricValue: currentGoal.target_metric_value as number | null,
       })
     : null;
 
-  let opportunities: { id: string; description: string; readinessStatus: "do_now" | "fix_groundwork_first" | null; readinessReasoning: string | null }[] = [];
-  let readiness: { data_quality: number | null; team_skill: number | null; process_maturity: number | null; governance_foundation: number | null } | null = null;
-  if (latestReport) {
-    const { data: oppRows } = await supabase
-      .from("ai_opportunity_synthesis")
-      .select("id, opportunity_description, readiness_status, readiness_reasoning")
-      .eq("report_id", latestReport.id);
-    opportunities = (oppRows ?? []).map((o) => ({
-      id: o.id as string,
-      description: o.opportunity_description as string,
-      readinessStatus: o.readiness_status as "do_now" | "fix_groundwork_first" | null,
-      readinessReasoning: o.readiness_reasoning as string | null,
-    }));
-
-    const { data: readinessRow } = await supabase
-      .from("readiness_scores")
-      .select("data_quality, team_skill, process_maturity, governance_foundation")
-      .eq("report_id", latestReport.id)
-      .maybeSingle();
-    readiness = readinessRow as typeof readiness;
-  }
-
-  const admin = createAdminClient();
-  const { data: activeModuleRequestRows } = await admin
-    .from("module_requests")
-    .select("id, module_type, status, created_at, approved_at")
-    .eq("company_id", company.id)
-    .in("status", ["pending_review", "approved"])
-    .order("created_at", { ascending: false });
-
+  // activeModuleRequestRows is also already available from the batch above.
   // Real client-facing overdue-delivery copy (confirmed 2026-08-19, direct
   // founder request) — modules have no client-edit-window step (they go
   // straight to pending_review on submission), so there's no separate
@@ -432,24 +476,8 @@ export default async function DashboardPage() {
     return deadline < new Date();
   }
 
-  const { data: activeSessionRequestRows } = await supabase
-    .from("session_requests")
-    .select("id, session_type, status, requested_at, scheduled_at")
-    .eq("company_id", company.id)
-    .neq("session_type", "discovery")
-    .in("status", ["requested", "scheduled"])
-    .order("requested_at", { ascending: false });
-
-  const { data: sprintRows } = await supabase
-    .from("execution_sprints")
-    .select("id, status, target_end_date, selected_finding_id, report_id")
-    .eq("company_id", company.id)
-    // "proposed" added 2026-08-18 — the new leading stage, awaiting the
-    // client's own confirm-or-reselect step, is non-terminal too and
-    // belongs in "active status" same as "scoped"/"in_progress".
-    .in("status", ["proposed", "scoped", "in_progress"])
-    .order("start_date", { ascending: false, nullsFirst: false });
-
+  // activeSessionRequestRows/sprintRows are also already available from
+  // the batch above.
   const activeSprint = (sprintRows ?? []).find((s) => s.status === "in_progress") ?? (sprintRows ?? [])[0] ?? null;
   let sprintFindingTitle: string | null = null;
   let sprintTaskCounts: { done: number; total: number } | null = null;
@@ -490,26 +518,7 @@ export default async function DashboardPage() {
   // engagement it actually was: a bounded, paid, multi-week implementation
   // project reads as materially different from "we sent you a report," and
   // a bare combined number obscured that. It gets its own line below.
-  const { count: deliveredReportsCount } = await supabase
-    .from("reports")
-    .select("id", { count: "exact", head: true })
-    .eq("company_id", company.id)
-    .eq("status", "sent");
-  const { count: deliveredModulesCount } = await admin
-    .from("module_requests")
-    .select("id", { count: "exact", head: true })
-    .eq("company_id", company.id)
-    .eq("status", "sent");
-  const { count: completedSessionsCount } = await supabase
-    .from("session_requests")
-    .select("id", { count: "exact", head: true })
-    .eq("company_id", company.id)
-    .eq("status", "completed");
-  const { count: completeSprintsCount } = await supabase
-    .from("execution_sprints")
-    .select("id", { count: "exact", head: true })
-    .eq("company_id", company.id)
-    .eq("status", "complete");
+  // All four counts are already available from the batch above.
   const deliveredCount = (deliveredReportsCount ?? 0) + (deliveredModulesCount ?? 0) + (completedSessionsCount ?? 0);
   const inProgressCount = (activeModuleRequestRows?.length ?? 0) + (activeSessionRequestRows?.length ?? 0);
   const sprintSummaryCount = completeSprintsCount ?? 0;

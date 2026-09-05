@@ -169,6 +169,19 @@ const STATUS_BADGE: Record<FindingRow["reviewer_status"], string> = {
 
 // SEVERITY_BADGE replaced by the shared SEVERITY_STYLES (@/lib/severity-badge).
 
+// Evidence-pack API route slugs (confirmed 2026-09-05) — genuinely
+// different spelling from the `module_type` DB enum, same real mismatch
+// MODULE_META's own docblock already warns about for the intake-page
+// routes (`ai_reliability` -> `/ai-reliability-audit`, `data_protection`
+// -> `/data-protection-compliance`) — kept as its own small map here
+// rather than importing MODULE_META, since these are API routes, not the
+// client-facing intake pages that map describes.
+const EVIDENCE_PACK_ROUTE_SLUG: Record<string, string> = {
+  tender_readiness: "tender-readiness",
+  ai_reliability: "ai-reliability-audit",
+  data_protection: "data-protection-compliance",
+};
+
 export function ModuleReviewWorkspaceClient({
   requestId,
   companyName,
@@ -429,17 +442,30 @@ export function ModuleReviewWorkspaceClient({
         </Button>
       </Card>
 
-      {moduleType === "tender_readiness" && (requestStatus === "approved" || requestStatus === "sent") && (
-        <Card title="Procurement answers" className="mt-8">
-          <div className="mb-3 flex items-center justify-end">
+      {/* Evidence-pack download, extended to all three modules (confirmed
+          2026-09-05, code-quality audit item 5) — was previously nested
+          inside the Tender-Readiness-only "Procurement answers" Card
+          below, which is why it only ever existed for that one module;
+          the underlying route/builder are now real for AI Reliability and
+          Data Protection Compliance too. Same reviewer-only-for-now access
+          pattern already established (the route itself also allows the
+          owning client to fetch their own delivered pack, unchanged). */}
+      {(requestStatus === "approved" || requestStatus === "sent") && (
+        <Card className="mt-8">
+          <div className="flex items-center justify-end">
             <a
-              href={`/api/tender-readiness/${requestId}/evidence-pack`}
+              href={`/api/${EVIDENCE_PACK_ROUTE_SLUG[moduleType] ?? "tender-readiness"}/${requestId}/evidence-pack`}
               className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
               download
             >
               Download evidence pack (.md)
             </a>
           </div>
+        </Card>
+      )}
+
+      {moduleType === "tender_readiness" && (requestStatus === "approved" || requestStatus === "sent") && (
+        <Card title="Procurement answers" className="mt-8">
           {procurementAnswers.length === 0 ? (
             <div>
               {hasNoApplicableJurisdiction ? (
