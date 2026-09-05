@@ -52,6 +52,7 @@ async function templateFor(
     related_module_request_id: string | null;
     related_session_request_id: string | null;
     related_contact_request_id: string | null;
+    related_pending_submission_id: string | null;
   },
 ): Promise<{ subject: string; bodyHtml: string }> {
   const eventType = notification.event_type;
@@ -172,6 +173,22 @@ async function templateFor(
         bodyHtml: `<p style="margin:0 0 16px 0;">A real "Having trouble?" request came in${detail}.</p><p style="margin:0;"><a href="${SITE_URL}/queue" style="color:#B87333;font-weight:600;">View on the reviewer queue →</a></p>`,
       };
     }
+    case "reaudit_awaiting_payment": {
+      let detail = "";
+      if (notification.related_pending_submission_id) {
+        const { data: submission } = await admin
+          .from("pending_evidence_submissions")
+          .select("companies(name)")
+          .eq("id", notification.related_pending_submission_id)
+          .maybeSingle();
+        const submissionCompanyName = (submission?.companies as unknown as { name: string } | null)?.name;
+        if (submissionCompanyName) detail = ` from ${submissionCompanyName}`;
+      }
+      return {
+        subject: "Re-audit awaiting payment",
+        bodyHtml: `<p style="margin:0 0 16px 0;">A re-audit${detail} has its evidence window closed and is ready to run, but hasn't been marked as paid yet — the analysis is deliberately on hold until you confirm it.</p><p style="margin:0;"><a href="${SITE_URL}/queue" style="color:#B87333;font-weight:600;">Open the reviewer queue →</a></p>`,
+      };
+    }
     case "sprint_interest_requested":
       return {
         subject: "A client is interested in an Execution Sprint",
@@ -232,6 +249,22 @@ async function templateFor(
         subject: "New module request ready for review",
         bodyHtml: `<p style="margin:0 0 16px 0;">A new standalone module request is ready for your review.</p><p style="margin:0;"><a href="${SITE_URL}/queue" style="color:#B87333;font-weight:600;">Open the reviewer queue →</a></p>`,
       };
+    case "module_awaiting_payment": {
+      let detail = "";
+      if (notification.related_module_request_id) {
+        const { data: request } = await admin
+          .from("module_requests")
+          .select("companies(name)")
+          .eq("id", notification.related_module_request_id)
+          .maybeSingle();
+        const requestCompanyName = (request?.companies as unknown as { name: string } | null)?.name;
+        if (requestCompanyName) detail = ` from ${requestCompanyName}`;
+      }
+      return {
+        subject: "Module request awaiting payment",
+        bodyHtml: `<p style="margin:0 0 16px 0;">A new module request${detail} has been submitted, but the real analysis is deliberately on hold until you confirm it's been paid.</p><p style="margin:0;"><a href="${SITE_URL}/queue" style="color:#B87333;font-weight:600;">Open the reviewer queue →</a></p>`,
+      };
+    }
     case "module_ready":
       return {
         subject: companyName ? `${companyName}'s module results are ready` : "Your module results are ready",
@@ -279,7 +312,7 @@ export async function sendPendingNotifications(): Promise<DispatchResult> {
   const { data: pending, error } = await supabase
     .from("notifications")
     .select(
-      "id, recipient_type, recipient_id, event_type, related_report_id, related_sprint_id, related_module_request_id, related_session_request_id, related_contact_request_id",
+      "id, recipient_type, recipient_id, event_type, related_report_id, related_sprint_id, related_module_request_id, related_session_request_id, related_contact_request_id, related_pending_submission_id",
     )
     .is("sent_at", null)
     .eq("channel", "email");
@@ -325,6 +358,7 @@ export async function sendPendingNotifications(): Promise<DispatchResult> {
         related_module_request_id: (notification.related_module_request_id as string | null) ?? null,
         related_session_request_id: (notification.related_session_request_id as string | null) ?? null,
         related_contact_request_id: (notification.related_contact_request_id as string | null) ?? null,
+        related_pending_submission_id: (notification.related_pending_submission_id as string | null) ?? null,
       });
 
       const html = renderEmail({

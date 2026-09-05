@@ -73,6 +73,62 @@ export async function notifyReviewersOfNewModuleRequest(supabase: SupabaseClient
 }
 
 /**
+ * Re-audit payment gate (confirmed 2026-09-06, direct founder decision) —
+ * fired exactly once per row (idempotency lives in the caller, via
+ * pending_evidence_submissions.payment_notified_at, same pattern as
+ * reports.reviewer_notified_at) when a re-audit's edit window has closed
+ * but payment_status is still 'pending', so the audit run is deliberately
+ * withheld. Same fan-out shape as the two functions above — every
+ * role="reviewer" account gets one row, related_pending_submission_id set
+ * so dispatch.ts can look up the real company name.
+ */
+export async function notifyReviewersOfAwaitingPayment(supabase: SupabaseClient, pendingSubmissionId: string): Promise<void> {
+  const { data: reviewers, error: reviewersError } = await supabase.from("users").select("id").eq("role", "reviewer");
+  if (reviewersError) throw new Error(`notifyReviewersOfAwaitingPayment: failed to load reviewers: ${reviewersError.message}`);
+
+  if ((reviewers ?? []).length > 0) {
+    const { error: notifError } = await supabase.from("notifications").insert(
+      (reviewers ?? []).map((reviewer) => ({
+        recipient_type: "reviewer",
+        recipient_id: reviewer.id,
+        event_type: "reaudit_awaiting_payment",
+        channel: "email",
+        related_pending_submission_id: pendingSubmissionId,
+        sent_at: null, // logged, not actually delivered — a separate, explicit, confirmed step (see dispatch.ts)
+      })),
+    );
+    if (notifError) throw new Error(`notifyReviewersOfAwaitingPayment: failed to log notification: ${notifError.message}`);
+  }
+}
+
+/**
+ * Module payment gate (confirmed 2026-09-06) — fired exactly once, at raw
+ * submission time, when a module request is created in 'awaiting_payment'
+ * status. No idempotency guard is needed (unlike the re-audit gate's
+ * payment_notified_at) — this is a synchronous, one-shot insert inside
+ * the same request that creates the row, never a repeated cron
+ * discovery.
+ */
+export async function notifyReviewersOfModuleAwaitingPayment(supabase: SupabaseClient, requestId: string): Promise<void> {
+  const { data: reviewers, error: reviewersError } = await supabase.from("users").select("id").eq("role", "reviewer");
+  if (reviewersError) throw new Error(`notifyReviewersOfModuleAwaitingPayment: failed to load reviewers: ${reviewersError.message}`);
+
+  if ((reviewers ?? []).length > 0) {
+    const { error: notifError } = await supabase.from("notifications").insert(
+      (reviewers ?? []).map((reviewer) => ({
+        recipient_type: "reviewer",
+        recipient_id: reviewer.id,
+        event_type: "module_awaiting_payment",
+        channel: "email",
+        related_module_request_id: requestId,
+        sent_at: null, // logged, not actually delivered — a separate, explicit, confirmed step (see dispatch.ts)
+      })),
+    );
+    if (notifError) throw new Error(`notifyReviewersOfModuleAwaitingPayment: failed to log notification: ${notifError.message}`);
+  }
+}
+
+/**
  * Originally: "the reviewer notification must fire the instant the 24h
  * edit window closes" (spec §2.3a, confirmed 2026-07-31).
  *

@@ -75,7 +75,25 @@ export const MODULE_ORDER: ModuleType[] = ["tender_readiness", "ai_reliability",
 /** module_requests.status reuses the same report_status enum as Core Audit reports. */
 export const MODULE_STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
+  awaiting_payment: "Submitted — awaiting payment",
   pending_review: "Submitted — under review",
   approved: "Reviewed — awaiting delivery",
   sent: "Delivered",
 };
+
+/**
+ * Client-facing status label, module payment gate (confirmed 2026-09-06)
+ * — `status: 'awaiting_payment'` alone is ambiguous: it covers both "just
+ * submitted, nothing checked yet" (payment_status 'pending' or
+ * 'processing') and "a reviewer checked and it hasn't been paid"
+ * (payment_status 'unpaid'), which the confirmed design requires reading
+ * back as two different client-facing labels ("Submitted" vs "Unpaid").
+ * `MODULE_STATUS_LABELS` alone can't express this — it's keyed on
+ * `status` only — so this helper combines both fields, falling back to
+ * the plain status map for every other status where payment_status is
+ * irrelevant.
+ */
+export function moduleClientStatusLabel(status: string, paymentStatus: string | null | undefined): string {
+  if (status === "awaiting_payment" && paymentStatus === "unpaid") return "Unpaid";
+  return MODULE_STATUS_LABELS[status] ?? status;
+}

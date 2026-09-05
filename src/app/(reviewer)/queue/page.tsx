@@ -18,6 +18,9 @@ import {
   replyToSprintQueueItemAction,
   resolveSprintInterestRequestAction,
   resolveContactRequestAction,
+  markReaduitPaidAction,
+  markModulePaidAction,
+  markModuleUnpaidAction,
 } from "./actions";
 import { Card } from "@/app/_components/ui/Card";
 import { Input } from "@/app/_components/ui/Input";
@@ -88,6 +91,7 @@ export default async function ReviewerQueuePage() {
     { data: moduleRequests, error: moduleError },
     moduleTurnaroundHours,
     { data: awaitingDeliveryModules, error: awaitingDeliveryError },
+    { data: awaitingPaymentModules, error: awaitingPaymentModulesError },
     { data: scopedSprints, error: sprintsError },
     sessionRequests,
     pricing,
@@ -117,7 +121,7 @@ export default async function ReviewerQueuePage() {
     // action here, same as before.
     supabase
       .from("pending_evidence_submissions")
-      .select("id, status, edit_window_closes_at, submitted_at, companies(name)")
+      .select("id, status, edit_window_closes_at, submitted_at, payment_status, companies(name)")
       .neq("status", "completed"),
     supabase
       .from("module_requests")
@@ -147,6 +151,15 @@ export default async function ReviewerQueuePage() {
       .from("module_requests")
       .select("id, module_type, created_at, approved_at, companies(name)")
       .eq("status", "approved"),
+    // Module payment gate (confirmed 2026-09-06, direct founder decision)
+    // — a real request sitting here needs a real reviewer action (Mark as
+    // paid / Mark as unpaid) before it will ever move, same "this DOES
+    // need something from you" framing as the re-audit gate's own
+    // "Awaiting payment" section above.
+    supabase
+      .from("module_requests")
+      .select("id, module_type, payment_status, created_at, company_id, companies(name)")
+      .eq("status", "awaiting_payment"),
     supabase.from("execution_sprints").select("id, created_at, companies(name)").eq("status", "scoped"),
     listPendingSessionRequests(),
     listPricing(),
@@ -168,6 +181,9 @@ export default async function ReviewerQueuePage() {
   }
   if (awaitingDeliveryError) {
     return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {awaitingDeliveryError.message}</div>;
+  }
+  if (awaitingPaymentModulesError) {
+    return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {awaitingPaymentModulesError.message}</div>;
   }
   if (sprintsError) {
     return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {sprintsError.message}</div>;
@@ -249,8 +265,15 @@ export default async function ReviewerQueuePage() {
     const stage = computeSubmissionDisplayStage({
       status: r.status as "editing" | "audit_in_progress" | "completed",
       edit_window_closes_at: r.edit_window_closes_at as string,
+      payment_status: r.payment_status as "not_required" | "pending" | "paid",
     });
-    return { companyName: name, stage, submittedAt: r.submitted_at as string, editWindowClosesAt: r.edit_window_closes_at as string };
+    return {
+      id: r.id as string,
+      companyName: name,
+      stage,
+      submittedAt: r.submitted_at as string,
+      editWindowClosesAt: r.edit_window_closes_at as string,
+    };
   });
 
   // Split "Still with client" into two genuinely different states
@@ -265,6 +288,11 @@ export default async function ReviewerQueuePage() {
   // for display rather than lumped into one label.
   const stillEditing = pendingByCompany.filter((p) => p.stage === "editing");
   const queuedOrProcessing = pendingByCompany.filter((p) => p.stage === "queued_for_audit" || p.stage === "audit_in_progress");
+  // Re-audit payment gate (confirmed 2026-09-06) — its own distinct
+  // section, separate from "Queued, not yet processed" above: this isn't
+  // "no action needed yet," it's the one state on this page that DOES
+  // need a real reviewer action (Mark as paid) before it will ever move.
+  const awaitingPayment = pendingByCompany.filter((p) => p.stage === "awaiting_payment");
 
   // regulatoryStatus/sessionRequests/pricing/deliveryFeedback/
   // sprintQueueItems/sprintInterestRequests/allSprints are all already
@@ -735,6 +763,99 @@ export default async function ReviewerQueuePage() {
                 </span>
               </li>
             ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Re-audit payment gate (confirmed 2026-09-06, direct founder
+          decision) — its own distinct section, deliberately separate from
+          "Queued, not yet processed" above: that one genuinely needs
+          nothing from the reviewer; this one does. Scoped to rows whose
+          edit window has already closed (the exact same moment the admin
+          notification fires) — a re-audit still within its own edit
+          window is correctly not shown here yet, since payment isn't
+          blocking anything until the window actually closes. */}
+      {awaitingPayment.length > 0 && (
+        <div className="mt-8">
+          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">Awaiting payment</h2>
+          <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
+            The client&apos;s edit window has closed, but this re-audit hasn&apos;t been marked as paid yet — the
+            analysis is deliberately on hold until you confirm it below.
+          </p>
+          <ul className="space-y-2">
+            {awaitingPayment.map((p) => (
+              <li
+                key={p.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900"
+              >
+                <span>
+                  <span className="font-medium text-neutral-700 dark:text-neutral-300">{p.companyName}</span>{" "}
+                  <span className="text-neutral-500 dark:text-neutral-400">· submitted {new Date(p.submittedAt).toLocaleString()}</span>
+                </span>
+                <form action={markReaduitPaidAction.bind(null, p.id)}>
+                  <Button type="submit" className="px-2 py-1 text-xs">
+                    Mark as paid — start audit
+                  </Button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Module payment gate (confirmed 2026-09-06, direct founder
+          decision) — a genuinely separate mechanism from the re-audit
+          gate above (see module-payment-gate.ts's own docblock for why):
+          no cron, no edit window — a module request sits here
+          indefinitely until a reviewer explicitly marks it paid (runs the
+          real Groq analysis and moves it into "Ready for review" above)
+          or unpaid (a real, visible, revisable client-facing status). */}
+      {(awaitingPaymentModules ?? []).length > 0 && (
+        <div className="mt-8">
+          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">Module requests awaiting payment</h2>
+          <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
+            Submitted, but no analysis has run yet — deliberately on hold until you confirm payment below.
+          </p>
+          <ul className="space-y-2">
+            {(awaitingPaymentModules ?? []).map((r) => {
+              const companyName = (r.companies as unknown as { name: string } | null)?.name ?? "Unknown company";
+              const isUnpaid = r.payment_status === "unpaid";
+              return (
+                <li
+                  key={r.id as string}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900"
+                >
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Link href={`/company/${r.company_id ?? ""}`} className="font-medium text-accent hover:underline">
+                      {companyName}
+                    </Link>
+                    <TypeBadge type={moduleTypeToItemType(r.module_type as string)} />
+                    {isUnpaid && (
+                      <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-950 dark:text-red-300">
+                        Unpaid
+                      </span>
+                    )}
+                    <span className="text-neutral-500 dark:text-neutral-400">
+                      · submitted {new Date(r.created_at as string).toLocaleString()}
+                    </span>
+                  </span>
+                  <span className="flex gap-2">
+                    <form action={markModulePaidAction.bind(null, r.id as string)}>
+                      <Button type="submit" className="px-2 py-1 text-xs">
+                        Mark as paid — run analysis
+                      </Button>
+                    </form>
+                    {!isUnpaid && (
+                      <form action={markModuleUnpaidAction.bind(null, r.id as string)}>
+                        <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
+                          Mark as unpaid
+                        </Button>
+                      </form>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

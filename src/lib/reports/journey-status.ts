@@ -68,7 +68,7 @@ export interface JourneyStatus {
 export async function computeJourneyStatus(supabase: SupabaseClient, companyId: string): Promise<JourneyStatus> {
   const { data: pendingSubmission } = await supabase
     .from("pending_evidence_submissions")
-    .select("status, edit_window_closes_at, submitted_at")
+    .select("status, edit_window_closes_at, submitted_at, payment_status")
     .eq("company_id", companyId)
     .neq("status", "completed")
     .maybeSingle();
@@ -97,6 +97,7 @@ export async function computeJourneyStatus(supabase: SupabaseClient, companyId: 
     const stage = computeSubmissionDisplayStage({
       status: pendingSubmission.status as "editing" | "audit_in_progress" | "completed",
       edit_window_closes_at: pendingSubmission.edit_window_closes_at as string,
+      payment_status: pendingSubmission.payment_status as "not_required" | "pending" | "paid",
     });
     if (stage) {
       return { stage, latestReportId: null, editWindowClosesAt: pendingSubmission.edit_window_closes_at as string };

@@ -43,6 +43,18 @@ const COPY: Record<JourneyStatus["stage"], { title: string; body: string; ctaLab
     ctaLabel: "Check status",
     href: () => "/evidence-intake",
   },
+  // Re-audit payment gate (confirmed 2026-09-06) — a real, distinct stage
+  // from queued_for_audit above: the window has closed, but analysis is
+  // deliberately withheld until payment is confirmed. body is overridden
+  // below with the real re-audit price + Payoneer link, same treatment as
+  // "editing"'s own live countdown override — this static string is only
+  // the defensive fallback.
+  awaiting_payment: {
+    title: "Your evidence is saved — payment needed before analysis begins",
+    body: "This re-audit hasn't been marked as paid yet — pay via the link on the evidence page, and we'll start analyzing it once it's confirmed.",
+    ctaLabel: "Check status",
+    href: () => "/evidence-intake",
+  },
   audit_in_progress: {
     title: "Your evidence is being analyzed",
     // Corrected 2026-08-25 (real honest-testing finding, same fix applied

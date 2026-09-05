@@ -198,7 +198,7 @@ test("Document upload states, all 3 modules on one company, Concierge inquiry (e
   await page.getByRole("button", { name: "Submit for review" }).click();
   await expect(page.getByText(/you don't have existing documentation/i)).toBeVisible({ timeout: 10_000 });
   await page.getByRole("button", { name: "Yes, continue without documentation" }).click();
-  await expect(page.getByText(/Submitted for review/i)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Your request is submitted/i)).toBeVisible({ timeout: 30_000 });
   await step(page, testInfo, "11-combinatorial", "11-tr-submitted-no-docs");
 
   // --- Module #2 of 3: Data Protection Compliance, with a real valid-PDF upload on its own shared document field (covers the "valid PDF upload on a different module" case too) ---
@@ -208,7 +208,7 @@ test("Document upload states, all 3 modules on one company, Concierge inquiry (e
   await dpcFileInput.setInputFiles(validPdf);
   await expect(page.getByText(/Extracted text from/i)).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Submit for review" }).click();
-  await expect(page.getByText(/Submitted for review/i)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Your request is submitted/i)).toBeVisible({ timeout: 30_000 });
   await step(page, testInfo, "11-combinatorial", "12-dpc-submitted-with-pdf");
 
   // --- Module #3 of 3: AI Reliability Audit, agent/automation mode, hasTraceLogs=false (exercises the deterministic guaranteed finding), no document upload field on this module (confirmed by design) ---
@@ -217,7 +217,7 @@ test("Document upload states, all 3 modules on one company, Concierge inquiry (e
   await page.getByText("Agent / automation").click();
   await page.getByLabel(/What credentials\/permissions/i).fill("A shared internal service account with no per-run attribution.");
   await page.getByRole("button", { name: "Submit for review" }).click();
-  await expect(page.getByText(/Submitted for review/i)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Your request is submitted/i)).toBeVisible({ timeout: 30_000 });
   await step(page, testInfo, "11-combinatorial", "13-ai-reliability-submitted");
 
   // --- Concierge inquiry on the same company (module + Concierge combo, and the "everything at once" modules+Concierge combo since this company now has all 3 modules) ---
@@ -366,7 +366,7 @@ test("Reviewer queue, Dashboard stages, client finding interactions, notificatio
   await page.getByRole("button", { name: "Submit for review" }).click();
   await expect(page.getByText(/you don't have existing documentation/i)).toBeVisible({ timeout: 10_000 });
   await page.getByRole("button", { name: "Yes, continue without documentation" }).click();
-  await expect(page.getByText(/Submitted for review/i)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Your request is submitted/i)).toBeVisible({ timeout: 30_000 });
 
   // --- Dashboard, "active sprint" stage, alongside a real module request (module + Execution Sprint combo, on the same company) ---
   await page.goto("/dashboard");

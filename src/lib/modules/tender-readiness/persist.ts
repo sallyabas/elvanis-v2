@@ -1,29 +1,38 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { notifyReviewersOfNewModuleRequest } from "@/lib/reviewer/notifications";
+import { notifyReviewersOfNewModuleRequest, notifyReviewersOfModuleAwaitingPayment } from "@/lib/reviewer/notifications";
 import { isCompanyRequestUrgent } from "@/lib/onboarding/compute-request-urgency";
 import { runTenderReadinessAudit } from "./index";
 import type { TenderReadinessDraftInput } from "./types";
 
 /**
- * Runs the module and persists into the generic module_requests/
- * module_findings tables (same pattern as AI Reliability Audit, spec
- * §1.8b/§Generic module review architecture). Created directly in
- * `pending_review`, same precedent as the core audit and AI Reliability —
- * no client-facing "submit for review" edit-window flow exists yet.
+ * Module payment gate (confirmed 2026-09-06, direct founder decision) —
+ * closes a real, confirmed gap: this module ran a real, synchronous Groq
+ * call on every submission with zero payment check of any kind. Split
+ * into two real steps, no findings and no Groq call happen at submission
+ * time anymore:
  *
- * Notifies every reviewer on real submission (confirmed 2026-08-15, module
- * intake/service flow review) — closes a real gap: this previously fired
- * nothing at all, unlike a core-audit report's new_submission notification.
+ * 1. createAwaitingPaymentTenderReadinessRequest() — stores the raw
+ *    intake, creates the request in 'awaiting_payment' status, notifies
+ *    reviewers once. `intake_data` is deliberately the RAW input here,
+ *    not yet enriched with `applicability` — that's computed as a side
+ *    effect of the real audit run, which hasn't happened yet.
+ * 2. runTenderReadinessAnalysisAfterPayment() — the reviewer's own "Mark
+ *    as paid" action (see module-payment-gate.ts) calls this once a
+ *    request has been atomically claimed. Runs the real audit, persists
+ *    findings, and only THEN flips status to 'pending_review' and
+ *    payment_status to 'paid' — the same moment `intake_data` gets
+ *    enriched with `applicability` for the first time, since
+ *    review-module/[requestId]/page.tsx, evidence-pack.ts, and
+ *    procurement-answers.ts all read `intake_data.applicability` and
+ *    must never see it missing once a request is genuinely reviewable.
  */
-export async function runAndPersistTenderReadinessAudit(input: TenderReadinessDraftInput): Promise<{ requestId: string; findingCount: number }> {
-  const result = await runTenderReadinessAudit(input);
+export async function createAwaitingPaymentTenderReadinessRequest(input: TenderReadinessDraftInput): Promise<{ requestId: string }> {
   const supabase = createAdminClient();
 
-  // Urgency flag (confirmed 2026-08-27, Onboarding Architecture & Path
-  // Routing brief, Part 3/8f) — computed once, at creation, from the
-  // company's own current triage answer. See isCompanyRequestUrgent's own
-  // docblock for why this is a live read rather than a value threaded
-  // through the onboarding UI.
+  // Urgency flag (confirmed 2026-08-27) is a live signal derived from the
+  // company's own current triage answer — safe and correct to compute
+  // here at raw-submission time, independent of whether the analysis has
+  // run yet.
   const isUrgent = await isCompanyRequestUrgent(supabase, input.companyId);
 
   const { data: request, error: requestError } = await supabase
@@ -31,15 +40,36 @@ export async function runAndPersistTenderReadinessAudit(input: TenderReadinessDr
     .insert({
       module_type: "tender_readiness",
       company_id: input.companyId,
-      status: "pending_review",
-      intake_data: { ...input, applicability: result.applicability },
+      status: "awaiting_payment",
+      payment_status: "pending",
+      intake_data: input,
       is_urgent: isUrgent,
     })
     .select("id")
     .single();
-  if (requestError) throw new Error(`runAndPersistTenderReadinessAudit: failed to create request: ${requestError.message}`);
+  if (requestError) throw new Error(`createAwaitingPaymentTenderReadinessRequest: failed to create request: ${requestError.message}`);
 
   const requestId = request.id as string;
+  await notifyReviewersOfModuleAwaitingPayment(supabase, requestId);
+
+  return { requestId };
+}
+
+export async function runTenderReadinessAnalysisAfterPayment(requestId: string, rawInput: unknown): Promise<{ findingCount: number }> {
+  const input = rawInput as TenderReadinessDraftInput;
+  const result = await runTenderReadinessAudit(input);
+  const supabase = createAdminClient();
+
+  const { error: updateError } = await supabase
+    .from("module_requests")
+    .update({
+      status: "pending_review",
+      payment_status: "paid",
+      intake_data: { ...input, applicability: result.applicability },
+    })
+    .eq("id", requestId)
+    .eq("payment_status", "processing");
+  if (updateError) throw new Error(`runTenderReadinessAnalysisAfterPayment: failed to finalize request: ${updateError.message}`);
 
   if (result.findings.length > 0) {
     const { error: findingsError } = await supabase.from("module_findings").insert(
@@ -51,10 +81,10 @@ export async function runAndPersistTenderReadinessAudit(input: TenderReadinessDr
         is_missing_data_finding: f.isMissingDataFinding,
       })),
     );
-    if (findingsError) throw new Error(`runAndPersistTenderReadinessAudit: failed to persist findings: ${findingsError.message}`);
+    if (findingsError) throw new Error(`runTenderReadinessAnalysisAfterPayment: failed to persist findings: ${findingsError.message}`);
   }
 
   await notifyReviewersOfNewModuleRequest(supabase);
 
-  return { requestId, findingCount: result.findings.length };
+  return { findingCount: result.findings.length };
 }

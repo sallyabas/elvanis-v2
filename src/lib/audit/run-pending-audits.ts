@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runAudit } from "./run-audit";
 import { loadCompanyProfileForLens, loadGoalContext } from "./load-profile";
-import { notifyReviewersOfNewSubmission } from "@/lib/reviewer/notifications";
+import { notifyReviewersOfNewSubmission, notifyReviewersOfAwaitingPayment } from "@/lib/reviewer/notifications";
 import type { EvidenceFieldInput } from "@/lib/lenses/types";
 import type { CommercialSelfReport } from "@/lib/lenses/commercial";
 import type { GovernanceDimensionKey } from "@/lib/lenses/ai-governance-framework";
@@ -57,6 +57,16 @@ export interface RunPendingAuditsResult {
   processedReportIds: string[];
   /** Company IDs whose audit failed this tick and remain queued for retry on a later tick — not a permanent failure state, no dead-letter cap in this pass (see the migration's own docblock for why). */
   stillPending: string[];
+  /**
+   * Re-audit payment gate (confirmed 2026-09-06) — company IDs whose
+   * re-audit is genuinely due (window closed) but deliberately WITHHELD
+   * because payment_status is still 'pending'. Kept separate from
+   * stillPending above (a real claim race or audit failure) since this is
+   * a deliberate hold, not a failure — a reviewer must mark it paid
+   * (see reaudit-payment.ts's markReaduitPaid()) before this function will
+   * ever process it. Useful for direct verification of this exact flow.
+   */
+  awaitingPayment: string[];
 }
 
 /**
@@ -157,6 +167,25 @@ export async function runAuditForClaimedSubmission(supabase: SupabaseClient, row
       customerType: company.customerType,
     });
 
+    // rerun_of_report_id linking (confirmed 2026-09-06, direct founder
+    // decision) — closes a real, confirmed gap: this client-initiated
+    // path never linked a re-audit back to its predecessor at all, unlike
+    // the reviewer's own separate QA rerunAudit() tool, which always has.
+    // Links to the immediately-prior SENT report specifically (never the
+    // very first one), so repeat re-audits form a real chain
+    // (3rd → 2nd → 1st), not everything pointing at one root — the
+    // "traceable progress over time" the founder asked this for. A
+    // company's genuinely first-ever audit has no prior sent report, so
+    // this is null for it, same as today.
+    const { data: priorSentReport } = await supabase
+      .from("reports")
+      .select("id")
+      .eq("company_id", row.company_id)
+      .eq("status", "sent")
+      .order("delivered_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
     const result = await runAudit({
       companyId: row.company_id,
       company,
@@ -168,6 +197,7 @@ export async function runAuditForClaimedSubmission(supabase: SupabaseClient, row
       commercial: { selfReport: payload.commercial, independentResearch },
       aiGovernance: payload.aiGovernance,
       sourceEvidenceSnapshot: payload as unknown as Record<string, unknown>,
+      rerunOfReportId: (priorSentReport?.id as string | undefined) ?? null,
       // Real bug found and fixed live (confirmed 2026-08-10) — without
       // this, runAudit() computes a fresh "now + edit_window_hours" for
       // the new report, stacking a second 24h reviewer-visibility delay
@@ -228,10 +258,39 @@ export async function runPendingAudits(): Promise<RunPendingAuditsResult> {
 
   const { data: dueEditing, error: dueError } = await supabase
     .from("pending_evidence_submissions")
-    .select("id, company_id, goal_id, evidence_payload, submitted_at, edit_window_closes_at")
+    .select("id, company_id, goal_id, evidence_payload, submitted_at, edit_window_closes_at, payment_status, payment_notified_at")
     .eq("status", "editing")
     .lte("edit_window_closes_at", now.toISOString());
   if (dueError) throw new Error(`runPendingAudits: failed to load due rows: ${dueError.message}`);
+
+  // Re-audit payment gate (confirmed 2026-09-06) — a due row whose
+  // payment_status is still 'pending' is deliberately NEVER claimed by
+  // this function; the audit run is withheld until a reviewer marks it
+  // paid (see reaudit-payment.ts's markReaduitPaid()). Notified exactly
+  // once per row (payment_notified_at is the idempotency guard, same
+  // pattern as reports.reviewer_notified_at) — without it, this same row
+  // would re-notify the admin every single tick for as long as it sits
+  // unpaid. Left at raw status='editing' the whole time;
+  // computeSubmissionDisplayStage() already derives this as
+  // "awaiting_payment" for the client/reviewer UI (see submission-status.ts).
+  const awaitingPaymentRows = (dueEditing ?? []).filter((r) => r.payment_status === "pending");
+  const claimableEditingRows = (dueEditing ?? []).filter((r) => r.payment_status !== "pending");
+
+  for (const row of awaitingPaymentRows) {
+    if (row.payment_notified_at) continue; // already notified once — nothing more to do here until a reviewer acts
+    try {
+      await notifyReviewersOfAwaitingPayment(supabase, row.id as string);
+      const { error: notifiedError } = await supabase
+        .from("pending_evidence_submissions")
+        .update({ payment_notified_at: now.toISOString() })
+        .eq("id", row.id);
+      if (notifiedError) {
+        console.error(`runPendingAudits: notified reviewers of awaiting-payment row ${row.id} but failed to stamp payment_notified_at`, notifiedError);
+      }
+    } catch (err) {
+      console.error(`runPendingAudits: failed to notify reviewers of awaiting-payment row ${row.id}`, err);
+    }
+  }
 
   const { data: staleInProgress, error: staleError } = await supabase
     .from("pending_evidence_submissions")
@@ -252,7 +311,7 @@ export async function runPendingAudits(): Promise<RunPendingAuditsResult> {
   // call bug this whole architecture exists to prevent, just reintroduced
   // through a new second caller instead of the original resubmit bug.
   const rows = [
-    ...(dueEditing ?? []).map((r) => ({ ...r, previousStatus: "editing" as const })),
+    ...claimableEditingRows.map((r) => ({ ...r, previousStatus: "editing" as const })),
     ...(staleInProgress ?? []).map((r) => ({ ...r, previousStatus: "audit_in_progress" as const })),
   ] as (ClaimedPendingRow & { previousStatus: "editing" | "audit_in_progress" })[];
 
@@ -289,5 +348,5 @@ export async function runPendingAudits(): Promise<RunPendingAuditsResult> {
     }
   }
 
-  return { processedReportIds, stillPending };
+  return { processedReportIds, stillPending, awaitingPayment: awaitingPaymentRows.map((r) => r.company_id as string) };
 }

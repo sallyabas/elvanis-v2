@@ -363,3 +363,135 @@ export async function seedHealthyDeliveredReport(): Promise<{ clientEmail: strin
 
   return { clientEmail, companyId: company.id as string, companyName, reportId: report.id as string };
 }
+
+/**
+ * Re-audit payment gate fixtures (confirmed 2026-09-06) — minimal, no
+ * findings needed: both specs this feeds only need a real `reports` row
+ * in a specific status for the company, nothing about its content.
+ */
+export interface SeededReaduitFixture {
+  clientEmail: string;
+  companyId: string;
+  companyName: string;
+  reportId: string;
+}
+
+async function seedClientWithOneReport(status: "sent" | "pending_review"): Promise<SeededReaduitFixture> {
+  const supabase = createTestAdminClient();
+
+  const clientEmail = freshTestEmail("reaudit-client");
+  const companyName = `Playwright Re-audit Co ${Date.now()}`;
+
+  const { data: clientAuth, error: clientAuthError } = await supabase.auth.admin.createUser({ email: clientEmail, email_confirm: true });
+  if (clientAuthError || !clientAuth.user) throw new Error(`seed: create re-audit client auth failed: ${clientAuthError?.message}`);
+  await supabase.from("users").upsert({ id: clientAuth.user.id, email: clientEmail, role: "client" }, { onConflict: "id" });
+
+  // Real reviewer account for reviewed_by (only actually needed for the
+  // 'sent' case's mandatory-review-gate check constraint) — same pattern
+  // as every other seed helper in this file (e.g. seedHealthyDeliveredReport),
+  // not a shortcut using the client's own id.
+  const reviewerEmail = freshTestEmail("reaudit-reviewer");
+  const { data: reviewerAuth, error: reviewerAuthError } = await supabase.auth.admin.createUser({ email: reviewerEmail, email_confirm: true });
+  if (reviewerAuthError || !reviewerAuth.user) throw new Error(`seed: create re-audit reviewer auth failed: ${reviewerAuthError?.message}`);
+  await supabase.from("users").upsert({ id: reviewerAuth.user.id, email: reviewerEmail, role: "reviewer" }, { onConflict: "id" });
+
+  const { data: company, error: companyError } = await supabase
+    .from("companies")
+    .insert({ user_id: clientAuth.user.id, name: companyName, privacy_acknowledged_at: new Date().toISOString(), entry_path: "diagnosis" })
+    .select("id")
+    .single();
+  if (companyError || !company) throw new Error(`seed: create re-audit company failed: ${companyError?.message}`);
+
+  const { data: goal, error: goalError } = await supabase
+    .from("goals")
+    .insert({ company_id: company.id, primary_goal: "cash_flow_margin_efficiency" })
+    .select("id")
+    .single();
+  if (goalError || !goal) throw new Error(`seed: create re-audit goal failed: ${goalError?.message}`);
+
+  const now = new Date();
+  const reportInsert: Record<string, unknown> = {
+    company_id: company.id,
+    goal_id: goal.id,
+    status,
+    submitted_at: now.toISOString(),
+    edit_window_closes_at: now.toISOString(),
+    failed_lenses: [],
+  };
+  // A 'sent' report needs the real mandatory-review-gate fields the DB
+  // check constraint requires; a 'pending_review' one (Rule 1's own test
+  // case) deliberately has none of these yet, matching a genuinely
+  // still-in-review report.
+  if (status === "sent") {
+    reportInsert.reviewed_by = reviewerAuth.user.id;
+    reportInsert.approved_at = now.toISOString();
+    reportInsert.delivered_at = now.toISOString();
+  }
+  const { data: report, error: reportError } = await supabase.from("reports").insert(reportInsert).select("id").single();
+  if (reportError || !report) throw new Error(`seed: create re-audit report failed: ${reportError?.message}`);
+
+  return { clientEmail, companyId: company.id as string, companyName, reportId: report.id as string };
+}
+
+/** A company whose first (and only) audit has already been delivered — isFreeAudit is false, journeyStatus is "has_report". Drives the Part 2 payment-gate popup. */
+export async function seedClientWithSentReport(): Promise<SeededReaduitFixture> {
+  return seedClientWithOneReport("sent");
+}
+
+/** A company whose first audit is still in review (pending_review, never delivered) — journeyStatus is "in_review". Drives Rule 1's hard block. */
+export async function seedClientWithUndeliveredReport(): Promise<SeededReaduitFixture> {
+  return seedClientWithOneReport("pending_review");
+}
+
+/**
+ * Minimal real client + reviewer + company, no report and no module
+ * requests (confirmed 2026-09-06, module payment gate) — the module
+ * payment gate spec needs a real, already-onboarded client (so
+ * /tender-readiness etc. render past the (app) layout gate) AND a real
+ * reviewer to log in as (unlike seedMinimalClient(), which has no
+ * reviewer at all) to exercise /queue's new "Module requests awaiting
+ * payment" section. No report needed — this test is entirely about the
+ * standalone-module submission/payment flow, not the core audit.
+ */
+export async function seedModulePaymentGateFixture(): Promise<{ clientEmail: string; reviewerEmail: string; companyId: string; companyName: string }> {
+  const supabase = createTestAdminClient();
+
+  const clientEmail = freshTestEmail("module-payment-client");
+  const reviewerEmail = freshTestEmail("module-payment-reviewer");
+  const companyName = `Playwright Module Payment Co ${Date.now()}`;
+
+  const { data: clientAuth, error: clientAuthError } = await supabase.auth.admin.createUser({ email: clientEmail, email_confirm: true });
+  if (clientAuthError || !clientAuth.user) throw new Error(`seed: create client auth user failed: ${clientAuthError?.message}`);
+
+  const { data: reviewerAuth, error: reviewerAuthError } = await supabase.auth.admin.createUser({ email: reviewerEmail, email_confirm: true });
+  if (reviewerAuthError || !reviewerAuth.user) throw new Error(`seed: create reviewer auth user failed: ${reviewerAuthError?.message}`);
+
+  const { error: clientRowError } = await supabase.from("users").upsert({ id: clientAuth.user.id, email: clientEmail, role: "client" }, { onConflict: "id" });
+  if (clientRowError) throw new Error(`seed: upsert client users row failed: ${clientRowError.message}`);
+
+  const { error: reviewerRowError } = await supabase
+    .from("users")
+    .upsert({ id: reviewerAuth.user.id, email: reviewerEmail, role: "reviewer" }, { onConflict: "id" });
+  if (reviewerRowError) throw new Error(`seed: upsert reviewer users row failed: ${reviewerRowError.message}`);
+
+  const { data: company, error: companyError } = await supabase
+    .from("companies")
+    .insert({
+      user_id: clientAuth.user.id,
+      name: companyName,
+      privacy_acknowledged_at: new Date().toISOString(),
+      entry_path: "diagnosis",
+      // Real EU customer market (not just UK) so EU AI Act genuinely
+      // applies — a UK-only company correctly produces zero findings by
+      // design (see CLAUDE.md's own documented "Sally" case), which
+      // would make this test's own "real analysis genuinely ran" proof
+      // ambiguous with "analysis never ran at all."
+      registration_country: "United Kingdom",
+      customer_market_countries: ["Germany"],
+    })
+    .select("id")
+    .single();
+  if (companyError || !company) throw new Error(`seed: create company failed: ${companyError?.message}`);
+
+  return { clientEmail, reviewerEmail, companyId: company.id as string, companyName };
+}

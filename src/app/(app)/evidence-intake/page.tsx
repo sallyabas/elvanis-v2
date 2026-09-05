@@ -10,10 +10,12 @@ import { SessionRequestButton } from "@/app/_components/SessionRequestButton";
 import { ProgressStepper } from "@/app/_components/ProgressStepper";
 import { computeJourneyStatus } from "@/lib/reports/journey-status";
 import { SUBMISSION_STAGE_LABELS } from "@/lib/evidence/submission-status";
+import { getPricingItem, formatPrice } from "@/lib/pricing";
+import { REAUDIT_PAYONEER_LINK } from "@/lib/reaudit-payment-link";
 import { Card } from "@/app/_components/ui/Card";
-import { Alert } from "@/app/_components/ui/Alert";
 import { EvidenceSubmittedDisclosure, type EvidenceSnapshotShape } from "@/app/_components/EvidenceSubmittedDisclosure";
 import { EvidenceIntakeForm } from "./EvidenceIntakeForm";
+import { ReAuditPaymentGate } from "./ReAuditPaymentGate";
 
 /**
  * Real root cause found in production 2026-08-15 (see tender-readiness's
@@ -85,6 +87,14 @@ export default async function EvidenceIntakePage() {
   const { data: priorSentReports } = await supabase.from("reports").select("id").eq("company_id", companyId).eq("status", "sent").limit(1);
   const isFreeAudit = (priorSentReports ?? []).length === 0;
 
+  // Re-audit payment gate (confirmed 2026-09-06) — real, DB-backed price,
+  // same "never a hardcoded literal" discipline as every other price this
+  // app displays. Fallback only covers a genuinely missing DB row (should
+  // never happen once the seed migration has run), never a silently wrong
+  // number the client could actually be shown.
+  const readuitPricing = await getPricingItem("core_audit_reaudit");
+  const readuitPriceLabel = formatPrice(readuitPricing ?? { priceAmount: 149, currency: "GBP" });
+
   const journeyStatus = await computeJourneyStatus(createAdminClient(), companyId);
 
   // Locked view (confirmed 2026-08-10) — the client's evidence exists but
@@ -103,8 +113,25 @@ export default async function EvidenceIntakePage() {
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
             {activeSubmission.stage === "queued_for_audit"
               ? "The window for changes has closed. Your evidence is locked and waiting for the scheduled analysis run — check back shortly."
-              : "Your evidence is being analyzed right now. This usually takes a minute or two."}
+              : activeSubmission.stage === "awaiting_payment"
+                ? `Your evidence is saved, but this re-audit hasn't been marked as paid yet — your reviewer has been notified. Pay ${readuitPriceLabel} via the link below and we'll start your analysis once it's confirmed.`
+                : "Your evidence is being analyzed right now. This usually takes a minute or two."}
           </p>
+          {/* Real addition (confirmed 2026-09-06, direct founder
+              go-ahead) — a client who dismissed the original gate popup
+              without paying, or paid after their edit window already
+              closed, otherwise has no way back to the payment link from
+              this locked view. */}
+          {activeSubmission.stage === "awaiting_payment" && (
+            <a
+              href={REAUDIT_PAYONEER_LINK}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-block rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover"
+            >
+              Pay via Payoneer
+            </a>
+          )}
           {/* Real submission/edit dates (confirmed 2026-08-12, real bug
               list item #4) — this locked view previously showed a status
               label and nothing else, no indication of when the evidence
@@ -158,28 +185,53 @@ export default async function EvidenceIntakePage() {
   const rawDraft = await loadEvidenceIntakeDraft(companyId);
   const draft = rawDraft ?? (activeSubmission ? evidencePayloadToDraft(activeSubmission.evidencePayload as unknown as EvidencePayload) : null);
 
-  // Informational note (confirmed 2026-08-10) — distinct from the locked
-  // view above: this is the case where no submission is active for THIS
-  // cycle, but a PRIOR cycle's report still exists and hasn't been
-  // delivered yet (pending_review/approved). Submitting now is allowed
-  // (starts a fresh cycle, per the existing re-audit principle) — this is
-  // just honesty about what happens, not a block.
-  const priorCycleInProgress = !activeSubmission && journeyStatus.stage === "in_review";
+  // Rule 1 (confirmed 2026-09-06, direct founder decision — reverses the
+  // earlier 2026-08-10 design, which explicitly framed this as
+  // "informational... not a block"): a prior cycle's report still exists
+  // and hasn't been delivered yet (pending_review/approved) — a client
+  // cannot start a NEW submission while it's still active. journeyStatus
+  // already computes exactly this signal (computeJourneyStatus() returns
+  // "in_review" whenever the company's own most recent report isn't
+  // "sent" yet) — no new query needed, this is purely a change in what
+  // the page DOES with a condition it already had. Applies regardless of
+  // isFreeAudit: even a company's genuinely first-ever audit sitting in
+  // review blocks a second submission — "one active cycle at a time" is
+  // universal, not specific to paid re-audits.
+  const hasUndeliveredPriorReport = !activeSubmission && journeyStatus.stage === "in_review";
 
-  return (
-    <div className="mx-auto max-w-2xl px-6 py-10">
-      <ProgressStepper journeyStatus={journeyStatus} />
+  if (hasUndeliveredPriorReport) {
+    return (
+      <div className="mx-auto max-w-2xl px-6 py-10">
+        <ProgressStepper journeyStatus={journeyStatus} />
+        <Card className="text-center">
+          <h1 className="mb-2 text-xl font-semibold text-neutral-900 dark:text-neutral-50">Your previous audit is still being reviewed</h1>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            You&apos;ll be able to submit new evidence once it&apos;s delivered — only one audit cycle can be active
+            at a time.
+          </p>
+        </Card>
+        <div className="mt-6">
+          <SessionRequestButton companyId={companyId} sessionType="discovery" />
+        </div>
+      </div>
+    );
+  }
+
+  // Re-audit payment gate, Part 2 (confirmed 2026-09-06) — shown ONLY
+  // before this cycle's own pending_evidence_submissions row exists yet
+  // (activeSubmission === null): once it exists, the client already
+  // passed this gate to create it in the first place (row creation only
+  // ever happens via this same form's own Submit action), so it's
+  // deliberately not re-shown to someone already mid-edit.
+  const showReaduitGate = !activeSubmission && !isFreeAudit;
+
+  const formSection = (
+    <>
       <h1 className="mb-1 text-2xl font-semibold">Submit your evidence</h1>
       <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
         Fill in what you can for each area below — leaving something blank is meaningful too, not an incomplete
         submission.
       </p>
-      {priorCycleInProgress && (
-        <Alert variant="warning" className="mb-4">
-          You have a report from an earlier submission still being reviewed. Submitting now starts a separate, new
-          audit cycle rather than changing that one.
-        </Alert>
-      )}
       <div className="mb-8">
         <SessionRequestButton companyId={companyId} sessionType="discovery" />
       </div>
@@ -198,6 +250,19 @@ export default async function EvidenceIntakePage() {
         initialHasAiInProduction={company.has_ai_in_production as boolean | null}
         privacyAlreadyAcknowledged={company.privacy_acknowledged_at !== null}
       />
+    </>
+  );
+
+  return (
+    <div className="mx-auto max-w-2xl px-6 py-10">
+      <ProgressStepper journeyStatus={journeyStatus} />
+      {showReaduitGate ? (
+        <ReAuditPaymentGate priceLabel={readuitPriceLabel} paymentLink={REAUDIT_PAYONEER_LINK}>
+          {formSection}
+        </ReAuditPaymentGate>
+      ) : (
+        formSection
+      )}
     </div>
   );
 }

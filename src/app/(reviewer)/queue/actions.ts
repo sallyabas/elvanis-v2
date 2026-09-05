@@ -6,6 +6,8 @@ import { updatePricingItem } from "@/lib/pricing";
 import { replyToSprintQueueItem } from "@/lib/execution-sprint/workspace";
 import { resolveSprintInterestRequest } from "@/lib/execution-sprint/interest-requests";
 import { resolveContactRequest } from "@/lib/reviewer/contact-requests";
+import { markReaduitPaid } from "@/lib/reviewer/reaudit-payment";
+import { markModulePaidAndRunAnalysis, markModuleUnpaid } from "@/lib/reviewer/module-payment-gate";
 import { createClient } from "@/lib/supabase/server";
 
 // Same independent session+role re-check as every other reviewer Server
@@ -114,5 +116,44 @@ export async function resolveSprintInterestRequestAction(requestId: string) {
 export async function resolveContactRequestAction(id: string) {
   await getReviewerId();
   await resolveContactRequest(id);
+  revalidatePath("/queue");
+}
+
+/**
+ * Re-audit payment gate (confirmed 2026-09-06) — the reviewer's own
+ * "Mark as paid" action, the one thing that moves an awaiting-payment
+ * re-audit forward (see reaudit-payment.ts's markReaduitPaid() for the
+ * real atomic-claim-and-run logic; this is just the session+role-checked
+ * wrapper, same pattern as every other action in this file). Throws on a
+ * real failure rather than silently no-opping — same plain-form
+ * convention already used on this page, where an action's own exception
+ * is the error-surfacing mechanism.
+ */
+export async function markReaduitPaidAction(pendingSubmissionId: string) {
+  await getReviewerId();
+  const result = await markReaduitPaid(pendingSubmissionId);
+  if (!result.success) throw new Error(result.error ?? "Failed to mark as paid.");
+  revalidatePath("/queue");
+}
+
+/**
+ * Module payment gate (confirmed 2026-09-06, direct founder decision) —
+ * the reviewer's own "Mark as paid" action for the three standalone
+ * modules. Runs the real, synchronous Groq call inline (see
+ * module-payment-gate.ts's own docblock for why there's no cron to
+ * hand this off to) — same independent session+role re-check as every
+ * other reviewer Server Action in this file.
+ */
+export async function markModulePaidAction(requestId: string) {
+  await getReviewerId();
+  const result = await markModulePaidAndRunAnalysis(requestId);
+  if (!result.success) throw new Error(result.error ?? "Failed to mark as paid.");
+  revalidatePath("/queue");
+}
+
+export async function markModuleUnpaidAction(requestId: string) {
+  await getReviewerId();
+  const result = await markModuleUnpaid(requestId);
+  if (!result.success) throw new Error(result.error ?? "Failed to mark as unpaid.");
   revalidatePath("/queue");
 }

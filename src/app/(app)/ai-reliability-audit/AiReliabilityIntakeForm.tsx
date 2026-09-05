@@ -14,7 +14,15 @@ import { ModuleStartConfirm } from "@/app/_components/ModuleStartConfirm";
 import { ContactUsForm } from "@/app/_components/ContactUsForm";
 import { MODULE_META } from "@/lib/modules/module-meta";
 
-export function AiReliabilityIntakeForm({ companyId, reviewPeriodHours }: { companyId: string; reviewPeriodHours: number }) {
+export function AiReliabilityIntakeForm({
+  companyId,
+  priceLabel,
+  paymentLink,
+}: {
+  companyId: string;
+  priceLabel?: string;
+  paymentLink: string;
+}) {
   const [systemType, setSystemType] = useState<AiReliabilitySystemType | null>(null);
   const [responses, setResponses] = useState<Record<number, string>>({});
   const [evidence, setEvidence] = useState<AgentAutomationEvidence>({
@@ -82,6 +90,7 @@ export function AiReliabilityIntakeForm({ companyId, reviewPeriodHours }: { comp
         <ModuleStartConfirm
           label={MODULE_META.ai_reliability.label}
           description={MODULE_META.ai_reliability.description}
+          priceLabel={priceLabel}
           onContinue={() => setStatus("idle")}
         />
       </div>
@@ -92,7 +101,7 @@ export function AiReliabilityIntakeForm({ companyId, reviewPeriodHours }: { comp
     return (
       <div className="mx-auto max-w-2xl px-6 py-10">
         <h1 className="mb-2 text-2xl font-semibold">AI Reliability Audit</h1>
-        <ModuleSubmittedNotice reviewPeriodHours={reviewPeriodHours} />
+        <ModuleSubmittedNotice paymentLink={paymentLink} priceLabel={priceLabel} />
       </div>
     );
   }
@@ -112,10 +121,8 @@ export function AiReliabilityIntakeForm({ companyId, reviewPeriodHours }: { comp
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-lg dark:bg-neutral-900">
         <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-neutral-200 border-t-accent dark:border-neutral-700" aria-hidden="true" />
-        <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Analyzing your submission…</h3>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          We&apos;re running the adversarial-testing analysis against your evidence. This usually takes a minute or two — please don&apos;t close this tab.
-        </p>
+        <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Saving your submission…</h3>
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">This only takes a moment.</p>
       </div>
     </div>
   );

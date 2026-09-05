@@ -11,7 +11,7 @@ import { computeCascadeSignals, type FindingForCascade } from "@/lib/recommendat
 import { computeJourneyStatus } from "@/lib/reports/journey-status";
 import { loadGoalMetricTrend, type MetricTrend } from "@/lib/goals/metric-trend";
 import { aggregateFinancialImpact, formatCurrencyRange, isUsableFinancialImpact } from "@/lib/reports/financial-impact";
-import { MODULE_META, MODULE_ORDER, MODULE_STATUS_LABELS, type ModuleType } from "@/lib/modules/module-meta";
+import { MODULE_META, MODULE_ORDER, moduleClientStatusLabel, type ModuleType } from "@/lib/modules/module-meta";
 import { getSettingNumber } from "@/lib/app-settings";
 import { TYPE_LABELS, sessionTypeToItemType } from "@/lib/item-type-badge";
 import { humanizeStatus, SESSION_STATUS_LABELS } from "@/lib/format";
@@ -148,7 +148,7 @@ export default async function DashboardPage() {
     // as computeJourneyStatus() above.
     admin
       .from("module_requests")
-      .select("id, module_type, status, created_at, delivered_at")
+      .select("id, module_type, status, payment_status, created_at, delivered_at")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false }),
     // Real, confirmed dead-end fix (2026-08-28) — "no completed
@@ -173,9 +173,13 @@ export default async function DashboardPage() {
       .maybeSingle(),
     admin
       .from("module_requests")
-      .select("id, module_type, status, created_at, approved_at")
+      .select("id, module_type, status, payment_status, created_at, approved_at")
       .eq("company_id", companyId)
-      .in("status", ["pending_review", "approved"])
+      // Module payment gate (confirmed 2026-09-06) — 'awaiting_payment'
+      // added so a request sitting there (or explicitly marked 'unpaid')
+      // still shows on Dashboard, not silently invisible until a reviewer
+      // marks it paid and it advances to pending_review.
+      .in("status", ["awaiting_payment", "pending_review", "approved"])
       .order("created_at", { ascending: false }),
     supabase
       .from("session_requests")
@@ -350,6 +354,11 @@ export default async function DashboardPage() {
       : "Your evidence is saved — you're still in your edit window, not with your reviewer yet.";
   } else if (journeyStatus.stage === "queued_for_audit") {
     subtitleLine1 = "Your edit window has closed — your evidence is queued for analysis.";
+  } else if (journeyStatus.stage === "awaiting_payment") {
+    // Re-audit payment gate (confirmed 2026-09-06) — a real, distinct
+    // stage from queued_for_audit above: the window has closed, but
+    // analysis is deliberately withheld until payment is confirmed.
+    subtitleLine1 = "Your edit window has closed — this re-audit is awaiting payment confirmation before analysis begins.";
   } else if (journeyStatus.stage === "audit_in_progress") {
     subtitleLine1 = "Your evidence is being analyzed right now.";
   } else if (journeyStatus.stage === "in_review") {
@@ -586,10 +595,16 @@ export default async function DashboardPage() {
             <>
               <p className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{MODULE_META[mostRecentModuleRequest.module_type as ModuleType].label}</p>
               <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">
-                {MODULE_STATUS_LABELS[mostRecentModuleRequest.status as string] ?? humanizeStatus(mostRecentModuleRequest.status as string)}
+                {moduleClientStatusLabel(mostRecentModuleRequest.status as string, mostRecentModuleRequest.payment_status as string | null)}
               </p>
               {mostRecentModuleRequest.status === "sent" ? (
                 <LinkButton href={`/services/module/${mostRecentModuleRequest.id}`}>View your findings</LinkButton>
+              ) : mostRecentModuleRequest.status === "awaiting_payment" ? (
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  {mostRecentModuleRequest.payment_status === "unpaid"
+                    ? "Your reviewer checked and hasn't received payment yet — complete payment to continue."
+                    : "Complete payment to start the real analysis — see your request below for the payment link."}
+                </p>
               ) : (
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">You&apos;ll get an email the moment this is ready to view.</p>
               )}
@@ -1044,8 +1059,24 @@ export default async function DashboardPage() {
               return (
                 <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
                   <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{meta?.label ?? r.module_type}</h3>
-                  <p className="mb-1 text-accent">{MODULE_STATUS_LABELS[r.status as string] ?? r.status}</p>
-                  <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">{MODULE_EXPLANATION[r.status as string] ?? ""}</p>
+                  <p className="mb-1 text-accent">{moduleClientStatusLabel(r.status as string, r.payment_status as string | null)}</p>
+                  <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">
+                    {r.status === "awaiting_payment"
+                      ? r.payment_status === "unpaid"
+                        ? "Your reviewer checked and hasn't received payment yet — complete payment to continue."
+                        : "No analysis has started yet — complete payment to begin."
+                      : (MODULE_EXPLANATION[r.status as string] ?? "")}
+                  </p>
+                  {r.status === "awaiting_payment" && meta && (
+                    <a
+                      href={meta.paymentLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mb-1 inline-block text-xs font-medium text-accent underline hover:text-accent-hover"
+                    >
+                      Continue to payment →
+                    </a>
+                  )}
                   <p className="text-neutral-500 dark:text-neutral-400">Submitted {new Date(r.created_at as string).toLocaleDateString()}</p>
                   {isModuleOverdue(r.status as string, r.created_at as string) && r.approved_at && (
                     <p className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">

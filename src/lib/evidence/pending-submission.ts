@@ -13,6 +13,8 @@ import type { EvidencePayload } from "@/lib/audit/run-pending-audits";
  * the full "why."
  */
 
+export type ReaduitPaymentStatus = "not_required" | "pending" | "paid";
+
 export interface PendingEvidenceSubmissionRecord {
   id: string;
   companyId: string;
@@ -24,6 +26,8 @@ export interface PendingEvidenceSubmissionRecord {
   submittedAt: string;
   /** Last touched (new column, confirmed 2026-08-12) — same value as submittedAt until a real in-window edit happens. */
   updatedAt: string;
+  /** Re-audit payment gate (confirmed 2026-09-06) — set once at creation, never recomputed. See computeSubmissionDisplayStage()'s own docblock for how this feeds the derived "awaiting_payment" stage. */
+  paymentStatus: ReaduitPaymentStatus;
 }
 
 /** The one active (non-'completed') pending submission for a company, if any — null if this company has none in flight right now. */
@@ -31,7 +35,7 @@ export async function loadActivePendingEvidenceSubmission(companyId: string): Pr
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("pending_evidence_submissions")
-    .select("id, company_id, goal_id, evidence_payload, status, edit_window_closes_at, submitted_at, updated_at")
+    .select("id, company_id, goal_id, evidence_payload, status, edit_window_closes_at, submitted_at, updated_at, payment_status")
     .eq("company_id", companyId)
     .neq("status", "completed")
     .maybeSingle();
@@ -41,6 +45,7 @@ export async function loadActivePendingEvidenceSubmission(companyId: string): Pr
   const stage = computeSubmissionDisplayStage({
     status: data.status as "editing" | "audit_in_progress" | "completed",
     edit_window_closes_at: data.edit_window_closes_at as string,
+    payment_status: data.payment_status as ReaduitPaymentStatus,
   });
   if (!stage) return null; // defensive — neq('completed') should already exclude this
 
@@ -53,6 +58,7 @@ export async function loadActivePendingEvidenceSubmission(companyId: string): Pr
     editWindowClosesAt: data.edit_window_closes_at as string,
     submittedAt: data.submitted_at as string,
     updatedAt: data.updated_at as string,
+    paymentStatus: data.payment_status as ReaduitPaymentStatus,
   };
 }
 
@@ -83,7 +89,7 @@ export async function upsertPendingEvidenceSubmission(input: UpsertPendingEviden
 
   const { data: existing, error: existingError } = await supabase
     .from("pending_evidence_submissions")
-    .select("id, status, edit_window_closes_at")
+    .select("id, status, edit_window_closes_at, payment_status")
     .eq("company_id", input.companyId)
     .neq("status", "completed")
     .maybeSingle();
@@ -93,6 +99,22 @@ export async function upsertPendingEvidenceSubmission(input: UpsertPendingEviden
     const editWindowHours = await getSettingNumber("edit_window_hours", 24);
     const now = new Date();
     const closesAt = new Date(now.getTime() + editWindowHours * 60 * 60 * 1000);
+    // Re-audit payment gate (confirmed 2026-09-06) — decided ONCE, right
+    // here, at the moment a brand-new cycle's row is actually created:
+    // 'not_required' for this company's genuinely first/free audit,
+    // 'pending' for every subsequent one. Same "compute now, don't
+    // recompute later" principle as edit_window_closes_at above — this
+    // never gets re-evaluated once set, regardless of what happens to the
+    // company's report history afterward.
+    const { data: priorSentReports, error: priorReportsError } = await supabase
+      .from("reports")
+      .select("id")
+      .eq("company_id", input.companyId)
+      .eq("status", "sent")
+      .limit(1);
+    if (priorReportsError) return { success: false, error: priorReportsError.message };
+    const paymentStatus: "not_required" | "pending" = (priorSentReports ?? []).length === 0 ? "not_required" : "pending";
+
     const { error } = await supabase.from("pending_evidence_submissions").insert({
       company_id: input.companyId,
       goal_id: input.goalId,
@@ -101,6 +123,7 @@ export async function upsertPendingEvidenceSubmission(input: UpsertPendingEviden
       submitted_at: now.toISOString(),
       updated_at: now.toISOString(),
       edit_window_closes_at: closesAt.toISOString(),
+      payment_status: paymentStatus,
     });
     if (error) return { success: false, error: error.message };
     return { success: true };
@@ -109,6 +132,7 @@ export async function upsertPendingEvidenceSubmission(input: UpsertPendingEviden
   const stage = computeSubmissionDisplayStage({
     status: existing.status as "editing" | "audit_in_progress" | "completed",
     edit_window_closes_at: existing.edit_window_closes_at as string,
+    payment_status: existing.payment_status as "not_required" | "pending" | "paid",
   });
 
   if (stage === "queued_for_audit") {
@@ -119,6 +143,12 @@ export async function upsertPendingEvidenceSubmission(input: UpsertPendingEviden
   }
   if (stage === "audit_in_progress") {
     return { success: false, error: "Your evidence is currently being analyzed — please wait for it to finish before making changes." };
+  }
+  if (stage === "awaiting_payment") {
+    return {
+      success: false,
+      error: "The window for changes has closed and this re-audit is awaiting payment confirmation — you can't make further changes right now.",
+    };
   }
 
   // stage === "editing": update in place, deadline untouched, updated_at
@@ -174,6 +204,29 @@ export type ClaimForImmediateAuditResult =
 export async function claimPendingEvidenceSubmissionForImmediateAudit(companyId: string): Promise<ClaimForImmediateAuditResult> {
   const supabase = createAdminClient();
   const now = new Date().toISOString();
+
+  // Re-audit payment gate (confirmed 2026-09-06) — a genuine read-then-act
+  // check, not folded into the atomic UPDATE's own WHERE clause below.
+  // Safe because payment_status only ever moves pending → paid, never
+  // back — so the one real race this could hit (payment clears in the
+  // instant between this read and the UPDATE) just means the client's
+  // click succeeds a moment later than it "should have," never a false
+  // claim. Checked here, not there, purely so a payment-pending client
+  // gets this specific, honest message instead of the generic
+  // "no longer open for editing" one below.
+  const { data: existing, error: existingError } = await supabase
+    .from("pending_evidence_submissions")
+    .select("payment_status")
+    .eq("company_id", companyId)
+    .eq("status", "editing")
+    .maybeSingle();
+  if (existingError) return { claimed: false, error: existingError.message };
+  if (existing?.payment_status === "pending") {
+    return {
+      claimed: false,
+      error: "This re-audit is awaiting payment confirmation before analysis can begin — you'll be notified once it's confirmed.",
+    };
+  }
 
   const { data, error } = await supabase
     .from("pending_evidence_submissions")

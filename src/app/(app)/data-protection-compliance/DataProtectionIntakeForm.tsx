@@ -66,11 +66,13 @@ const CATEGORY_FIELDS: { key: "consentFlow" | "dataSubjectRights" | "retentionPo
 export function DataProtectionIntakeForm({
   companyId,
   jurisdictionInput,
-  reviewPeriodHours,
+  priceLabel,
+  paymentLink,
 }: {
   companyId: string;
   jurisdictionInput: CompanyJurisdictionInput;
-  reviewPeriodHours: number;
+  priceLabel?: string;
+  paymentLink: string;
 }) {
   const [values, setValues] = useState<Record<string, string>>({
     consentFlow: "",
@@ -141,13 +143,14 @@ export function DataProtectionIntakeForm({
       <ModuleStartConfirm
         label={MODULE_META.data_protection.label}
         description={MODULE_META.data_protection.description}
+        priceLabel={priceLabel}
         onContinue={() => setStatus("idle")}
       />
     );
   }
 
   if (status === "done") {
-    return <ModuleSubmittedNotice reviewPeriodHours={reviewPeriodHours} />;
+    return <ModuleSubmittedNotice paymentLink={paymentLink} priceLabel={priceLabel} />;
   }
 
   return (
@@ -225,11 +228,8 @@ export function DataProtectionIntakeForm({
               className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-neutral-200 border-t-accent dark:border-neutral-700"
               aria-hidden="true"
             />
-            <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Analyzing your submission…</h3>
-            <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              We&apos;re assessing your data-protection posture against the applicable regulations. This usually takes a minute or two — please don&apos;t
-              close this tab.
-            </p>
+            <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Saving your submission…</h3>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">This only takes a moment.</p>
           </div>
         </div>
       )}

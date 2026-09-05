@@ -1,17 +1,16 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { notifyReviewersOfNewModuleRequest } from "@/lib/reviewer/notifications";
+import { notifyReviewersOfNewModuleRequest, notifyReviewersOfModuleAwaitingPayment } from "@/lib/reviewer/notifications";
 import { runDataProtectionComplianceAudit } from "./index";
 import type { DataProtectionDraftInput } from "./types";
 
 /**
- * Runs the module and persists into the generic module_requests/
- * module_findings tables (same pattern as AI Reliability Audit and Tender
- * Readiness, spec §1.8d/§Generic module review architecture). Created
- * directly in `pending_review`, same precedent as the other two modules —
- * no client-facing "submit for review" edit-window flow exists yet.
+ * Module payment gate (confirmed 2026-09-06, direct founder decision) —
+ * see tender-readiness/persist.ts's own docblock for the full design
+ * (identical shape here, including the `applicability` re-enrichment step
+ * at finalize time — evidence-pack.ts reads `intake_data.applicability`
+ * for this module too).
  */
-export async function runAndPersistDataProtectionComplianceAudit(input: DataProtectionDraftInput): Promise<{ requestId: string; findingCount: number }> {
-  const result = await runDataProtectionComplianceAudit(input);
+export async function createAwaitingPaymentDataProtectionComplianceRequest(input: DataProtectionDraftInput): Promise<{ requestId: string }> {
   const supabase = createAdminClient();
 
   const { data: request, error: requestError } = await supabase
@@ -19,14 +18,35 @@ export async function runAndPersistDataProtectionComplianceAudit(input: DataProt
     .insert({
       module_type: "data_protection",
       company_id: input.companyId,
-      status: "pending_review",
-      intake_data: { ...input, applicability: result.applicability },
+      status: "awaiting_payment",
+      payment_status: "pending",
+      intake_data: input,
     })
     .select("id")
     .single();
-  if (requestError) throw new Error(`runAndPersistDataProtectionComplianceAudit: failed to create request: ${requestError.message}`);
+  if (requestError) throw new Error(`createAwaitingPaymentDataProtectionComplianceRequest: failed to create request: ${requestError.message}`);
 
   const requestId = request.id as string;
+  await notifyReviewersOfModuleAwaitingPayment(supabase, requestId);
+
+  return { requestId };
+}
+
+export async function runDataProtectionAnalysisAfterPayment(requestId: string, rawInput: unknown): Promise<{ findingCount: number }> {
+  const input = rawInput as DataProtectionDraftInput;
+  const result = await runDataProtectionComplianceAudit(input);
+  const supabase = createAdminClient();
+
+  const { error: updateError } = await supabase
+    .from("module_requests")
+    .update({
+      status: "pending_review",
+      payment_status: "paid",
+      intake_data: { ...input, applicability: result.applicability },
+    })
+    .eq("id", requestId)
+    .eq("payment_status", "processing");
+  if (updateError) throw new Error(`runDataProtectionAnalysisAfterPayment: failed to finalize request: ${updateError.message}`);
 
   if (result.findings.length > 0) {
     const { error: findingsError } = await supabase.from("module_findings").insert(
@@ -38,13 +58,10 @@ export async function runAndPersistDataProtectionComplianceAudit(input: DataProt
         is_missing_data_finding: f.isMissingDataFinding,
       })),
     );
-    if (findingsError) throw new Error(`runAndPersistDataProtectionComplianceAudit: failed to persist findings: ${findingsError.message}`);
+    if (findingsError) throw new Error(`runDataProtectionAnalysisAfterPayment: failed to persist findings: ${findingsError.message}`);
   }
 
-  // Real gap found and fixed 2026-08-15 (module intake/service flow
-  // review) — a module request previously logged zero notification at
-  // submission, unlike a core-audit report's new_submission.
   await notifyReviewersOfNewModuleRequest(supabase);
 
-  return { requestId, findingCount: result.findings.length };
+  return { findingCount: result.findings.length };
 }

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getSettingNumber } from "@/lib/app-settings";
+import { getPricingItem, formatPrice } from "@/lib/pricing";
+import { MODULE_META } from "@/lib/modules/module-meta";
 import { computeJurisdictionApplicability } from "@/lib/modules/tender-readiness/jurisdiction";
 import { isKnownJurisdictionCountry } from "@/lib/modules/shared/regions";
 import { ApplicableRegulationsBox, type ApplicableRegulationItem } from "@/app/_components/ApplicableRegulationsBox";
@@ -79,7 +80,14 @@ export default async function TenderReadinessPage() {
     redirect("/onboarding");
   }
 
-  const reviewPeriodHours = await getSettingNumber("review_period_hours", 48);
+  // Module payment gate (confirmed 2026-09-06) — real DB-backed price,
+  // shown on both the start-confirmation popup and the post-submit
+  // "continue to payment" notice. Replaces the review-SLA display that
+  // used to live here — modules no longer run a real Groq analysis at
+  // submission time at all, so "typical turnaround" copy no longer
+  // applies until AFTER a reviewer marks the request paid.
+  const pricingItem = await getPricingItem(MODULE_META.tender_readiness.pricingKey);
+  const priceLabel = pricingItem ? formatPrice(pricingItem) : undefined;
 
   const jurisdictionInput = {
     registrationCountry: company.registration_country as string | null,
@@ -149,7 +157,12 @@ export default async function TenderReadinessPage() {
         </Alert>
       )}
 
-      <TenderReadinessIntakeForm companyId={company.id as string} jurisdictionInput={jurisdictionInput} reviewPeriodHours={reviewPeriodHours} />
+      <TenderReadinessIntakeForm
+        companyId={company.id as string}
+        jurisdictionInput={jurisdictionInput}
+        priceLabel={priceLabel}
+        paymentLink={MODULE_META.tender_readiness.paymentLink}
+      />
     </div>
   );
 }

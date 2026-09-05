@@ -39,11 +39,13 @@ import { MODULE_META } from "@/lib/modules/module-meta";
 export function TenderReadinessIntakeForm({
   companyId,
   jurisdictionInput,
-  reviewPeriodHours,
+  priceLabel,
+  paymentLink,
 }: {
   companyId: string;
   jurisdictionInput: CompanyJurisdictionInput;
-  reviewPeriodHours: number;
+  priceLabel?: string;
+  paymentLink: string;
 }) {
   const [aiUseCaseInventory, setAiUseCaseInventory] = useState("");
   const [existingDocumentation, setExistingDocumentation] = useState("");
@@ -105,13 +107,14 @@ export function TenderReadinessIntakeForm({
       <ModuleStartConfirm
         label={MODULE_META.tender_readiness.label}
         description={MODULE_META.tender_readiness.description}
+        priceLabel={priceLabel}
         onContinue={() => setStatus("idle")}
       />
     );
   }
 
   if (status === "done") {
-    return <ModuleSubmittedNotice reviewPeriodHours={reviewPeriodHours} />;
+    return <ModuleSubmittedNotice paymentLink={paymentLink} priceLabel={priceLabel} />;
   }
 
   return (
@@ -186,11 +189,8 @@ export function TenderReadinessIntakeForm({
               className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-neutral-200 border-t-accent dark:border-neutral-700"
               aria-hidden="true"
             />
-            <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Analyzing your submission…</h3>
-            <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              We&apos;re classifying your AI use against the applicable jurisdictions. This usually takes a minute or two — please don&apos;t close this
-              tab.
-            </p>
+            <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Saving your submission…</h3>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">This only takes a moment.</p>
           </div>
         </div>
       )}

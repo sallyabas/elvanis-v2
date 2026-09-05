@@ -55,6 +55,14 @@ test("Session requests: Discovery (schedule->complete), Delivery (decline), Conc
   // are filled before its own request button is clicked, same as a real
   // first-time client would.
   await page.goto("/evidence-intake");
+  // Re-audit payment gate (confirmed 2026-09-06) — this fixture's company
+  // already has a real `sent` report (seeded so Delivery Session's own
+  // precondition is satisfied, see seedSessionLifecycleFixtures()'s own
+  // docblock), so isFreeAudit is genuinely false here — the payment gate
+  // correctly shows before the Discovery Session widget becomes
+  // reachable, exactly as designed. "Continue to Payment" reveals the
+  // form regardless of payment status (confirmed decision).
+  await page.getByRole("link", { name: "Continue to Payment" }).click();
   const discoveryRequestButton = page.getByRole("button", { name: "Request a Discovery Session" });
   await fillSessionRequestContactFields(discoveryRequestButton);
   await discoveryRequestButton.click();

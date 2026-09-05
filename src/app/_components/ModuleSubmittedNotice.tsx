@@ -1,61 +1,47 @@
 import Link from "next/link";
 
 /**
- * Shared "submitted for review" state for all three standalone module
- * intake forms (confirmed 2026-08-15, module intake/service flow review)
- * — closes three real, confirmed gaps found live:
+ * Shared "submitted" state for all three standalone module intake forms.
  *
- * 1. No way to navigate anywhere from this state — dead-ended on the
- *    confirmation message with no back/next-step link. Now links back to
- *    Services.
- * 2. No time estimate for a response, unlike the core audit's prominent
- *    72h SLA. Modules have no formal enforced deadline yet (confirmed by
- *    reading the code — there's no equivalent to reports.review_due_at
- *    for module_requests), so this deliberately doesn't overclaim a hard
- *    guarantee; it reuses the same `review_period_hours` app_setting the
- *    core audit's own review SLA is built from — the same reviewers, a
- *    similar process — framed as a typical, not guaranteed, turnaround.
- * 3. No visible way to ask a question about a submitted request. Uses the
- *    same address already verified and sending real transactional email
- *    in this codebase (RESEND_FROM_EMAIL) — flagged as a default, not
- *    assumed to be the right inbox for this specifically.
+ * Rewritten 2026-09-06 for the module payment gate (direct founder
+ * decision, exact confirmed copy) — closes a real, confirmed gap: none of
+ * the three modules had any payment check before running a real,
+ * synchronous Groq call on every submission, at £2,000-£2,500 per
+ * request. The request now sits in `awaiting_payment` with NO analysis
+ * run yet — the real Groq call only happens once a reviewer marks it
+ * paid (see module-payment-gate.ts). This notice's job changed from
+ * "your analysis is being reviewed" to "your request is saved, go pay."
  *
- * Also true now, and reflected in the copy: submitting a module request
- * fires a real notification, both to reviewers on submission and to the
- * client on delivery (see notifyReviewersOfNewModuleRequest() and
- * deliverModuleRequest()'s notification insert) — "we'll email you" is
- * genuinely true here, not aspirational copy written ahead of the backend
- * that makes it true.
+ * "or it will remain pending" is the exact confirmed copy — deliberately
+ * doesn't promise a deadline or an auto-decline, since none exists; a
+ * request sits in `awaiting_payment` indefinitely until a reviewer
+ * checks and marks it paid or unpaid.
  *
- * Real bug caught live during verification, not anticipated: "within
- * {reviewPeriodHours} hours" rendered as "48hours" with no space — the
- * exact JSX whitespace-collapse gotcha already documented and fixed
- * elsewhere in this codebase (a text node right after a `{expression}`
- * loses its leading space whenever that node spans multiple SOURCE lines,
- * not multiple rendered lines). Fixed the same way: an explicit `{" "}`
- * after the expression, not relying on a plain space surviving JSX's
- * line-based trimming.
- *
- * Real bug found live 2026-08-15 (a second real-testing pass on this same
- * page): a raw internal database UUID ("Request ID: 852c2e4e-...") was
- * shown directly to the client — the same class of internal-identifier
- * leak already fixed once for conflict descriptions in the Reviewer
- * Workspace. Removed entirely; nothing client-facing needs it (a real
- * support conversation can look the request up by company/date, and no
- * client-facing detail view existed to link it to at the time this was
- * written either way).
+ * No in-app checkout exists anywhere in this codebase (same disclosed
+ * design as Execution Sprint/Concierge) — the real Payoneer link is
+ * already live and working for all three modules (see module-meta.ts),
+ * so this links straight to it rather than a placeholder.
  */
-export function ModuleSubmittedNotice({ reviewPeriodHours }: { reviewPeriodHours: number }) {
+export function ModuleSubmittedNotice({ paymentLink, priceLabel }: { paymentLink: string; priceLabel?: string }) {
   return (
     <div className="space-y-4">
       <p className="rounded-md border border-green-300 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-        Submitted for review.
+        Your request is submitted. Continue to payment now, or it will remain pending.
       </p>
-      <p className="text-sm text-neutral-600 dark:text-neutral-400">
-        A reviewer typically responds within {reviewPeriodHours}{" "}
-        hours (this is a typical turnaround, not a guaranteed deadline). We&apos;ll email you once your results are
-        ready — no need to keep checking back.
-      </p>
+      <div className="rounded-lg border border-neutral-200 bg-white p-5 shadow-card-1">
+        <p className="text-sm text-neutral-600">
+          No analysis has started yet — your reviewer confirms payment before the real work begins. Once you&apos;ve paid, we&apos;ll
+          take it from there.
+        </p>
+        <a
+          href={paymentLink}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-4 inline-flex items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+        >
+          Continue to payment{priceLabel ? ` — ${priceLabel}` : ""}
+        </a>
+      </div>
       <p className="text-sm text-neutral-500 dark:text-neutral-400">
         Questions about this request?{" "}
         <a href="mailto:info@app.elvanis.com" className="font-medium text-accent underline hover:text-accent-hover">

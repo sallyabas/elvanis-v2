@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getSettingNumber } from "@/lib/app-settings";
+import { getPricingItem, formatPrice } from "@/lib/pricing";
+import { MODULE_META } from "@/lib/modules/module-meta";
 import { AiReliabilityIntakeForm } from "./AiReliabilityIntakeForm";
 
 /**
@@ -37,7 +38,15 @@ export default async function AiReliabilityAuditPage() {
     redirect("/onboarding");
   }
 
-  const reviewPeriodHours = await getSettingNumber("review_period_hours", 48);
+  // Module payment gate (confirmed 2026-09-06) — see tender-readiness/page.tsx's own docblock for the full reasoning.
+  const pricingItem = await getPricingItem(MODULE_META.ai_reliability.pricingKey);
+  const priceLabel = pricingItem ? formatPrice(pricingItem) : undefined;
 
-  return <AiReliabilityIntakeForm companyId={company.id as string} reviewPeriodHours={reviewPeriodHours} />;
+  return (
+    <AiReliabilityIntakeForm
+      companyId={company.id as string}
+      priceLabel={priceLabel}
+      paymentLink={MODULE_META.ai_reliability.paymentLink}
+    />
+  );
 }

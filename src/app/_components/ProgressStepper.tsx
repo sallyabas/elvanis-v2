@@ -41,11 +41,16 @@ function currentStepIndex(stage: JourneyStatus["stage"]): number {
     case "queued_for_audit":
     case "audit_in_progress":
     case "in_review":
-      // All three land on "Review": the client's own part is done (their
-      // window has closed), and this step already conflated "the audit
-      // runs" with "a human reviews it" as one visual step before this
-      // date — queued/in-progress audit execution fits the same slot.
-      return 2; // Review
+    case "awaiting_payment":
+      // All four land on "Under Review": the client's own part is done
+      // (their window has closed), and this step already conflated "the
+      // audit runs" with "a human reviews it" as one visual step before
+      // this date — queued/in-progress audit execution fits the same
+      // slot. awaiting_payment (confirmed 2026-09-06, re-audit payment
+      // gate) is the same "waiting on us, not on you" family — a genuinely
+      // separate 5th step for this one stage would over-complicate a
+      // deliberately-4-step design for a real but comparatively rare state.
+      return 2; // Under Review
     case "has_report":
       return 3; // Report
   }

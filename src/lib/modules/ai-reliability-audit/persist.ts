@@ -1,18 +1,16 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { notifyReviewersOfNewModuleRequest } from "@/lib/reviewer/notifications";
+import { notifyReviewersOfNewModuleRequest, notifyReviewersOfModuleAwaitingPayment } from "@/lib/reviewer/notifications";
 import { runAiReliabilityAudit } from "./index";
 import type { AiReliabilityDraftInput } from "./types";
 
 /**
- * Runs the module and persists into the generic module_requests/
- * module_findings tables (confirmed 2026-08-02) — the same tables Tender
- * Readiness and Data Protection Compliance will use. Created directly in
- * `pending_review` (no client-facing "submit for review" edit-window flow
- * exists yet for modules, same precedent as runAudit() creating `reports`
- * rows directly in `pending_review` before any client UI existed).
+ * Module payment gate (confirmed 2026-09-06, direct founder decision) —
+ * see tender-readiness/persist.ts's own docblock for the full design
+ * (identical shape here — this module has no `applicability` concept, so
+ * `intake_data` needs no re-enrichment step at finalize time, unlike
+ * Tender Readiness/Data Protection).
  */
-export async function runAndPersistAiReliabilityAudit(input: AiReliabilityDraftInput): Promise<{ requestId: string; findingCount: number }> {
-  const result = await runAiReliabilityAudit(input);
+export async function createAwaitingPaymentAiReliabilityRequest(input: AiReliabilityDraftInput): Promise<{ requestId: string }> {
   const supabase = createAdminClient();
 
   const { data: request, error: requestError } = await supabase
@@ -20,14 +18,31 @@ export async function runAndPersistAiReliabilityAudit(input: AiReliabilityDraftI
     .insert({
       module_type: "ai_reliability",
       company_id: input.companyId,
-      status: "pending_review",
+      status: "awaiting_payment",
+      payment_status: "pending",
       intake_data: input,
     })
     .select("id")
     .single();
-  if (requestError) throw new Error(`runAndPersistAiReliabilityAudit: failed to create request: ${requestError.message}`);
+  if (requestError) throw new Error(`createAwaitingPaymentAiReliabilityRequest: failed to create request: ${requestError.message}`);
 
   const requestId = request.id as string;
+  await notifyReviewersOfModuleAwaitingPayment(supabase, requestId);
+
+  return { requestId };
+}
+
+export async function runAiReliabilityAnalysisAfterPayment(requestId: string, rawInput: unknown): Promise<{ findingCount: number }> {
+  const input = rawInput as AiReliabilityDraftInput;
+  const result = await runAiReliabilityAudit(input);
+  const supabase = createAdminClient();
+
+  const { error: updateError } = await supabase
+    .from("module_requests")
+    .update({ status: "pending_review", payment_status: "paid" })
+    .eq("id", requestId)
+    .eq("payment_status", "processing");
+  if (updateError) throw new Error(`runAiReliabilityAnalysisAfterPayment: failed to finalize request: ${updateError.message}`);
 
   if (result.findings.length > 0) {
     const { error: findingsError } = await supabase.from("module_findings").insert(
@@ -39,13 +54,10 @@ export async function runAndPersistAiReliabilityAudit(input: AiReliabilityDraftI
         is_missing_data_finding: f.isMissingDataFinding,
       })),
     );
-    if (findingsError) throw new Error(`runAndPersistAiReliabilityAudit: failed to persist findings: ${findingsError.message}`);
+    if (findingsError) throw new Error(`runAiReliabilityAnalysisAfterPayment: failed to persist findings: ${findingsError.message}`);
   }
 
-  // Real gap found and fixed 2026-08-15 (module intake/service flow
-  // review) — a module request previously logged zero notification at
-  // submission, unlike a core-audit report's new_submission.
   await notifyReviewersOfNewModuleRequest(supabase);
 
-  return { requestId, findingCount: result.findings.length };
+  return { findingCount: result.findings.length };
 }
