@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { loginAsTestUser } from "./support/auth";
+import { loginAsTestUser, fillSessionRequestContactFields } from "./support/auth";
 import { seedSessionLifecycleFixtures } from "./support/sessionLifecycle";
 import { step } from "./support/screenshot";
 
@@ -49,18 +49,29 @@ test("Session requests: Discovery (schedule->complete), Delivery (decline), Conc
   // --- Client half: request all three, via their real distinct entry points ---
   await loginAsTestUser(page, fixtures.clientEmail);
 
+  // Mandatory contact fields (confirmed 2026-09-05) — Email pre-fills
+  // correctly from the real signed-in test user; Name/Phone don't (this
+  // fixture never seeds `users.name`/`phone`), so each widget's fields
+  // are filled before its own request button is clicked, same as a real
+  // first-time client would.
   await page.goto("/evidence-intake");
-  await page.getByRole("button", { name: "Request a Discovery Session" }).click();
+  const discoveryRequestButton = page.getByRole("button", { name: "Request a Discovery Session" });
+  await fillSessionRequestContactFields(discoveryRequestButton);
+  await discoveryRequestButton.click();
   await expect(page.getByText("Discovery Session requested")).toBeVisible();
   await step(page, testInfo, "08-session-lifecycle", "01-discovery-requested");
 
   await page.goto(`/reports/${fixtures.sentReportId}`);
-  await page.getByRole("button", { name: "Request a Delivery Session" }).click();
+  const deliveryRequestButton = page.getByRole("button", { name: "Request a Delivery Session" });
+  await fillSessionRequestContactFields(deliveryRequestButton);
+  await deliveryRequestButton.click();
   await expect(page.getByText("Delivery Session requested")).toBeVisible();
   await step(page, testInfo, "08-session-lifecycle", "02-delivery-requested");
 
   await page.goto("/services");
-  await page.getByRole("button", { name: /Request Concierge/i }).click();
+  const conciergeRequestButton = page.getByRole("button", { name: /Request Concierge/i });
+  await fillSessionRequestContactFields(conciergeRequestButton);
+  await conciergeRequestButton.click();
   await expect(page.getByText("Concierge inquiry sent")).toBeVisible();
   await step(page, testInfo, "08-session-lifecycle", "03-concierge-requested");
 

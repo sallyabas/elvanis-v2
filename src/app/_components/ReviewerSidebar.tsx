@@ -38,6 +38,7 @@ export function ReviewerSidebar({ displayName }: { displayName: string }) {
         <SidebarLink href="/requests">All requests</SidebarLink>
         <SidebarLink href="/companies">Companies</SidebarLink>
         <SidebarLink href="/ideas">Ideas</SidebarLink>
+        <SidebarLink href="/admin/regulatory-frameworks">Regulatory frameworks</SidebarLink>
       </nav>
 
       <div className="border-t border-neutral-200 px-3 py-3">

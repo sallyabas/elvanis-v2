@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettingNumber } from "@/lib/app-settings";
-import { computeStalenessWarnings } from "@/lib/reviewer/regulatory-staleness";
+import { computeStalenessWarnings, listApplicableFrameworksMetadata } from "@/lib/reviewer/regulatory-staleness";
 import { ModuleReviewWorkspaceClient } from "./ModuleReviewWorkspaceClient";
 
 const MODULE_LABELS: Record<string, string> = {
@@ -81,6 +81,8 @@ export default async function ModuleReviewWorkspacePage({ params }: { params: Pr
   // applicability field exists for that module) with no special-casing.
   const applicableJurisdictionKeys = applicability ? Object.entries(applicability).filter(([, v]) => v).map(([k]) => k) : [];
   const regulatoryStalenessWarnings = await computeStalenessWarnings(applicableJurisdictionKeys);
+  // Real gap closed (confirmed 2026-09-05) — see listApplicableFrameworksMetadata()'s own docblock: the original brief's "report metadata showing frameworks + last-reviewed date" is always-shown, distinct from the RED/AMBER-only warning banner above.
+  const applicableFrameworksMetadata = await listApplicableFrameworksMetadata(applicableJurisdictionKeys);
 
   return (
     <>
@@ -113,6 +115,7 @@ export default async function ModuleReviewWorkspacePage({ params }: { params: Pr
         isUrgent={Boolean(request.is_urgent)}
         hasNoApplicableJurisdiction={hasNoApplicableJurisdiction}
         regulatoryStalenessWarnings={regulatoryStalenessWarnings}
+        applicableFrameworksMetadata={applicableFrameworksMetadata}
       />
     </>
   );

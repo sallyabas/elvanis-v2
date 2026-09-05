@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { computePathBRouting, type PathBRoutingResult, type TriageAiUsage, type TriageComplianceRequest, type TriagePersonalData } from "@/lib/onboarding/path-b-routing";
-import { requestSession } from "@/lib/service-layer/session-requests";
+import { requestSession, getContactFieldDefaults } from "@/lib/service-layer/session-requests";
 import { setUserNameIfUnset } from "@/lib/users/set-name";
 import type { CreateCompanyResult } from "./actions";
 
@@ -128,7 +128,17 @@ export async function submitTriageAnswers(input: {
  * requestSession() mechanism with the new compliance_consultation session
  * type, called directly from the Path B recommendation screen rather than
  * routing to a module intake page.
+ *
+ * Real, disclosed exception to the mandatory contact-fields requirement
+ * (confirmed 2026-09-05) — see requestSession()'s own docblock: this is
+ * the one session type with no client-facing form to gate on required
+ * fields in the first place, since it's triggered by triage answers, not
+ * a submit button. Still passes real contactEmail (the caller's own
+ * login email, always available) via getContactFieldDefaults(), with
+ * name/phone as whatever's already on file — possibly blank for a
+ * mid-onboarding client, never fabricated.
  */
 export async function requestComplianceConsultation(companyId: string, urgent: boolean): Promise<{ success: boolean; error?: string }> {
-  return requestSession(companyId, "compliance_consultation", null, urgent);
+  const defaults = await getContactFieldDefaults();
+  return requestSession(companyId, "compliance_consultation", null, defaults.email, defaults.name, defaults.phone, urgent);
 }

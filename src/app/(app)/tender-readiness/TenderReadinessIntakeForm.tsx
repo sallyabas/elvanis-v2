@@ -10,6 +10,7 @@ import { Alert } from "@/app/_components/ui/Alert";
 import { DocumentUploadField } from "@/app/_components/ui/DocumentUploadField";
 import { ModuleSubmittedNotice } from "@/app/_components/ModuleSubmittedNotice";
 import { ModuleStartConfirm } from "@/app/_components/ModuleStartConfirm";
+import { ContactUsForm } from "@/app/_components/ContactUsForm";
 import { MODULE_META } from "@/lib/modules/module-meta";
 
 /**
@@ -193,6 +194,10 @@ export function TenderReadinessIntakeForm({
           </div>
         </div>
       )}
+
+      <div className="border-t border-neutral-200 pt-4 dark:border-neutral-800">
+        <ContactUsForm companyId={companyId} serviceContext={MODULE_META.tender_readiness.label} />
+      </div>
     </section>
   );
 }

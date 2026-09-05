@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { computeJourneyStatus } from "@/lib/reports/journey-status";
 import { NextStepBanner } from "@/app/_components/NextStepBanner";
 import { ProgressStepper } from "@/app/_components/ProgressStepper";
-import { type ItemType } from "@/lib/item-type-badge";
+import { type ItemType, sessionTypeToItemType } from "@/lib/item-type-badge";
 import { SESSION_STATUS_LABELS } from "@/lib/format";
 import { ReportsHistoryClient, type HistoryItem } from "./ReportsHistoryClient";
 
@@ -163,14 +163,16 @@ export default async function ReportsHistoryPage() {
     .map((r) => {
       const date = (r.completed_at as string | null) ?? (r.scheduled_at as string | null) ?? (r.requested_at as string | null);
       const dateLabel = r.completed_at ? "Completed" : r.scheduled_at ? "Scheduled" : "Requested";
-      const type: ItemType =
-        r.session_type === "discovery"
-          ? "discovery"
-          : r.session_type === "delivery"
-            ? "delivery"
-            : r.session_type === "concierge_inquiry"
-              ? "concierge"
-              : "f2f_workshop";
+      // Real bug found and fixed while adding training_advisory (confirmed
+      // 2026-09-05) — this was a hand-rolled ternary duplicating the exact
+      // "map a session_type to its badge identity" logic
+      // sessionTypeToItemType() already exists specifically to prevent
+      // from drifting (the same class of silent-fallback-to-f2f_workshop
+      // bug already caught once for concierge_inquiry, see that helper's
+      // own history) — this local copy was never updated when that fix
+      // landed. Now reads from the one shared source of truth instead of
+      // a second, independently-drifting copy.
+      const type: ItemType = sessionTypeToItemType(r.session_type as string);
       return {
         id: r.id as string,
         type,

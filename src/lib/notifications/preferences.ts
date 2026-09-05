@@ -30,7 +30,8 @@ export type ClientNotificationEventType =
   | "sprint_proposed"
   | "module_ready"
   | "report_feedback_request"
-  | "pilot_testimonial_request";
+  | "pilot_testimonial_request"
+  | "session_request_confirmation";
 
 export interface NotificationPreferences {
   reportReady: boolean;
@@ -42,6 +43,7 @@ export interface NotificationPreferences {
   moduleReady: boolean;
   reportFeedbackRequest: boolean;
   pilotTestimonialRequest: boolean;
+  sessionRequestConfirmation: boolean;
   /** Master opt-out, set only via the real /unsubscribe flow's "unsubscribe
    *  from everything" option — checked before any per-type key. Also
    *  shown (and re-toggleable) in Account Settings, so a client isn't
@@ -59,6 +61,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   moduleReady: true,
   reportFeedbackRequest: true,
   pilotTestimonialRequest: true,
+  sessionRequestConfirmation: true,
   optedOutOfAll: false,
 };
 
@@ -73,6 +76,7 @@ export const EVENT_TYPE_TO_PREFERENCE_KEY: Record<ClientNotificationEventType, k
   module_ready: "moduleReady",
   report_feedback_request: "reportFeedbackRequest",
   pilot_testimonial_request: "pilotTestimonialRequest",
+  session_request_confirmation: "sessionRequestConfirmation",
 };
 
 /**
@@ -91,6 +95,7 @@ export const PREFERENCE_LABELS: Record<keyof NotificationPreferences, string> = 
   moduleReady: "module-results notifications",
   reportFeedbackRequest: "post-delivery feedback requests",
   pilotTestimonialRequest: "testimonial/referral requests",
+  sessionRequestConfirmation: "session-request confirmations",
   optedOutOfAll: "all Elvanis emails",
 };
 
@@ -105,6 +110,7 @@ export const PER_TYPE_PREFERENCE_KEYS: (keyof Omit<NotificationPreferences, "opt
   "moduleReady",
   "reportFeedbackRequest",
   "pilotTestimonialRequest",
+  "sessionRequestConfirmation",
 ];
 
 export function isOptedOut(preferences: Partial<NotificationPreferences> | null | undefined, key: keyof NotificationPreferences): boolean {

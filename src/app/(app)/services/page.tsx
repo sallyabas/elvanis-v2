@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listPricing, formatPrice } from "@/lib/pricing";
 import { MODULE_META, MODULE_ORDER } from "@/lib/modules/module-meta";
 import { SessionRequestButton } from "@/app/_components/SessionRequestButton";
+import { ContactUsForm } from "@/app/_components/ContactUsForm";
 import { Card } from "@/app/_components/ui/Card";
 import { LockedExecutionSprintCard } from "./LockedExecutionSprintCard";
 
@@ -107,9 +108,19 @@ export default async function ServicesPage() {
                     </div>
                     {price && <span className="shrink-0 text-sm font-medium text-accent">{formatPrice(price)}</span>}
                   </div>
-                  <Link href={meta.routePath} className="mt-3 inline-block rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover">
-                    {meta.requestButtonLabel}
-                  </Link>
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <Link href={meta.routePath} className="inline-block rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover">
+                      {meta.requestButtonLabel}
+                    </Link>
+                    {/* Real Payoneer payment link (confirmed 2026-09-05) —
+                        payment is still confirmed manually/externally, no
+                        in-app checkout; this is just a real, always-visible
+                        way to pay once you're ready, alongside the request
+                        button rather than replacing it. */}
+                    <a href={meta.paymentLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-accent hover:underline">
+                      Pay via Payoneer ↗
+                    </a>
+                  </div>
                 </Card>
               );
             })}
@@ -135,9 +146,19 @@ export default async function ServicesPage() {
                 </p>
                 <span className="shrink-0 text-sm font-medium text-accent">{formatPrice(pricingByKey.get("execution_sprint") ?? { priceAmount: 3000, currency: "GBP" })}</span>
               </div>
-              <Link href={`/reports/${latestReport.id}`} className="mt-3 inline-block text-sm font-medium text-accent hover:underline">
-                View your report to express interest
-              </Link>
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+                <Link href={`/reports/${latestReport.id}`} className="text-sm font-medium text-accent hover:underline">
+                  View your report to express interest
+                </Link>
+                <a
+                  href="https://link.payoneer.com/Token?t=EB23CB50E7EB4ED28C5B7C4451DA3169&src=tpl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-medium text-accent hover:underline"
+                >
+                  Pay via Payoneer ↗
+                </a>
+              </div>
             </Card>
           ) : (
             <LockedExecutionSprintCard />
@@ -170,6 +191,14 @@ export default async function ServicesPage() {
                 sessionType="concierge_inquiry"
                 priceLabel={pricingByKey.has("concierge_tier") ? formatPrice(pricingByKey.get("concierge_tier")!) : undefined}
               />
+              <a
+                href="https://link.payoneer.com/Token?t=DB274255C5154C9A9DA86497FEC8582B&src=dpl"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-block text-sm font-medium text-accent hover:underline"
+              >
+                Pay via Payoneer ↗
+              </a>
             </Card>
             <Card>
               <SessionRequestButton companyId={company.id} sessionType="discovery" />
@@ -187,19 +216,25 @@ export default async function ServicesPage() {
                 through together yet.
               </div>
             )}
-            {/* Training & Advisory (confirmed 2026-08-31, item 9) — a real,
-                named future service, deliberately not given a working
-                request flow yet (no session_type value exists for it, no
-                reviewer queue handling) — a "Coming soon" placeholder is
-                the honest state, not a button that goes nowhere. */}
-            <Card title="Training &amp; Advisory" subtitle="Coming soon.">
-              <p className="text-sm text-neutral-500">
-                Structured training and ongoing advisory for your team — not yet a real, working request flow. Nothing
-                to click here yet.
-              </p>
+            {/* Training & Advisory — reopened as a real, requestable
+                service (confirmed 2026-09-05, direct founder decision),
+                closing the gap left open 2026-08-31 ("no working request
+                flow yet"). Same exact manual pattern as Concierge/
+                Discovery/Delivery — "Contact Sales" framing, no price
+                shown, no payment link (unlike the five paid services this
+                same pass wires Payoneer links for). */}
+            <Card title="Training &amp; Advisory" subtitle="Structured training and ongoing advisory for your team.">
+              <SessionRequestButton companyId={company.id} sessionType="training_advisory" />
             </Card>
           </div>
         </section>
+
+        {/* "Having trouble? Contact us" (confirmed 2026-09-05) — one of
+            the 5 real placements (the 3 module intakes + Evidence Intake
+            + here), reusing the one shared ContactUsForm.tsx component. */}
+        <div className="border-t border-neutral-200 pt-6 dark:border-neutral-800">
+          <ContactUsForm companyId={company.id} serviceContext="Services" />
+        </div>
       </div>
     </div>
   );

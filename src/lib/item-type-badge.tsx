@@ -28,7 +28,8 @@ export type ItemType =
   | "delivery"
   | "f2f_workshop"
   | "concierge"
-  | "compliance_consultation";
+  | "compliance_consultation"
+  | "training_advisory";
 
 export const TYPE_LABELS: Record<ItemType, string> = {
   core_audit: "Core Audit",
@@ -43,6 +44,10 @@ export const TYPE_LABELS: Record<ItemType, string> = {
   // Added 2026-08-27, Onboarding Architecture & Path Routing brief, Part 3
   // refinement — the "route to human consultation" session type.
   compliance_consultation: "Compliance Consultation",
+  // Added 2026-09-05, direct founder decision — Training & Advisory
+  // reopened as a real requestable service, same "Contact Sales" pattern
+  // Concierge used before its own pricing was unified.
+  training_advisory: "Training & Advisory",
 };
 
 // One distinct color per type, so a reviewer or client can tell items
@@ -75,6 +80,7 @@ export const TYPE_BADGE_STYLES: Record<ItemType, string> = {
   // path-b-routing.ts), so red here is the same "genuinely urgent" signal
   // as the OVERDUE badge elsewhere, not a collision with severity.
   compliance_consultation: "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300",
+  training_advisory: "bg-cyan-50 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300",
 };
 
 export function TypeBadge({ type, className = "" }: { type: ItemType; className?: string }) {
@@ -94,5 +100,6 @@ export function sessionTypeToItemType(sessionType: string): ItemType {
   if (sessionType === "delivery") return "delivery";
   if (sessionType === "concierge_inquiry") return "concierge";
   if (sessionType === "compliance_consultation") return "compliance_consultation";
+  if (sessionType === "training_advisory") return "training_advisory";
   return "f2f_workshop";
 }

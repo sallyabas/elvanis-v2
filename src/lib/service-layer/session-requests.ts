@@ -40,7 +40,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // founder's own confirmed reuse of this exact mechanism for "route to
 // human consultation" (an active compliance/procurement request with no
 // AI in production yet), same pattern as concierge_inquiry.
-export type SessionType = "discovery" | "delivery" | "f2f_workshop" | "concierge_inquiry" | "compliance_consultation";
+// "training_advisory" added 2026-09-05, direct founder decision — Training
+// & Advisory reopened as a real requestable service ("Contact Sales"
+// framing, no price, no payment link), same reuse-not-reinvent pattern.
+export type SessionType = "discovery" | "delivery" | "f2f_workshop" | "concierge_inquiry" | "compliance_consultation" | "training_advisory";
 
 export interface RequestSessionResult {
   success: boolean;
@@ -48,28 +51,70 @@ export interface RequestSessionResult {
 }
 
 /**
+ * Pre-fill defaults for the mandatory contact fields (confirmed 2026-09-05)
+ * — SessionRequestButton.tsx calls this once on mount rather than every
+ * one of its 5 heterogeneous call sites threading these down as props
+ * (two of which are themselves client components). Spares a returning
+ * client re-typing what's already on file — still fully editable, still
+ * required, per the confirmed design.
+ */
+export async function getContactFieldDefaults(): Promise<{ email: string; name: string; phone: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { email: "", name: "", phone: "" };
+
+  const { data: profile } = await supabase.from("users").select("name, phone").eq("id", user.id).maybeSingle();
+  return {
+    email: user.email ?? "",
+    name: (profile?.name as string | null) ?? "",
+    phone: (profile?.phone as string | null) ?? "",
+  };
+}
+
+/**
  * Client-facing — session-scoped, RLS-respecting, verifies the caller owns
  * the company before writing (same discipline as every other client-owned
  * write in this codebase).
  *
- * Phone snapshot (confirmed 2026-09-03, direct founder request) — the
- * client's own profile-level `users.phone` is read here, at the moment of
- * submission, and copied onto the request row as `phone_snapshot` rather
- * than left as a live foreign-key-style reference. Same "compute now,
- * don't recompute later" principle already used for
- * reports.edit_window_closes_at/review_due_at: a reviewer looking back at
- * an already-submitted request should see the number that was actually
- * on file when the client asked to be reached, not whatever the profile
- * says today if it's since been edited. Optional throughout — a client
- * who's never set a phone number still gets `null`, same as before this
- * field existed.
+ * Mandatory contact fields (confirmed 2026-09-05, direct founder decision
+ * — "apply the same mandatory fields retroactively to all existing
+ * request types... for consistency"). Real, disclosed server-side
+ * re-validation, not just trusting the client-side form's own check —
+ * same "validate at the boundary too" discipline as every other mandatory
+ * field in this codebase. contactPhone is what actually gets stored as
+ * phone_snapshot now — the form's own submitted value (which may equal
+ * the profile default it was pre-filled from, or a value the client
+ * edited), never silently re-read from the live profile at submit time,
+ * so a reviewer sees exactly what the client actually typed.
+ *
+ * One real, disclosed exception: "compliance_consultation" is the one
+ * session type with NO form-driven creation path at all — it's created
+ * directly, server-side, by the Path B onboarding triage flow
+ * (path-b-actions.ts) the instant a client's answers indicate an active
+ * compliance/procurement request, with no client-facing submit button or
+ * form to gate in the first place. Enforcing "required" against fields a
+ * mid-onboarding client was never asked to fill in would simply break
+ * that flow for exactly the population it exists to serve (a client who
+ * hasn't necessarily touched Account Settings yet). This path still
+ * receives real contactEmail (always available — the caller's own login
+ * email) via getContactFieldDefaults(), with name/phone passed through
+ * as whatever's already on file (possibly blank) rather than fabricated.
  */
 export async function requestSession(
   companyId: string,
   sessionType: SessionType,
   clientNotes: string | null,
+  contactEmail: string,
+  contactName: string,
+  contactPhone: string,
   urgent: boolean = false,
 ): Promise<RequestSessionResult> {
+  if (sessionType !== "compliance_consultation" && (!contactEmail.trim() || !contactName.trim() || !contactPhone.trim())) {
+    return { success: false, error: "Email, name, and phone are all required." };
+  }
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -78,9 +123,6 @@ export async function requestSession(
 
   const { data: company, error: companyError } = await supabase.from("companies").select("id").eq("id", companyId).eq("user_id", user.id).single();
   if (companyError || !company) return { success: false, error: "Company not found." };
-
-  const { data: profile } = await supabase.from("users").select("phone").eq("id", user.id).maybeSingle();
-  const phoneSnapshot = (profile?.phone as string | null) ?? null;
 
   if (sessionType === "delivery" || sessionType === "f2f_workshop") {
     const { data: deliveredReport } = await supabase.from("reports").select("id").eq("company_id", companyId).eq("status", "sent").limit(1).maybeSingle();
@@ -94,13 +136,19 @@ export async function requestSession(
     }
   }
 
-  const { error: insertError } = await supabase.from("session_requests").insert({
-    company_id: companyId,
-    session_type: sessionType,
-    client_notes: clientNotes,
-    is_urgent: urgent,
-    phone_snapshot: phoneSnapshot,
-  });
+  const { data: insertedRequest, error: insertError } = await supabase
+    .from("session_requests")
+    .insert({
+      company_id: companyId,
+      session_type: sessionType,
+      client_notes: clientNotes,
+      is_urgent: urgent,
+      phone_snapshot: contactPhone.trim() || null,
+      contact_email: contactEmail.trim() || null,
+      contact_name: contactName.trim() || null,
+    })
+    .select("id")
+    .single();
   if (insertError) return { success: false, error: `Couldn't submit request: ${insertError.message}` };
 
   // Notify every reviewer, same pattern as checkEvidenceCompletenessNudges
@@ -122,6 +170,25 @@ export async function requestSession(
     );
   }
 
+  // Client-facing confirmation (confirmed 2026-09-05, direct founder
+  // request) — real gap found by reading dispatch.ts directly: no
+  // client-facing confirmation email has ever existed for ANY of the six
+  // session types, only the reviewer-facing "session_requested" one
+  // above. Built consistently for all six, not just the newest
+  // (training_advisory), per the founder's own explicit fallback
+  // instruction. Log-now, dispatch-on-next-cron-tick, same as every other
+  // client-facing notification in this codebase — nothing about a
+  // request confirmation is as time-sensitive as the one deliberate
+  // immediate-send exception (Execution Sprint KPI-deviation replies).
+  await admin.from("notifications").insert({
+    recipient_type: "client",
+    recipient_id: user.id,
+    event_type: "session_request_confirmation",
+    channel: "email",
+    sent_at: null,
+    related_session_request_id: insertedRequest.id,
+  });
+
   return { success: true };
 }
 
@@ -137,6 +204,8 @@ export interface SessionRequestRow {
   completed_at: string | null;
   is_urgent: boolean;
   phone_snapshot: string | null;
+  contact_email: string | null;
+  contact_name: string | null;
 }
 
 /** Reviewer-facing — lists pending (requested/scheduled) session requests across all companies. */

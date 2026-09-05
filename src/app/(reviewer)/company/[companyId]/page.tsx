@@ -4,6 +4,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { loadActivePendingEvidenceSubmission } from "@/lib/evidence/pending-submission";
 import { SUBMISSION_STAGE_LABELS } from "@/lib/evidence/submission-status";
 import { loadPaymentRecords, type PaymentEntityType, type PaymentRecord } from "@/lib/reviewer/payment-records";
+import { loadServiceStatusRecords } from "@/lib/reviewer/service-status";
+import { listReviewerNotes } from "@/lib/reviewer/reviewer-notes";
+import { listPricing } from "@/lib/pricing";
+import { MODULE_META, type ModuleType } from "@/lib/modules/module-meta";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import type { PrimaryGoal } from "@/lib/lenses/types";
 import { TypeBadge, moduleTypeToItemType, sessionTypeToItemType } from "@/lib/item-type-badge";
@@ -12,7 +16,19 @@ import { Card } from "@/app/_components/ui/Card";
 import { Input } from "@/app/_components/ui/Input";
 import { Select } from "@/app/_components/ui/Select";
 import { Button } from "@/app/_components/ui/Button";
-import { setPilotClientAction, setPaymentRecordAction } from "./actions";
+import { setPilotClientAction, setPaymentRecordAction, addManualReviewerNoteAction, editReviewerNoteAction, deleteReviewerNoteAction } from "./actions";
+import { ServiceStatusRow } from "./ServiceStatusRow";
+import { ReviewerNotesPanel } from "./ReviewerNotesPanel";
+
+// Real, fixed-price lookups per service type (confirmed 2026-09-05) —
+// used to auto-populate ServiceStatusRow's price field for fixed-price
+// services; Contact Sales services (Training & Advisory, discovery/
+// delivery/compliance_consultation — genuinely free calls with no
+// catalog price) correctly fall through to null (manual entry).
+const SESSION_TYPE_PRICING_KEY: Record<string, string> = {
+  concierge_inquiry: "concierge_tier",
+  f2f_workshop: "f2f_workshop",
+};
 
 /**
  * One shared payment-status row, reused across every payable item on this
@@ -128,12 +144,23 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
   // real payment record among reports; module requests, sessions, and
   // sprints are all real, priced items regardless.
   const paidReportIds = (reports ?? []).filter((r) => r.rerun_of_report_id !== null).map((r) => r.id as string);
-  const [reportPayments, modulePayments, sessionPayments, sprintPayments] = await Promise.all([
-    loadPaymentRecords("report", paidReportIds),
-    loadPaymentRecords("module_request", (moduleRequests ?? []).map((m) => m.id as string)),
-    loadPaymentRecords("session_request", (sessionRequests ?? []).map((s) => s.id as string)),
-    loadPaymentRecords("execution_sprint", (executionSprints ?? []).map((s) => s.id as string)),
-  ]);
+  const [reportPayments, modulePayments, sessionPayments, sprintPayments, reportServiceStatus, moduleServiceStatus, sessionServiceStatus, sprintServiceStatus, pricing, reviewerNotes] =
+    await Promise.all([
+      loadPaymentRecords("report", paidReportIds),
+      loadPaymentRecords("module_request", (moduleRequests ?? []).map((m) => m.id as string)),
+      loadPaymentRecords("session_request", (sessionRequests ?? []).map((s) => s.id as string)),
+      loadPaymentRecords("execution_sprint", (executionSprints ?? []).map((s) => s.id as string)),
+      // Service status (confirmed 2026-09-05) — same 4-entity-type
+      // batching pattern as payment records above, kept in the same
+      // Promise.all rather than a second round-trip.
+      loadServiceStatusRecords("report", paidReportIds),
+      loadServiceStatusRecords("module_request", (moduleRequests ?? []).map((m) => m.id as string)),
+      loadServiceStatusRecords("session_request", (sessionRequests ?? []).map((s) => s.id as string)),
+      loadServiceStatusRecords("execution_sprint", (executionSprints ?? []).map((s) => s.id as string)),
+      listPricing(),
+      listReviewerNotes(companyId),
+    ]);
+  const pricingByKey = new Map(pricing.map((p) => [p.itemKey, p.priceAmount]));
 
   const activePendingSubmission = await loadActivePendingEvidenceSubmission(companyId);
 
@@ -159,6 +186,14 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
               {company.is_pilot_client ? "Unmark as pilot client" : "Mark as pilot client"}
             </Button>
           </form>
+        </Card>
+
+        {/* Reviewer Notes — per-company structured list (confirmed
+            2026-09-05, direct founder decision). See reviewer_notes'
+            own migration docblock for the two-way-creation/one-way-
+            editing design shared with the Service status fields below. */}
+        <Card title="Reviewer notes">
+          <ReviewerNotesPanel companyId={companyId} notes={reviewerNotes} />
         </Card>
 
         <Card title="Business profile">
@@ -252,7 +287,16 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
                     {/* Only paid re-audits carry a real payment record — a
                         first, free audit has nothing to pay. */}
                     {isPaidReAudit && (
-                      <PaymentStatusRow companyId={companyId} entityType="report" entityId={r.id as string} record={reportPayments.get(r.id as string)} />
+                      <>
+                        <PaymentStatusRow companyId={companyId} entityType="report" entityId={r.id as string} record={reportPayments.get(r.id as string)} />
+                        <ServiceStatusRow
+                          companyId={companyId}
+                          entityType="report"
+                          entityId={r.id as string}
+                          defaultPrice={null}
+                          record={reportServiceStatus.get(r.id as string)}
+                        />
+                      </>
                     )}
                   </li>
                 );
@@ -278,6 +322,13 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
                     </Link>
                   </div>
                   <PaymentStatusRow companyId={companyId} entityType="module_request" entityId={m.id as string} record={modulePayments.get(m.id as string)} />
+                  <ServiceStatusRow
+                    companyId={companyId}
+                    entityType="module_request"
+                    entityId={m.id as string}
+                    defaultPrice={pricingByKey.get(MODULE_META[m.module_type as ModuleType].pricingKey) ?? null}
+                    record={moduleServiceStatus.get(m.id as string)}
+                  />
                 </li>
               ))}
             </ul>
@@ -306,6 +357,15 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
                   {/* Phone snapshot (confirmed 2026-09-03) — the number on file at request time, not a live profile reference. */}
                   {s.phone_snapshot && <p className="text-xs text-neutral-500 dark:text-neutral-400">Phone: {s.phone_snapshot as string}</p>}
                   <PaymentStatusRow companyId={companyId} entityType="session_request" entityId={s.id as string} record={sessionPayments.get(s.id as string)} />
+                  <ServiceStatusRow
+                    companyId={companyId}
+                    entityType="session_request"
+                    entityId={s.id as string}
+                    defaultPrice={
+                      SESSION_TYPE_PRICING_KEY[s.session_type as string] ? (pricingByKey.get(SESSION_TYPE_PRICING_KEY[s.session_type as string]) ?? null) : null
+                    }
+                    record={sessionServiceStatus.get(s.id as string)}
+                  />
                 </li>
               ))}
             </ul>
@@ -352,6 +412,13 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
                     </Link>
                   </div>
                   <PaymentStatusRow companyId={companyId} entityType="execution_sprint" entityId={s.id as string} record={sprintPayments.get(s.id as string)} />
+                  <ServiceStatusRow
+                    companyId={companyId}
+                    entityType="execution_sprint"
+                    entityId={s.id as string}
+                    defaultPrice={pricingByKey.get("execution_sprint") ?? null}
+                    record={sprintServiceStatus.get(s.id as string)}
+                  />
                 </li>
               ))}
             </ul>

@@ -1,0 +1,12 @@
+-- Client-facing session-request confirmation email (confirmed 2026-09-05,
+-- direct founder request) — real gap found by checking dispatch.ts
+-- directly before building anything: the existing "session_requested"
+-- event type is REVIEWER-facing only ("A client requested a live
+-- session... follow up"); no client-facing confirmation email has ever
+-- existed for any of the six session types (discovery/delivery/
+-- f2f_workshop/concierge_inquiry/compliance_consultation/
+-- training_advisory). Per the founder's own explicit fallback
+-- instruction ("if no such email exists yet for any request type, build
+-- one for all of them consistently"), this covers all six, not just the
+-- newest one.
+alter type notification_event_type add value 'session_request_confirmation';

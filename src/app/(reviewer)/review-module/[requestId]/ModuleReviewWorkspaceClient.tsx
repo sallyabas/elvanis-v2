@@ -99,7 +99,17 @@ interface Props {
    * page.tsx). Empty for AI Reliability Audit requests, which have no
    * applicability concept at all.
    */
-  regulatoryStalenessWarnings: { jurisdiction: string; label: string; daysSinceReview: number }[];
+  regulatoryStalenessWarnings: { shortCode: string; label: string; daysSinceReview: number | null; status: "red" | "amber" }[];
+  /**
+   * Real gap closed (confirmed 2026-09-05) — see
+   * listApplicableFrameworksMetadata()'s own docblock: the original
+   * brief's "report metadata showing frameworks + last-reviewed date" is
+   * always-shown for every applicable framework, distinct from
+   * regulatoryStalenessWarnings above (which deliberately drops
+   * fully-current frameworks, since a warning has nothing to say about
+   * one). Empty for AI Reliability Audit requests, same as the warnings list.
+   */
+  applicableFrameworksMetadata: { shortCode: string; label: string; daysSinceReview: number | null; status: "red" | "amber" | "green" }[];
 }
 
 /**
@@ -194,6 +204,7 @@ export function ModuleReviewWorkspaceClient({
   isUrgent,
   hasNoApplicableJurisdiction,
   regulatoryStalenessWarnings,
+  applicableFrameworksMetadata,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingAnswerId, setEditingAnswerId] = useState<string | null>(null);
@@ -362,22 +373,46 @@ export function ModuleReviewWorkspaceClient({
           the core audit's own ambient version of this warning, this one
           reflects this request's own real, frozen jurisdiction
           determination — reviewer-only, never shown to the client. */}
-      {regulatoryStalenessWarnings.length > 0 && (
-        <Alert variant="warning" className="mb-6">
-          <div>
-            <p className="font-medium">
-              This request touches {regulatoryStalenessWarnings.length === 1 ? "a regulatory framework" : "regulatory frameworks"} whose{" "}
-              reference content hasn&apos;t been checked recently:
+      {/* Migrated 2026-09-05 to the same real RED/AMBER two-tier treatment
+          as the core audit's own version — see that workspace's own
+          docblock for the full reasoning. Still reflects this request's
+          own real, frozen jurisdiction determination, not the company's
+          current profile. */}
+      {regulatoryStalenessWarnings.map((w) => (
+        <Alert key={w.shortCode} variant={w.status === "red" ? "warning" : "info"} className="mb-6">
+          {w.status === "red" ? (
+            <p>
+              ⚠️ Framework review overdue: <strong>{w.label}</strong>{" "}
+              {w.daysSinceReview === null ? "has not yet been reviewed under this tracker" : `was last reviewed ${w.daysSinceReview} days ago`}.
+              Consider checking for regulatory updates before approving this request.
             </p>
-            <ul className="mt-1 list-disc pl-5">
-              {regulatoryStalenessWarnings.map((w) => (
-                <li key={w.jurisdiction}>
-                  {w.label} last reviewed {w.daysSinceReview} days ago — consider checking for updates before approving this request.
-                </li>
-              ))}
-            </ul>
-          </div>
+          ) : (
+            <p>
+              ℹ️ Framework review due soon: <strong>{w.label}</strong> is coming up for review.
+            </p>
+          )}
+          <p className="mt-1 text-xs italic">
+            <a href="/admin/regulatory-frameworks" className="underline">
+              View the regulatory framework tracker →
+            </a>
+          </p>
         </Alert>
+      ))}
+
+      {/* Real gap closed (confirmed 2026-09-05, found during final live
+          verification) — the original brief's "report metadata showing
+          frameworks + last-reviewed date" is its own, always-shown
+          requirement, not just the RED/AMBER warning above (which
+          deliberately drops fully-current frameworks). Plain metadata,
+          not an alert — no icon/wash, since nothing here is asking for
+          attention. */}
+      {applicableFrameworksMetadata.length > 0 && (
+        <p className="mb-6 text-xs text-neutral-500 dark:text-neutral-400">
+          Applicable frameworks:{" "}
+          {applicableFrameworksMetadata
+            .map((f) => `${f.label} (${f.daysSinceReview === null ? "never reviewed" : `reviewed ${f.daysSinceReview}d ago`})`)
+            .join(" · ")}
+        </p>
       )}
 
       {actionError && (

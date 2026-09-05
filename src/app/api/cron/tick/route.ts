@@ -4,7 +4,7 @@ import { runPendingAudits } from "@/lib/audit/run-pending-audits";
 import { runPendingAiOpportunitySynthesis } from "@/lib/synthesis/run-pending-synthesis";
 import { checkReAuditReminders } from "@/lib/reviewer/re-audit-reminders";
 import { checkEvidenceCompletenessNudges } from "@/lib/reviewer/evidence-nudges";
-import { checkRegulatoryContentReviewDue } from "@/lib/reviewer/regulatory-content-review";
+import { checkRegulatoryFrameworksDue } from "@/lib/reviewer/regulatory-frameworks";
 import { checkSprintProgressCheckins } from "@/lib/execution-sprint/progress-checkins";
 import { sendPendingNotifications } from "@/lib/notifications/dispatch";
 
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
     runCheck("aiOpportunitySynthesis", runPendingAiOpportunitySynthesis),
     runCheck("reAuditReminders", checkReAuditReminders),
     runCheck("evidenceCompletenessNudges", checkEvidenceCompletenessNudges),
-    runCheck("regulatoryContentReviewDue", checkRegulatoryContentReviewDue),
+    runCheck("regulatoryFrameworksDue", checkRegulatoryFrameworksDue),
     runCheck("sprintProgressCheckins", checkSprintProgressCheckins),
   ]);
 

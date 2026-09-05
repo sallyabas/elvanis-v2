@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { requestSession, type SessionType } from "@/lib/service-layer/session-requests";
+import { useEffect, useState } from "react";
+import { requestSession, getContactFieldDefaults, type SessionType } from "@/lib/service-layer/session-requests";
+import { ContactFieldsForm, isContactFieldsValid } from "@/app/_components/ContactFieldsForm";
 import { Alert } from "@/app/_components/ui/Alert";
-import { Textarea } from "@/app/_components/ui/Textarea";
 
 // Framing text + spelled-out F2F wording added 2026-08-06 (honest UX
 // review pass) — the report page previously offered Delivery Session and
@@ -55,17 +55,33 @@ const LABELS: Record<SessionType, { cta: string; sentLabel: string; description:
     sentLabel: "Compliance consultation requested",
     description: "A direct conversation with your reviewer about an active compliance, procurement, or investor request.",
   },
+  // Reopened 2026-09-05, direct founder decision — "Training & Advisory"
+  // was previously a "Coming soon" placeholder on Services with no working
+  // request flow at all. "Contact Sales" framing only, matching how
+  // Concierge's own button read before its pricing was unified — no price,
+  // no payment link, a real scoping conversation with the reviewer first.
+  training_advisory: {
+    cta: "Contact Sales",
+    sentLabel: "Training & Advisory inquiry sent",
+    description: "Structured training and ongoing advisory for your team — scoped with you personally, not a checkout.",
+  },
 };
 
 /**
  * Service Layer session requests, client-facing (confirmed 2026-08-06) —
  * no calendar/payment integration exists, so this is a real request +
- * human follow-up, not a fake booking flow. Shared across the two client
- * surfaces that offer a session request (evidence-intake for Discovery,
- * the delivered-report page for Delivery/F2F Workshop) — kept here rather
- * than duplicated per route, unlike this codebase's usual "one small
- * component per route group" convention, since the three variants are
- * genuinely identical apart from copy.
+ * human follow-up, not a fake booking flow. Shared across every client
+ * surface that offers a session request.
+ *
+ * Mandatory contact fields (confirmed 2026-09-05, direct founder decision)
+ * — Email/Name/Phone are now required on all six session types, using the
+ * shared ContactFieldsForm.tsx (also used by the separate "Having
+ * trouble? Contact us" form — two distinct forms, not merged). Pre-filled
+ * from the client's own session email + Account Settings profile via
+ * getContactFieldDefaults(), fetched once on mount rather than threaded
+ * as props through this component's 5 heterogeneous call sites (two of
+ * which are themselves client components) — still fully editable, still
+ * required.
  */
 export function SessionRequestButton({
   companyId,
@@ -97,22 +113,50 @@ export function SessionRequestButton({
 }) {
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
-  // Real gap closed (confirmed 2026-09-03, direct founder request) —
-  // every call site of requestSession() previously hardcoded `null` for
-  // clientNotes, since no field existed anywhere to collect one. The
-  // column already existed and was already wired through persistence and
-  // reviewer display — this was purely a missing input.
   const [notes, setNotes] = useState("");
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getContactFieldDefaults().then((defaults) => {
+      if (cancelled) return;
+      setEmail(defaults.email);
+      setName(defaults.name);
+      setPhone(defaults.phone);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleRequest() {
+    setAttemptedSubmit(true);
+    if (!isContactFieldsValid({ email, name, phone, message: notes }, true)) return;
+
     setStatus("sending");
     setError(null);
-    const result = await requestSession(companyId, sessionType, notes.trim() || null);
-    if (result.success) {
-      setStatus("sent");
-    } else {
+    try {
+      const result = await requestSession(companyId, sessionType, notes.trim() || null, email.trim(), name.trim(), phone.trim());
+      if (result.success) {
+        setStatus("sent");
+      } else {
+        setStatus("error");
+        setError(result.error ?? "Something went wrong.");
+      }
+    } catch {
+      // Real gap found and fixed while adding training_advisory (confirmed
+      // 2026-09-05) — the same uncaught-RPC-failure class already fixed
+      // repeatedly elsewhere in this codebase (all three module intake
+      // forms, DocumentUploadField, the reviewer workspace action buttons,
+      // FindingNotApplicableButton, SprintInterestButton) had never been
+      // swept to this component: a genuine RPC-level rejection left
+      // `status` stuck on "sending" forever, with no error and no way to
+      // retry.
       setStatus("error");
-      setError(result.error ?? "Something went wrong.");
+      setError("Something went wrong reaching the server — please try again.");
     }
   }
 
@@ -129,7 +173,7 @@ export function SessionRequestButton({
   // not writing one at all).
   return (
     <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
-      <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">
+      <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
         {LABELS[sessionType].description}
         {priceLabel && (
           <>
@@ -138,13 +182,20 @@ export function SessionRequestButton({
           </>
         )}
       </p>
-      <Textarea
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        placeholder="Anything your reviewer should know before reaching out? (optional)"
-        rows={2}
-        className="mb-2 text-xs"
-      />
+      <div className="mb-3">
+        <ContactFieldsForm
+          email={email}
+          onEmailChange={setEmail}
+          name={name}
+          onNameChange={setName}
+          phone={phone}
+          onPhoneChange={setPhone}
+          message={notes}
+          onMessageChange={setNotes}
+          messageHint="Anything your reviewer should know before reaching out?"
+          showValidation={attemptedSubmit}
+        />
+      </div>
       <button
         type="button"
         onClick={handleRequest}

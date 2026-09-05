@@ -27,6 +27,17 @@ export interface ModuleMeta {
    * up at its own card's heading.
    */
   requestButtonLabel: string;
+  /**
+   * Real Payoneer payment link (confirmed 2026-09-05, direct founder
+   * instruction — "confirmed against each service") — no in-app checkout
+   * exists anywhere in this codebase; payment is still confirmed
+   * externally/manually, same disclosed design as Execution Sprint's own
+   * "a Stripe payment link, sent by the reviewer after the scope is
+   * agreed." This is the same idea, just a real, always-visible link on
+   * the Services page rather than something a reviewer has to remember to
+   * send by hand for these three fixed-price modules.
+   */
+  paymentLink: string;
 }
 
 export const MODULE_META: Record<ModuleType, ModuleMeta> = {
@@ -37,6 +48,7 @@ export const MODULE_META: Record<ModuleType, ModuleMeta> = {
     pricingKey: "tender_readiness",
     description: "AI-specific regulatory risk classification and procurement-readiness content across EU AI Act, UAE DIFC, and Saudi AI governance.",
     requestButtonLabel: "Request Tender Readiness Review",
+    paymentLink: "https://link.payoneer.com/Token?t=E4694A12E5F647D682D6A9EFB3599F61&src=tpl",
   },
   ai_reliability: {
     moduleType: "ai_reliability",
@@ -45,6 +57,7 @@ export const MODULE_META: Record<ModuleType, ModuleMeta> = {
     pricingKey: "ai_reliability_audit",
     description: "Adversarial testing against documented real-world AI failure patterns — invented policy, data leakage, bias, prompt injection.",
     requestButtonLabel: "Request AI Reliability Audit",
+    paymentLink: "https://link.payoneer.com/Token?t=DA239AC7FF0C4A4D8A94672F574CB542&src=tpl",
   },
   data_protection: {
     moduleType: "data_protection",
@@ -53,6 +66,7 @@ export const MODULE_META: Record<ModuleType, ModuleMeta> = {
     pricingKey: "data_protection_compliance",
     description: "GDPR/PDPL readiness across consent, data-subject rights, retention, breach response, and cross-border transfer.",
     requestButtonLabel: "Request Data Protection Review",
+    paymentLink: "https://link.payoneer.com/Token?t=F25C11FC4D42469D8F88A7455472B66D&src=tpl",
   },
 };
 

@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "./send-email";
 import { renderEmail } from "./email-template";
 import { EVENT_TYPE_TO_PREFERENCE_KEY, isOptedOut, type ClientNotificationEventType, type NotificationPreferences } from "./preferences";
+import { TYPE_LABELS, sessionTypeToItemType } from "@/lib/item-type-badge";
 
 /**
  * The "separate, explicit, confirmed step" every notification-creating
@@ -49,6 +50,8 @@ async function templateFor(
     related_report_id: string | null;
     related_sprint_id: string | null;
     related_module_request_id: string | null;
+    related_session_request_id: string | null;
+    related_contact_request_id: string | null;
   },
 ): Promise<{ subject: string; bodyHtml: string }> {
   const eventType = notification.event_type;
@@ -124,6 +127,51 @@ async function templateFor(
         subject: "A client requested a live session",
         bodyHtml: `<p style="margin:0 0 16px 0;">A client has requested a Discovery, Delivery, or F2F Workshop session — worth following up to get it on the calendar.</p><p style="margin:0;"><a href="${SITE_URL}/queue" style="color:#B87333;font-weight:600;">View on the reviewer queue →</a></p>`,
       };
+    // Client-facing confirmation (confirmed 2026-09-05, direct founder
+    // request) — real gap: no client-facing confirmation email ever
+    // existed for any of the six session types, only the reviewer-facing
+    // "session_requested" case above. Built consistently for all six.
+    // Reuses TYPE_LABELS/sessionTypeToItemType (item-type-badge.tsx,
+    // plain server-safe exports) rather than a third, independently-
+    // drifting label map — that module already has the real display name
+    // for every session type.
+    case "session_request_confirmation": {
+      let sessionTypeLabel = "session";
+      if (notification.related_session_request_id) {
+        const { data: request } = await admin
+          .from("session_requests")
+          .select("session_type")
+          .eq("id", notification.related_session_request_id)
+          .maybeSingle();
+        if (request?.session_type) {
+          sessionTypeLabel = TYPE_LABELS[sessionTypeToItemType(request.session_type as string)];
+        }
+      }
+      return {
+        subject: `We've got your ${sessionTypeLabel} request`,
+        bodyHtml: `${greeting}<p style="margin:0 0 16px 0;">We've received your ${sessionTypeLabel} request — your reviewer will follow up directly to get it scheduled.</p><p style="margin:0;"><a href="${SITE_URL}/reports" style="color:#B87333;font-weight:600;">Track it in Reports &amp; History →</a></p>${loginReminder}`,
+      };
+    }
+    // Reviewer-facing (confirmed 2026-09-05, direct founder request) —
+    // "Having trouble? Contact us," a genuinely new capture path
+    // (contact_requests), distinct from the general mailto: link.
+    case "contact_request_submitted": {
+      let detail = "";
+      if (notification.related_contact_request_id) {
+        const { data: request } = await admin
+          .from("contact_requests")
+          .select("name, email, service_context")
+          .eq("id", notification.related_contact_request_id)
+          .maybeSingle();
+        if (request) {
+          detail = ` from ${request.name as string} (${request.email as string})${request.service_context ? `, re: ${request.service_context as string}` : ""}`;
+        }
+      }
+      return {
+        subject: "A client needs help",
+        bodyHtml: `<p style="margin:0 0 16px 0;">A real "Having trouble?" request came in${detail}.</p><p style="margin:0;"><a href="${SITE_URL}/queue" style="color:#B87333;font-weight:600;">View on the reviewer queue →</a></p>`,
+      };
+    }
     case "sprint_interest_requested":
       return {
         subject: "A client is interested in an Execution Sprint",
@@ -230,7 +278,9 @@ export async function sendPendingNotifications(): Promise<DispatchResult> {
 
   const { data: pending, error } = await supabase
     .from("notifications")
-    .select("id, recipient_type, recipient_id, event_type, related_report_id, related_sprint_id, related_module_request_id")
+    .select(
+      "id, recipient_type, recipient_id, event_type, related_report_id, related_sprint_id, related_module_request_id, related_session_request_id, related_contact_request_id",
+    )
     .is("sent_at", null)
     .eq("channel", "email");
   if (error) throw new Error(`sendPendingNotifications: failed to load pending notifications: ${error.message}`);
@@ -273,6 +323,8 @@ export async function sendPendingNotifications(): Promise<DispatchResult> {
         related_report_id: (notification.related_report_id as string | null) ?? null,
         related_sprint_id: (notification.related_sprint_id as string | null) ?? null,
         related_module_request_id: (notification.related_module_request_id as string | null) ?? null,
+        related_session_request_id: (notification.related_session_request_id as string | null) ?? null,
+        related_contact_request_id: (notification.related_contact_request_id as string | null) ?? null,
       });
 
       const html = renderEmail({

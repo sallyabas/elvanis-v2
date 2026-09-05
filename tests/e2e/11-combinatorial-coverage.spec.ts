@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { execFileSync } from "node:child_process";
-import { loginAsTestUser } from "./support/auth";
+import { loginAsTestUser, fillSessionRequestContactFields } from "./support/auth";
 import { createTestAdminClient } from "./support/db";
 import { seedMinimalClient, seedReviewableReport, seedHealthyDeliveredReport } from "./support/seed";
 import { step } from "./support/screenshot";
@@ -221,8 +221,14 @@ test("Document upload states, all 3 modules on one company, Concierge inquiry (e
   await step(page, testInfo, "11-combinatorial", "13-ai-reliability-submitted");
 
   // --- Concierge inquiry on the same company (module + Concierge combo, and the "everything at once" modules+Concierge combo since this company now has all 3 modules) ---
+  // Mandatory contact fields (confirmed 2026-09-05) — see
+  // support/auth.ts's own docblock for why this is scoped to the specific
+  // button (Services renders several SessionRequestButton widgets at
+  // once, each sharing identical Name/Phone label text).
   await page.goto("/services");
-  await page.getByRole("button", { name: /Request Concierge/i }).click();
+  const conciergeRequestButton = page.getByRole("button", { name: /Request Concierge/i });
+  await fillSessionRequestContactFields(conciergeRequestButton);
+  await conciergeRequestButton.click();
   await expect(page.getByText(/Concierge inquiry sent/i)).toBeVisible({ timeout: 10_000 });
   await step(page, testInfo, "11-combinatorial", "14-concierge-requested-everything-at-once");
 

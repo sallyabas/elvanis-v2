@@ -1,11 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { markRegulatoryContentReviewed } from "@/lib/reviewer/regulatory-content-review";
 import { updateSessionRequestStatus } from "@/lib/service-layer/session-requests";
 import { updatePricingItem } from "@/lib/pricing";
 import { replyToSprintQueueItem } from "@/lib/execution-sprint/workspace";
 import { resolveSprintInterestRequest } from "@/lib/execution-sprint/interest-requests";
+import { resolveContactRequest } from "@/lib/reviewer/contact-requests";
 import { createClient } from "@/lib/supabase/server";
 
 // Same independent session+role re-check as every other reviewer Server
@@ -23,12 +23,6 @@ async function getReviewerId(): Promise<string> {
   if (profile?.role !== "reviewer") throw new Error("Not authorized as a reviewer.");
 
   return user.id;
-}
-
-export async function markRegulatoryContentReviewedAction(jurisdiction: string) {
-  const reviewerId = await getReviewerId();
-  await markRegulatoryContentReviewed(jurisdiction, reviewerId);
-  revalidatePath("/queue");
 }
 
 /**
@@ -113,5 +107,12 @@ export async function replyToSprintQueueItemAction(formData: FormData) {
 export async function resolveSprintInterestRequestAction(requestId: string) {
   const reviewerId = await getReviewerId();
   await resolveSprintInterestRequest(requestId, reviewerId);
+  revalidatePath("/queue");
+}
+
+/** "Having trouble? Contact us" (confirmed 2026-09-05) — marking a request resolved once the reviewer has followed up. */
+export async function resolveContactRequestAction(id: string) {
+  await getReviewerId();
+  await resolveContactRequest(id);
   revalidatePath("/queue");
 }

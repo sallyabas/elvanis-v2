@@ -1,24 +1,23 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { listRegulatoryContentReviewStatus } from "@/lib/reviewer/regulatory-content-review";
-import { JURISDICTION_LABELS } from "@/lib/reviewer/regulatory-staleness";
 import { listPendingSessionRequests } from "@/lib/service-layer/session-requests";
 import { listPricing } from "@/lib/pricing";
 import { listOpenSprintQueueItems, listAllSprints } from "@/lib/execution-sprint/workspace";
 import { listOpenSprintInterestRequests } from "@/lib/execution-sprint/interest-requests";
 import { listDeliveryFeedback } from "@/lib/reviewer/delivery-feedback";
+import { listOpenContactRequests } from "@/lib/reviewer/contact-requests";
 import { computeSubmissionDisplayStage, SUBMISSION_STAGE_LABELS } from "@/lib/evidence/submission-status";
 import { getSettingNumber } from "@/lib/app-settings";
 import { type ItemType, TypeBadge, moduleTypeToItemType, sessionTypeToItemType } from "@/lib/item-type-badge";
 import { SESSION_STATUS_LABELS } from "@/lib/format";
 import {
-  markRegulatoryContentReviewedAction,
   scheduleSessionRequestAction,
   completeSessionRequestAction,
   declineSessionRequestAction,
   updatePricingItemAction,
   replyToSprintQueueItemAction,
   resolveSprintInterestRequestAction,
+  resolveContactRequestAction,
 } from "./actions";
 import { Card } from "@/app/_components/ui/Card";
 import { Input } from "@/app/_components/ui/Input";
@@ -90,13 +89,13 @@ export default async function ReviewerQueuePage() {
     moduleTurnaroundHours,
     { data: awaitingDeliveryModules, error: awaitingDeliveryError },
     { data: scopedSprints, error: sprintsError },
-    regulatoryStatus,
     sessionRequests,
     pricing,
     deliveryFeedback,
     sprintQueueItems,
     sprintInterestRequests,
     allSprints,
+    contactRequests,
   ] = await Promise.all([
     supabase
       .from("reports")
@@ -149,13 +148,13 @@ export default async function ReviewerQueuePage() {
       .select("id, module_type, created_at, approved_at, companies(name)")
       .eq("status", "approved"),
     supabase.from("execution_sprints").select("id, created_at, companies(name)").eq("status", "scoped"),
-    listRegulatoryContentReviewStatus(),
     listPendingSessionRequests(),
     listPricing(),
     listDeliveryFeedback(),
     listOpenSprintQueueItems(),
     listOpenSprintInterestRequests(),
     listAllSprints(),
+    listOpenContactRequests(),
   ]);
 
   if (reportsError) {
@@ -297,6 +296,16 @@ export default async function ReviewerQueuePage() {
                     </span>
                   </div>
                   {r.client_notes && <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">&quot;{r.client_notes}&quot;</p>}
+                  {/* Mandatory contact fields (confirmed 2026-09-05) — the
+                      values on file AT REQUEST TIME, not a live profile
+                      reference, same discipline as phone_snapshot below.
+                      Blank for the one disclosed exception
+                      (compliance_consultation, no client-facing form). */}
+                  {(r.contact_name || r.contact_email) && (
+                    <p className="mb-2 text-xs text-neutral-700 dark:text-neutral-300">
+                      Contact: {r.contact_name ?? "—"} {r.contact_email && <>· {r.contact_email}</>}
+                    </p>
+                  )}
                   {/* Phone snapshot (confirmed 2026-09-03) — the number on
                       file AT REQUEST TIME, not a live profile reference. */}
                   {r.phone_snapshot && <p className="mb-2 text-xs text-neutral-700 dark:text-neutral-300">Phone: {r.phone_snapshot}</p>}
@@ -367,6 +376,43 @@ export default async function ReviewerQueuePage() {
                       </form>
                     )}
                   </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        {/* "Having trouble? Contact us" (confirmed 2026-09-05) — a real,
+            dedicated support-request queue, distinct from Session requests
+            (no scheduling lifecycle fits "someone is stuck"). */}
+        <Card title="Contact requests">
+          {contactRequests.length === 0 ? (
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">No open contact requests.</p>
+          ) : (
+            <ul className="space-y-3">
+              {contactRequests.map((r) => (
+                <li key={r.id} className="rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-neutral-900 dark:text-neutral-50">{r.name}</span>
+                    <span className="text-neutral-500 dark:text-neutral-400">· {r.email}</span>
+                    {r.companyName && (
+                      <Link href={`/company/${r.companyId}`} className="text-accent hover:underline">
+                        {r.companyName}
+                      </Link>
+                    )}
+                    {r.serviceContext && (
+                      <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+                        {r.serviceContext}
+                      </span>
+                    )}
+                    <span className="text-xs text-neutral-400 dark:text-neutral-500">{new Date(r.createdAt).toLocaleString()}</span>
+                  </div>
+                  {r.message && <p className="mb-2 text-neutral-700 dark:text-neutral-300">&quot;{r.message}&quot;</p>}
+                  <form action={resolveContactRequestAction.bind(null, r.id)}>
+                    <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
+                      Mark resolved
+                    </Button>
+                  </form>
                 </li>
               ))}
             </ul>
@@ -530,29 +576,18 @@ export default async function ReviewerQueuePage() {
           )}
         </Card>
 
-        <Card title="Regulatory content status">
-          <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
-            When each jurisdiction&apos;s regulatory reference content was last manually checked against current law —
-            this is a manual process, nothing in the code can detect a law changing on its own.
+        {/* Migrated 2026-09-05 to its own standalone admin page
+            (/admin/regulatory-frameworks) — a full migration off the old
+            regulatory_content_reviews-backed panel, not left running
+            alongside it (direct founder decision: "since we're still in
+            test phase... now is the cheap moment to do this properly"). */}
+        <Card title="Regulatory framework tracker">
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            Moved to its own page —{" "}
+            <Link href="/admin/regulatory-frameworks" className="font-medium text-accent hover:underline">
+              open the Regulatory Framework Tracker →
+            </Link>
           </p>
-          <ul className="space-y-2">
-            {regulatoryStatus.map((r) => (
-              <li key={r.jurisdiction} className="flex items-center justify-between text-sm text-neutral-800 dark:text-neutral-200">
-                <div>
-                  <span className="font-medium">{JURISDICTION_LABELS[r.jurisdiction] ?? r.jurisdiction}</span>{" "}
-                  <span className={r.isOverdue ? "text-red-600 dark:text-red-400" : "text-neutral-500 dark:text-neutral-400"}>
-                    · last reviewed {new Date(r.lastReviewedAt).toLocaleDateString()} ({r.daysSinceReview}d ago, {r.cadenceDays}d cadence
-                    {r.isOverdue ? " · overdue" : ""})
-                  </span>
-                </div>
-                <form action={markRegulatoryContentReviewedAction.bind(null, r.jurisdiction)}>
-                  <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
-                    Mark reviewed
-                  </Button>
-                </form>
-              </li>
-            ))}
-          </ul>
         </Card>
       </div>
 

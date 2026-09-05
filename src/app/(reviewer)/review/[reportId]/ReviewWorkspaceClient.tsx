@@ -168,7 +168,7 @@ interface Props {
    * (the core audit never does formal jurisdiction determination — see
    * the warning's own copy below for the exact framing).
    */
-  regulatoryStalenessWarnings: { jurisdiction: string; label: string; daysSinceReview: number }[];
+  regulatoryStalenessWarnings: { shortCode: string; label: string; daysSinceReview: number | null; status: "red" | "amber" }[];
   top3FindingIds: string[];
   canRerun: boolean;
   rerunOfReportId: string | null;
@@ -613,37 +613,38 @@ export function ReviewWorkspaceClient({
         </Alert>
       )}
 
-      {/* Real, new (confirmed 2026-09-03, direct founder request) — a
-          90-day (admin-adjustable) staleness warning, genuinely distinct
-          from the pre-existing /queue "Regulatory content status" panel
-          (that one tracks the maintenance cadence for the content
-          itself; this one is a per-decision nudge). Deliberately framed
-          as an AMBIENT signal about the company's profile, never a claim
-          that this report's own findings address these frameworks — the
-          core audit doesn't do formal jurisdiction determination, that's
-          the standalone modules' job. Reviewer-only, never client-facing. */}
-      {regulatoryStalenessWarnings.length > 0 && (
-        <Alert variant="warning" className="mb-6">
-          <div>
-            <p className="font-medium">
-              This company&apos;s profile touches {regulatoryStalenessWarnings.length === 1 ? "a regulatory framework" : "regulatory frameworks"}{" "}
-              whose reference content hasn&apos;t been checked recently:
+      {/* Migrated 2026-09-05 to a real RED (overdue)/AMBER (due soon)
+          two-tier treatment, reading from regulatory_frameworks — one
+          Alert per stale framework, per the brief's own explicit "if
+          multiple frameworks are stale, show one banner per stale
+          framework" instruction, rather than one combined list. Still
+          deliberately framed as an AMBIENT signal about the company's
+          profile, never a claim that this report's own findings address
+          these frameworks — the core audit doesn't do formal jurisdiction
+          determination, that's the standalone modules' job. Reviewer-only,
+          never client-facing. Links to the new standalone admin page. */}
+      {regulatoryStalenessWarnings.map((w) => (
+        <Alert key={w.shortCode} variant={w.status === "red" ? "warning" : "info"} className="mb-6">
+          {w.status === "red" ? (
+            <p>
+              ⚠️ Framework review overdue: <strong>{w.label}</strong>{" "}
+              {w.daysSinceReview === null ? "has not yet been reviewed under this tracker" : `was last reviewed ${w.daysSinceReview} days ago`}.
+              Consider checking for regulatory updates before approving this report.
             </p>
-            <ul className="mt-1 list-disc pl-5">
-              {regulatoryStalenessWarnings.map((w) => (
-                <li key={w.jurisdiction}>
-                  {w.label} last reviewed {w.daysSinceReview} days ago — consider checking for updates before approving this report.
-                </li>
-              ))}
-            </ul>
-            <p className="mt-2 text-xs italic">
-              This is an ambient signal from the company&apos;s current registration/customer-market profile, not a claim that this
-              report&apos;s own findings specifically address these frameworks — this audit doesn&apos;t perform formal jurisdiction
-              determination (that&apos;s Tender Readiness&apos;s and Data Protection Compliance&apos;s job).
+          ) : (
+            <p>
+              ℹ️ Framework review due soon: <strong>{w.label}</strong> is coming up for review.
             </p>
-          </div>
+          )}
+          <p className="mt-1 text-xs italic">
+            An ambient signal from the company&apos;s current registration/customer-market profile, not a claim that this report&apos;s own
+            findings address this framework — this audit doesn&apos;t perform formal jurisdiction determination.{" "}
+            <a href="/admin/regulatory-frameworks" className="underline">
+              View the regulatory framework tracker →
+            </a>
+          </p>
         </Alert>
-      )}
+      ))}
 
       {(draftFindings.length > 0 || unresolvedConflicts.length > 0) && (
         <section className="mb-6 rounded-lg bg-red-50 p-4 text-sm text-red-700 shadow-card-1 dark:bg-red-950 dark:text-red-300">
@@ -815,23 +816,9 @@ export function ReviewWorkspaceClient({
           <ul className="space-y-4">
             {undisputedFindings
               .filter((f) => f.lens === lens)
-              .map((f) => (
-                <li key={f.id}>
-                  <FindingCard f={f} />
-                  <ConciergeNoteEditor
-                    reportId={reportId}
-                    findingId={f.id}
-                    existingNote={conciergeNotesByFindingId[f.id]}
-                    defaultAuthorName={currentReviewerName}
-                  />
-                  {/* Reviewer second opinion (confirmed 2026-09-04) — v1
-                      scope is Financial lens only; real enforcement is
-                      server-side, this condition is just where the
-                      button appears. */}
-                  {f.lens === "financial" && (
-                    <SecondOpinionPanel reportId={reportId} findingId={f.id} existingOpinion={secondOpinionsByFindingId[f.id]} />
-                  )}
-                  {editingId === f.id ? (
+              .map((f) => {
+                const decisionControls =
+                  editingId === f.id ? (
                     <EditForm
                       lens={f.lens}
                       initial={displayedContent(f)}
@@ -851,9 +838,44 @@ export function ReviewWorkspaceClient({
                         Reject
                       </Button>
                     </div>
-                  )}
-                </li>
-              ))}
+                  );
+
+                return (
+                  <li key={f.id}>
+                    <FindingCard f={f} />
+                    <ConciergeNoteEditor
+                      reportId={reportId}
+                      findingId={f.id}
+                      existingNote={conciergeNotesByFindingId[f.id]}
+                      defaultAuthorName={currentReviewerName}
+                    />
+                    {/* Second-opinion comparison view (confirmed 2026-09-05,
+                        direct founder request) — reviewer second opinion
+                        v1 scope is Financial lens only, so this is the
+                        only lens getting the real side-by-side layout;
+                        every other lens keeps the original stacked
+                        treatment below. Your own decision (accept/edit/
+                        reject) and Claude's second-opinion result sit in
+                        two columns on the same screen, using the exact
+                        same decisionControls/SecondOpinionPanel already
+                        built — no new data, purely a layout change. */}
+                    {f.lens === "financial" ? (
+                      <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Your decision</p>
+                          {decisionControls}
+                        </div>
+                        <div>
+                          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Second opinion (Claude)</p>
+                          <SecondOpinionPanel reportId={reportId} findingId={f.id} existingOpinion={secondOpinionsByFindingId[f.id]} />
+                        </div>
+                      </div>
+                    ) : (
+                      decisionControls
+                    )}
+                  </li>
+                );
+              })}
           </ul>
         </Card>
       ))}

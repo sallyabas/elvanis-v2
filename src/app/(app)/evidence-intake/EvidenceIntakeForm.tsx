@@ -19,6 +19,7 @@ import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
 import { DocumentUploadField } from "@/app/_components/ui/DocumentUploadField";
 import { EditWindowCountdown } from "@/app/_components/EditWindowCountdown";
+import { ContactUsForm } from "@/app/_components/ContactUsForm";
 
 // EvidenceIntakeDraft moved to draft-shape.ts (confirmed 2026-08-10,
 // delayed-execution architecture) — a server component (evidence-intake/
@@ -512,6 +513,7 @@ export function EvidenceIntakeForm({
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="flex items-center justify-between">
         {initialDraft && (
@@ -974,5 +976,16 @@ export function EvidenceIntakeForm({
         </div>
       )}
     </form>
+    {/* "Having trouble? Contact us" (confirmed 2026-09-05) — deliberately
+        OUTSIDE the <form> above (a real, disclosed risk otherwise: this
+        component's own inputs/buttons live inside one large <form
+        onSubmit={handleSubmit}>, and pressing Enter inside a nested
+        text field can trigger the PARENT form's submit unless carefully
+        guarded — a sibling placement sidesteps that entirely rather than
+        relying on every inner button's type="button" alone). */}
+    <div className="mt-6 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+      <ContactUsForm companyId={companyId} serviceContext="Evidence Intake" />
+    </div>
+    </>
   );
 }
