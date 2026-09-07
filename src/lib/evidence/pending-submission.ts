@@ -13,7 +13,7 @@ import type { EvidencePayload } from "@/lib/audit/run-pending-audits";
  * the full "why."
  */
 
-export type ReaduitPaymentStatus = "not_required" | "pending" | "paid";
+export type ReaduitPaymentStatus = "not_required" | "pending" | "paid" | "unpaid";
 
 export interface PendingEvidenceSubmissionRecord {
   id: string;
@@ -30,20 +30,35 @@ export interface PendingEvidenceSubmissionRecord {
   paymentStatus: ReaduitPaymentStatus;
 }
 
-/** The one active (non-'completed') pending submission for a company, if any — null if this company has none in flight right now. */
+/**
+ * The one active pending submission for a company, if any — null if this
+ * company has none in flight right now.
+ *
+ * Real bug found and fixed (confirmed 2026-09-07) — this used
+ * `.neq("status", "completed")`, which also matched a genuinely
+ * 'canceled' row (a real, new terminal status added in the same batch
+ * that added the partial unique index fix — see
+ * 20260907092500_pending_evidence_submissions_canceled_index.sql's own
+ * docblock, which correctly excludes 'canceled' from the ACTIVE-slot
+ * check but this function was never updated to match). A canceled row
+ * is not "active" — same explicit allow-list fix already applied to
+ * computeJourneyStatus() the same day 'canceled' was added, just missed
+ * here at the time. See upsertPendingEvidenceSubmission() below for the
+ * more serious half of this same bug.
+ */
 export async function loadActivePendingEvidenceSubmission(companyId: string): Promise<PendingEvidenceSubmissionRecord | null> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("pending_evidence_submissions")
     .select("id, company_id, goal_id, evidence_payload, status, edit_window_closes_at, submitted_at, updated_at, payment_status")
     .eq("company_id", companyId)
-    .neq("status", "completed")
+    .in("status", ["editing", "audit_in_progress"])
     .maybeSingle();
   if (error) throw new Error(`loadActivePendingEvidenceSubmission: ${error.message}`);
   if (!data) return null;
 
   const stage = computeSubmissionDisplayStage({
-    status: data.status as "editing" | "audit_in_progress" | "completed",
+    status: data.status as "editing" | "audit_in_progress",
     edit_window_closes_at: data.edit_window_closes_at as string,
     payment_status: data.payment_status as ReaduitPaymentStatus,
   });
@@ -83,6 +98,24 @@ export interface UpsertPendingEvidenceSubmissionResult {
  * is running: rejected with a clear reason rather than silently doing
  * something ambiguous (there's no coherent "edit" to make once the window
  * has closed — the evidence is already locked in for the run).
+ *
+ * Real, confirmed data-corruption risk found and fixed (confirmed
+ * 2026-09-07) — this "existing" lookup used `.neq("status", "completed")`,
+ * which also matched a genuinely 'canceled' row (see
+ * loadActivePendingEvidenceSubmission()'s own docblock above for how the
+ * bug was introduced). The real consequence here is worse than a display
+ * glitch: `computeSubmissionDisplayStage()` correctly classifies a
+ * canceled row's stage as 'canceled', but NONE of the four explicit
+ * `stage === ...` checks below matched it — so it fell straight through
+ * to the final branch, which UPDATES the existing row in place. A client
+ * whose re-audit request was canceled, then tried to submit fresh
+ * evidence, would have had that new evidence silently written into the
+ * dead, canceled row instead of starting a genuinely new cycle — not
+ * merely mislabeled, but actually merged into a request nobody would ever
+ * review again. Fixed the same way as above: an explicit allow-list
+ * instead of a negative exclusion, so a canceled row can never be
+ * returned as "existing" here — a client in this exact situation now
+ * correctly falls into the `!existing` branch and gets a real, fresh row.
  */
 export async function upsertPendingEvidenceSubmission(input: UpsertPendingEvidenceSubmissionInput): Promise<UpsertPendingEvidenceSubmissionResult> {
   const supabase = createAdminClient();
@@ -91,7 +124,7 @@ export async function upsertPendingEvidenceSubmission(input: UpsertPendingEviden
     .from("pending_evidence_submissions")
     .select("id, status, edit_window_closes_at, payment_status")
     .eq("company_id", input.companyId)
-    .neq("status", "completed")
+    .in("status", ["editing", "audit_in_progress"])
     .maybeSingle();
   if (existingError) return { success: false, error: existingError.message };
 
@@ -130,9 +163,9 @@ export async function upsertPendingEvidenceSubmission(input: UpsertPendingEviden
   }
 
   const stage = computeSubmissionDisplayStage({
-    status: existing.status as "editing" | "audit_in_progress" | "completed",
+    status: existing.status as "editing" | "audit_in_progress",
     edit_window_closes_at: existing.edit_window_closes_at as string,
-    payment_status: existing.payment_status as "not_required" | "pending" | "paid",
+    payment_status: existing.payment_status as ReaduitPaymentStatus,
   });
 
   if (stage === "queued_for_audit") {

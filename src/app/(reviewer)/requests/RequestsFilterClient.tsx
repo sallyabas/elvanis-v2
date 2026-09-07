@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { UnifiedRequestRow, UnifiedRequestType } from "@/lib/reviewer/unified-requests";
 import { TypeBadge } from "@/lib/item-type-badge";
-import { humanizeStatus } from "@/lib/format";
 import { SEVERITY_STYLES } from "@/lib/severity-badge";
 import { Select } from "@/app/_components/ui/Select";
 import { Input } from "@/app/_components/ui/Input";
@@ -27,24 +26,45 @@ const TYPE_LABELS: Record<UnifiedRequestType, string> = {
   module: "Module",
   session: "Session / Concierge",
   sprint: "Execution Sprint",
+  reaudit_pending: "Re-audit (pre-payment)",
 };
 
 const SEVERITY_ORDER = ["critical", "high", "medium", "low"] as const;
 
+// Payment status filter (confirmed 2026-09-07) — deliberately its own
+// dimension, separate from the existing Status filter: Status filters on
+// the raw lifecycle value (which already includes 'awaiting_payment' as
+// one value covering two real sub-cases), while this lets a reviewer
+// isolate specifically by payment state across every entity type that has
+// one (modules, Execution Sprint, and the new pre-payment re-audit rows)
+// — sessions/Core-Audit-reports never have one, correctly excluded from
+// the option list and handled via a real "Not applicable" choice, same
+// pattern as the existing Severity filter's own "none" option.
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  pending: "Pending (not yet checked)",
+  processing: "Processing",
+  paid: "Paid",
+  unpaid: "Unpaid",
+};
+
 export function RequestsFilterClient({ rows }: { rows: UnifiedRequestRow[] }) {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all");
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [companySearch, setCompanySearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
   const statusOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.status))).sort(), [rows]);
+  const paymentStatusOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.paymentStatus).filter((p): p is string => p !== null))).sort(), [rows]);
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       if (typeFilter !== "all" && r.type !== typeFilter) return false;
       if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      if (paymentStatusFilter === "none" && r.paymentStatus !== null) return false;
+      if (paymentStatusFilter !== "all" && paymentStatusFilter !== "none" && r.paymentStatus !== paymentStatusFilter) return false;
       if (severityFilter === "none" && r.severity !== null) return false;
       if (severityFilter !== "all" && severityFilter !== "none" && r.severity !== severityFilter) return false;
       if (companySearch.trim() && !r.companyName.toLowerCase().includes(companySearch.trim().toLowerCase())) return false;
@@ -52,11 +72,11 @@ export function RequestsFilterClient({ rows }: { rows: UnifiedRequestRow[] }) {
       if (dateTo && (!r.date || r.date.slice(0, 10) > dateTo)) return false;
       return true;
     });
-  }, [rows, typeFilter, statusFilter, severityFilter, companySearch, dateFrom, dateTo]);
+  }, [rows, typeFilter, statusFilter, paymentStatusFilter, severityFilter, companySearch, dateFrom, dateTo]);
 
   return (
     <div>
-      <div className="mb-4 grid gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 sm:grid-cols-2 lg:grid-cols-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="mb-4 grid gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 sm:grid-cols-2 lg:grid-cols-6 dark:border-neutral-800 dark:bg-neutral-900">
         <Select label="Type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
           <option value="all">All types</option>
           {(Object.entries(TYPE_LABELS) as [UnifiedRequestType, string][]).map(([value, label]) => (
@@ -73,6 +93,16 @@ export function RequestsFilterClient({ rows }: { rows: UnifiedRequestRow[] }) {
               {s}
             </option>
           ))}
+        </Select>
+
+        <Select label="Payment status" value={paymentStatusFilter} onChange={(e) => setPaymentStatusFilter(e.target.value)}>
+          <option value="all">All payment statuses</option>
+          {paymentStatusOptions.map((p) => (
+            <option key={p} value={p}>
+              {PAYMENT_STATUS_LABELS[p] ?? p}
+            </option>
+          ))}
+          <option value="none">Not applicable</option>
         </Select>
 
         <Select label="Severity" value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)}>
@@ -124,7 +154,21 @@ export function RequestsFilterClient({ rows }: { rows: UnifiedRequestRow[] }) {
                     <TypeBadge type={r.badgeType} />
                   </td>
                   <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">{r.date ? new Date(r.date).toLocaleDateString() : "—"}</td>
-                  <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">{humanizeStatus(r.status)}</td>
+                  <td className="px-3 py-2">
+                    {/* r.displayStatus is the human-readable, payment-aware label
+                        (Submitted / Awaiting payment / Under review / Canceled /
+                        etc.) — confirmed 2026-09-07 to replace the old raw
+                        humanizeStatus(r.status) rendering, which collapsed the
+                        real Submitted-vs-Awaiting-payment distinction into one
+                        generic "Awaiting payment" label regardless of whether a
+                        reviewer had actually checked payment yet. */}
+                    <span className="text-neutral-600 dark:text-neutral-400">{r.displayStatus}</span>
+                    {r.cancellationReason && (
+                      <p className="mt-0.5 max-w-xs text-xs italic text-neutral-400 dark:text-neutral-500">
+                        Reason: {r.cancellationReason}
+                      </p>
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     {r.severity ? (
                       <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${SEVERITY_STYLES[r.severity]}`}>

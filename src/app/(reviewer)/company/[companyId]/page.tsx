@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { loadActivePendingEvidenceSubmission } from "@/lib/evidence/pending-submission";
-import { SUBMISSION_STAGE_LABELS } from "@/lib/evidence/submission-status";
 import { loadPaymentRecords, type PaymentEntityType, type PaymentRecord } from "@/lib/reviewer/payment-records";
 import { loadServiceStatusRecords } from "@/lib/reviewer/service-status";
 import { listReviewerNotes } from "@/lib/reviewer/reviewer-notes";
@@ -12,6 +11,7 @@ import { GOAL_LABELS } from "@/lib/lenses/goals";
 import type { PrimaryGoal } from "@/lib/lenses/types";
 import { TypeBadge, moduleTypeToItemType, sessionTypeToItemType } from "@/lib/item-type-badge";
 import { humanizeStatus, SESSION_STATUS_LABELS } from "@/lib/format";
+import { computeDisplayStatus } from "@/lib/reviewer/unified-requests";
 import { Card } from "@/app/_components/ui/Card";
 import { Input } from "@/app/_components/ui/Input";
 import { Select } from "@/app/_components/ui/Select";
@@ -103,22 +103,31 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
 
   const { data: moduleRequests } = await admin
     .from("module_requests")
-    .select("id, module_type, status, created_at")
+    .select("id, module_type, status, payment_status, cancellation_reason, created_at")
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
 
   // All requests for this company (confirmed 2026-08-25, direct founder
   // request) — sessions/Concierge and Execution Sprints, alongside the
   // Core Audit reports and module requests already shown above.
+  //
+  // reviewer_notes added (confirmed 2026-09-07) — a real gap, not just a
+  // missed field: session_requests' own "Canceled" status is a reuse of
+  // the existing 'declined' value (confirmed design, one status not two),
+  // and reviewer_notes is where a decline reason actually lives on this
+  // table. unified-requests.ts's own docblock already claimed this page
+  // "already shows reviewer_notes alongside every other session detail" —
+  // that claim was false until this fix; the field was never selected or
+  // rendered here.
   const { data: sessionRequests } = await admin
     .from("session_requests")
-    .select("id, session_type, status, requested_at, scheduled_at, completed_at, phone_snapshot")
+    .select("id, session_type, status, requested_at, scheduled_at, completed_at, phone_snapshot, reviewer_notes")
     .eq("company_id", companyId)
     .order("requested_at", { ascending: false });
 
   const { data: executionSprints } = await admin
     .from("execution_sprints")
-    .select("id, status, start_date, target_end_date, report_id")
+    .select("id, status, payment_status, cancellation_reason, start_date, target_end_date, report_id")
     .eq("company_id", companyId)
     .order("id", { ascending: false });
 
@@ -163,6 +172,23 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
   const pricingByKey = new Map(pricing.map((p) => [p.itemKey, p.priceAmount]));
 
   const activePendingSubmission = await loadActivePendingEvidenceSubmission(companyId);
+
+  // Canceled re-audit request history (confirmed 2026-09-07) — a real gap
+  // found while wiring this up: loadActivePendingEvidenceSubmission()
+  // deliberately excludes 'canceled' rows (they're not "active" — see
+  // that function's own docblock), but unified-requests.ts's new
+  // reaudit_pending row type links a canceled re-audit request straight
+  // to THIS page. Without this query, that link would land a reviewer on
+  // a page with zero trace of the very request they clicked through to
+  // see. Scoped to 'canceled' specifically — completed/active rows are
+  // already covered by the Core Audit reports card and the "Current
+  // evidence status" card above, respectively.
+  const { data: canceledReaudits } = await admin
+    .from("pending_evidence_submissions")
+    .select("id, submitted_at, cancellation_reason")
+    .eq("company_id", companyId)
+    .eq("status", "canceled")
+    .order("submitted_at", { ascending: false });
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
@@ -256,13 +282,36 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
         <Card title="Current evidence status">
           {activePendingSubmission ? (
             <p className="text-sm text-neutral-800 dark:text-neutral-200">
-              {SUBMISSION_STAGE_LABELS[activePendingSubmission.stage]}
+              {/* Payment-aware label (confirmed 2026-09-07) — replaces the
+                  flat SUBMISSION_STAGE_LABELS lookup, which showed
+                  "Awaiting payment" for a paid re-audit's window-closed
+                  state regardless of whether a reviewer had actually
+                  checked payment yet. computeDisplayStatus() produces the
+                  identical string to SUBMISSION_STAGE_LABELS for every
+                  other stage (verified: humanizeStatus's sentence-case
+                  transform matches that map's own hand-written casing
+                  exactly), so this is a pure fix, not a wording change
+                  anywhere but the one ambiguous case. */}
+              {computeDisplayStatus(activePendingSubmission.stage, activePendingSubmission.paymentStatus)}
               {activePendingSubmission.stage === "editing" && (
                 <span className="text-neutral-500 dark:text-neutral-400"> · edit window closes {new Date(activePendingSubmission.editWindowClosesAt).toLocaleString()}</span>
               )}
             </p>
           ) : (
             <p className="text-sm text-neutral-500 dark:text-neutral-400">No evidence submission currently in progress.</p>
+          )}
+          {/* Canceled re-audit request history (confirmed 2026-09-07) —
+              see the canceledReaudits query above for why this is a
+              separate query from the "active" one, not folded into it. */}
+          {canceledReaudits && canceledReaudits.length > 0 && (
+            <ul className="mt-3 space-y-1 border-t border-neutral-100 pt-2 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+              {canceledReaudits.map((c) => (
+                <li key={c.id}>
+                  Canceled re-audit request (submitted {c.submitted_at ? new Date(c.submitted_at as string).toLocaleDateString() : "—"})
+                  {c.cancellation_reason && <> — reason: {c.cancellation_reason as string}</>}
+                </li>
+              ))}
+            </ul>
           )}
         </Card>
 
@@ -315,12 +364,20 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
                   <div className="flex items-center justify-between">
                     <span className="flex flex-wrap items-center gap-2 text-neutral-800 dark:text-neutral-200">
                       <TypeBadge type={moduleTypeToItemType(m.module_type as string)} />
-                      {humanizeStatus(m.status as string)} · {m.created_at ? new Date(m.created_at).toLocaleDateString() : "—"}
+                      {/* Payment-aware label (confirmed 2026-09-07) —
+                          replaces the old plain humanizeStatus(m.status),
+                          which showed "Awaiting Payment" regardless of
+                          whether a reviewer had actually checked yet. */}
+                      {computeDisplayStatus(m.status as string, m.payment_status as string | null)} ·{" "}
+                      {m.created_at ? new Date(m.created_at).toLocaleDateString() : "—"}
                     </span>
                     <Link href={`/review-module/${m.id}`} className="text-xs font-medium text-accent hover:underline">
                       Open
                     </Link>
                   </div>
+                  {m.cancellation_reason && (
+                    <p className="mt-0.5 text-xs italic text-neutral-500 dark:text-neutral-400">Cancellation reason: {m.cancellation_reason as string}</p>
+                  )}
                   <PaymentStatusRow companyId={companyId} entityType="module_request" entityId={m.id as string} record={modulePayments.get(m.id as string)} />
                   <ServiceStatusRow
                     companyId={companyId}
@@ -356,6 +413,19 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
                   </span>
                   {/* Phone snapshot (confirmed 2026-09-03) — the number on file at request time, not a live profile reference. */}
                   {s.phone_snapshot && <p className="text-xs text-neutral-500 dark:text-neutral-400">Phone: {s.phone_snapshot as string}</p>}
+                  {/* Decline/cancellation reason (confirmed 2026-09-07) —
+                      session_requests' own 'declined' status is the reused
+                      "Canceled" status for Concierge/Training & Advisory
+                      (confirmed design: one status, not two); reviewer_notes
+                      is where the real reason lives on this table. Shown
+                      whenever present, not only when declined, since a
+                      reviewer may leave a note on a scheduled/completed
+                      session too. */}
+                  {s.reviewer_notes && (
+                    <p className="text-xs italic text-neutral-500 dark:text-neutral-400">
+                      {s.status === "declined" ? "Cancellation reason" : "Reviewer notes"}: {s.reviewer_notes as string}
+                    </p>
+                  )}
                   <PaymentStatusRow companyId={companyId} entityType="session_request" entityId={s.id as string} record={sessionPayments.get(s.id as string)} />
                   <ServiceStatusRow
                     companyId={companyId}
@@ -403,7 +473,12 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
                   <div className="flex items-center justify-between">
                     <span className="flex flex-wrap items-center gap-2 text-neutral-800 dark:text-neutral-200">
                       <TypeBadge type="execution_sprint" />
-                      {humanizeStatus(s.status as string)}
+                      {/* Payment-aware label (confirmed 2026-09-07) — same
+                          "awaiting_payment is ambiguous" fix as modules
+                          above; sprint_status also gained a genuine
+                          'awaiting_payment' value (2026-09-07, unified flow
+                          spec) alongside the pre-existing 'canceled'. */}
+                      {computeDisplayStatus(s.status as string, s.payment_status as string | null)}
                       {s.start_date && <> · started {s.start_date}</>}
                       {s.target_end_date && <> · target end {s.target_end_date}</>}
                     </span>
@@ -411,6 +486,9 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
                       Open
                     </Link>
                   </div>
+                  {s.cancellation_reason && (
+                    <p className="mt-0.5 text-xs italic text-neutral-500 dark:text-neutral-400">Cancellation reason: {s.cancellation_reason as string}</p>
+                  )}
                   <PaymentStatusRow companyId={companyId} entityType="execution_sprint" entityId={s.id as string} record={sprintPayments.get(s.id as string)} />
                   <ServiceStatusRow
                     companyId={companyId}

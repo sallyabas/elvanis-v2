@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Severity } from "@/lib/lenses/types";
 import { type ItemType, TYPE_LABELS, moduleTypeToItemType, sessionTypeToItemType } from "@/lib/item-type-badge";
+import { humanizeStatus } from "@/lib/format";
+import { computeSubmissionDisplayStage } from "@/lib/evidence/submission-status";
 
 /**
  * Unified, filterable request list (confirmed 2026-08-25, direct founder
@@ -25,7 +27,7 @@ import { type ItemType, TYPE_LABELS, moduleTypeToItemType, sessionTypeToItemType
  * SEVERITY_RANK, kept as a local copy here since that one isn't exported.
  */
 
-export type UnifiedRequestType = "audit" | "module" | "session" | "sprint";
+export type UnifiedRequestType = "audit" | "module" | "session" | "sprint" | "reaudit_pending";
 
 export interface UnifiedRequestRow {
   id: string;
@@ -44,9 +46,60 @@ export interface UnifiedRequestRow {
   companyName: string;
   /** The single date this row sorts/filters by — submitted_at / created_at / requested_at, whichever is this row's own real anchor moment. */
   date: string | null;
+  /** Raw DB status value — kept for the existing Status filter's own value/dedup logic, unchanged. */
   status: string;
+  /**
+   * Human-readable, payment-aware label (confirmed 2026-09-07, unified
+   * payment/status flow follow-up) — `status` alone is ambiguous for the
+   * `awaiting_payment` value (covers both "nothing checked yet" and
+   * "reviewer confirmed unpaid"), same split already built for `/queue`.
+   * Everything else falls back to a plain humanized version of `status`.
+   */
+  displayStatus: string;
+  /** Raw payment_status, where this entity type has one (modules, Execution Sprint, and the new pre-payment re-audit rows) — null for sessions and for already-existing reports (a report only ever exists post-payment, so payment_status has nothing left to say by the time it's a `reports` row). */
+  paymentStatus: string | null;
+  /** 'Canceled' status (confirmed 2026-09-07) — the real reason, wherever one was recorded; null otherwise. */
+  cancellationReason: string | null;
   severity: Severity | null;
   link: string;
+}
+
+/**
+ * Shared reviewer-facing label split (confirmed 2026-09-07, wording
+ * corrected same day per direct follow-up) - the awaiting_payment status
+ * is ambiguous on its own: it covers both "just submitted, nothing
+ * checked yet" and "a reviewer checked and it's confirmed unpaid".
+ * `pending_review` gets the matching "Under review" treatment; every
+ * other status (approved/sent/scoped/in_progress/complete/canceled/
+ * requested/scheduled/completed/declined/not_required) falls back to the
+ * existing generic humanizer, deliberately not given new bespoke copy
+ * beyond what was actually asked for.
+ *
+ * Wording, corrected 2026-09-07: initially built with the simpler
+ * client-facing three-word vocabulary ("Submitted"/"Awaiting payment"),
+ * same as modules' moduleClientStatusLabel() - but /requests, /company/
+ * [companyId], and /queue are ALL reviewer-only pages, and /queue's own
+ * awaiting-payment sections already use richer wording ("Not yet
+ * checked"/"Unpaid", see queue/page.tsx's own `isUnpaid` checks) to
+ * distinguish the same two sub-states. Direct follow-up confirmed:
+ * consistency across all three reviewer-only pages is worth more than
+ * this one function staying "simple" - so this now matches /queue's
+ * exact vocabulary instead of inventing a third phrasing. Client-facing
+ * labels (moduleClientStatusLabel(), SUBMISSION_STAGE_LABELS, Dashboard's
+ * own subtitle logic) are separate functions, deliberately untouched -
+ * they still show clients the simpler "Submitted"/"Awaiting payment"
+ * pair; "Not yet checked"/"Unpaid" is internal reviewer-process language,
+ * never shown to a client.
+ *
+ * Exported so /company/[companyId] can reuse the identical split instead
+ * of a third, independently-drifting copy - that page's own module/
+ * sprint/re-audit sections needed the exact same "awaiting_payment is
+ * ambiguous" fix.
+ */
+export function computeDisplayStatus(rawStatus: string, paymentStatus: string | null): string {
+  if (rawStatus === "awaiting_payment") return paymentStatus === "unpaid" ? "Unpaid" : "Not yet checked";
+  if (rawStatus === "pending_review") return "Under review";
+  return humanizeStatus(rawStatus);
 }
 
 const SEVERITY_RANK: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1 };
@@ -82,14 +135,37 @@ function companyNameOf(row: { companies: unknown }): string {
 export async function loadUnifiedRequests(): Promise<UnifiedRequestRow[]> {
   const admin = createAdminClient();
 
-  const [{ data: reports }, { data: moduleRequests }, { data: sessionRequests }, { data: sprints }] = await Promise.all([
+  const [{ data: reports }, { data: moduleRequests }, { data: sessionRequests }, { data: sprints }, { data: pendingReaudits }] = await Promise.all([
     admin.from("reports").select("id, company_id, status, submitted_at, companies(name)").order("submitted_at", { ascending: false }),
-    admin.from("module_requests").select("id, company_id, module_type, status, created_at, companies(name)").order("created_at", { ascending: false }),
+    admin.from("module_requests").select("id, company_id, module_type, status, payment_status, cancellation_reason, created_at, companies(name)").order("created_at", { ascending: false }),
     admin
       .from("session_requests")
       .select("id, company_id, session_type, status, requested_at, companies(name)")
       .order("requested_at", { ascending: false }),
-    admin.from("execution_sprints").select("id, company_id, status, start_date, report_id, companies(name)").order("start_date", { ascending: false }),
+    admin
+      .from("execution_sprints")
+      .select("id, company_id, status, payment_status, cancellation_reason, start_date, report_id, companies(name)")
+      .order("start_date", { ascending: false }),
+    // Real, new row source (confirmed 2026-09-07) — a re-audit's own
+    // pre-payment lifecycle (Submitted/Awaiting payment/Unpaid/Canceled)
+    // lives entirely on pending_evidence_submissions and never shows up
+    // as a `reports` row until payment actually clears — this list
+    // previously had no way to represent that stage at all.
+    //
+    // Two real exclusions, not one: (a) `payment_status = 'not_required'`
+    // — a company's genuinely first, free audit never goes through this
+    // gate at all, so it's not a "request" in the sense this page tracks;
+    // (b) `status = 'completed'` — once payment clears and the real audit
+    // has actually run, a genuine `reports` row now exists and is already
+    // its own row above; showing the same cycle again here would be a
+    // real, confusing duplicate of the same underlying request, not a
+    // second one.
+    admin
+      .from("pending_evidence_submissions")
+      .select("id, company_id, status, payment_status, cancellation_reason, submitted_at, edit_window_closes_at, companies(name)")
+      .neq("payment_status", "not_required")
+      .neq("status", "completed")
+      .order("submitted_at", { ascending: false }),
   ]);
 
   const reportIds = (reports ?? []).map((r) => r.id as string);
@@ -121,6 +197,7 @@ export async function loadUnifiedRequests(): Promise<UnifiedRequestRow[]> {
   const rows: UnifiedRequestRow[] = [];
 
   for (const r of reports ?? []) {
+    const status = r.status as string;
     rows.push({
       id: r.id as string,
       type: "audit",
@@ -129,13 +206,18 @@ export async function loadUnifiedRequests(): Promise<UnifiedRequestRow[]> {
       companyId: r.company_id as string,
       companyName: companyNameOf(r),
       date: r.submitted_at as string | null,
-      status: r.status as string,
+      status,
+      displayStatus: computeDisplayStatus(status, null),
+      paymentStatus: null,
+      cancellationReason: null,
       severity: highestSeverity(findingsByReport.get(r.id as string) ?? []),
       link: `/review/${r.id}`,
     });
   }
 
   for (const m of moduleRequests ?? []) {
+    const status = m.status as string;
+    const paymentStatus = m.payment_status as string | null;
     rows.push({
       id: m.id as string,
       type: "module",
@@ -144,13 +226,17 @@ export async function loadUnifiedRequests(): Promise<UnifiedRequestRow[]> {
       companyId: m.company_id as string,
       companyName: companyNameOf(m),
       date: m.created_at as string | null,
-      status: m.status as string,
+      status,
+      displayStatus: computeDisplayStatus(status, paymentStatus),
+      paymentStatus,
+      cancellationReason: (m.cancellation_reason as string | null) ?? null,
       severity: highestSeverity(findingsByModule.get(m.id as string) ?? []),
       link: `/review-module/${m.id}`,
     });
   }
 
   for (const s of sessionRequests ?? []) {
+    const status = s.status as string;
     rows.push({
       id: s.id as string,
       type: "session",
@@ -159,13 +245,24 @@ export async function loadUnifiedRequests(): Promise<UnifiedRequestRow[]> {
       companyId: s.company_id as string,
       companyName: companyNameOf(s),
       date: s.requested_at as string | null,
-      status: s.status as string,
+      status,
+      displayStatus: computeDisplayStatus(status, null),
+      paymentStatus: null,
+      // session_requests' own decline reason is reviewer_notes, not
+      // selected here — a real, deliberate scope narrowing: this list
+      // already links session rows straight to /company/[companyId],
+      // where the full reviewer_notes field is already shown alongside
+      // every other session detail, rather than duplicating that one
+      // field's plumbing into this generic list too.
+      cancellationReason: null,
       severity: null,
       link: `/company/${s.company_id}`,
     });
   }
 
   for (const sp of sprints ?? []) {
+    const status = sp.status as string;
+    const paymentStatus = sp.payment_status as string | null;
     rows.push({
       id: sp.id as string,
       type: "sprint",
@@ -174,9 +271,52 @@ export async function loadUnifiedRequests(): Promise<UnifiedRequestRow[]> {
       companyId: sp.company_id as string,
       companyName: companyNameOf(sp),
       date: sp.start_date as string | null,
-      status: sp.status as string,
+      status,
+      displayStatus: computeDisplayStatus(status, paymentStatus),
+      paymentStatus,
+      cancellationReason: (sp.cancellation_reason as string | null) ?? null,
       severity: null,
       link: `/review-sprint/${sp.id}`,
+    });
+  }
+
+  // Real, new row type (confirmed 2026-09-07) — a re-audit's own
+  // pre-payment lifecycle, previously invisible on this page entirely
+  // (see the query's own docblock above). No dedicated reviewer
+  // workspace exists for a request at this stage — links to
+  // /company/[companyId], same as session requests already do.
+  //
+  // The raw `status` column here (editing/audit_in_progress/completed/
+  // canceled) is NOT the same value the other row types use for
+  // filtering — 'awaiting_payment' is a genuinely DERIVED stage for
+  // pending_evidence_submissions (computeSubmissionDisplayStage(), same
+  // function every other consumer of this table already uses), not a
+  // literal DB column value the way it is for module_requests/
+  // execution_sprints. Using the derived stage here instead of the raw
+  // column keeps this row's `status`/`displayStatus` genuinely
+  // comparable to the other row types' own real 'awaiting_payment' rows.
+  for (const p of pendingReaudits ?? []) {
+    const paymentStatus = p.payment_status as string | null;
+    const stage =
+      computeSubmissionDisplayStage({
+        status: p.status as "editing" | "audit_in_progress" | "completed" | "canceled",
+        edit_window_closes_at: p.edit_window_closes_at as string,
+        payment_status: paymentStatus as "not_required" | "pending" | "paid" | "unpaid" | undefined,
+      }) ?? (p.status as string);
+    rows.push({
+      id: p.id as string,
+      type: "reaudit_pending",
+      typeLabel: "Re-audit",
+      badgeType: "core_audit",
+      companyId: p.company_id as string,
+      companyName: companyNameOf(p),
+      date: p.submitted_at as string | null,
+      status: stage,
+      displayStatus: computeDisplayStatus(stage, paymentStatus),
+      paymentStatus,
+      cancellationReason: (p.cancellation_reason as string | null) ?? null,
+      severity: null,
+      link: `/company/${p.company_id}`,
     });
   }
 
