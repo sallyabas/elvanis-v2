@@ -72,28 +72,39 @@ export const MODULE_META: Record<ModuleType, ModuleMeta> = {
 
 export const MODULE_ORDER: ModuleType[] = ["tender_readiness", "ai_reliability", "data_protection"];
 
-/** module_requests.status reuses the same report_status enum as Core Audit reports. */
+/**
+ * module_requests.status reuses the same report_status enum as Core Audit
+ * reports. Client-facing labels use the unified three-word vocabulary
+ * (confirmed 2026-09-07, "one unified pattern" spec, identical for
+ * re-audits) — "Submitted" / "Awaiting payment" / "Under review" — see
+ * moduleClientStatusLabel() below for how the awaiting_payment status
+ * splits into "Submitted" vs "Awaiting payment" depending on
+ * payment_status.
+ */
 export const MODULE_STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
-  awaiting_payment: "Submitted — awaiting payment",
-  pending_review: "Submitted — under review",
+  awaiting_payment: "Submitted",
+  pending_review: "Under review",
   approved: "Reviewed — awaiting delivery",
   sent: "Delivered",
+  canceled: "Canceled",
 };
 
 /**
- * Client-facing status label, module payment gate (confirmed 2026-09-06)
- * — `status: 'awaiting_payment'` alone is ambiguous: it covers both "just
- * submitted, nothing checked yet" (payment_status 'pending' or
- * 'processing') and "a reviewer checked and it hasn't been paid"
- * (payment_status 'unpaid'), which the confirmed design requires reading
- * back as two different client-facing labels ("Submitted" vs "Unpaid").
+ * Client-facing status label, module payment gate (confirmed 2026-09-06,
+ * relabeled 2026-09-07 for the unified flow) — `status: 'awaiting_payment'`
+ * alone is ambiguous: it covers both "just submitted, nothing checked
+ * yet" (payment_status 'pending' or 'processing') and "a reviewer checked
+ * and it hasn't been paid" (payment_status 'unpaid'), which read back as
+ * two different client-facing labels: "Submitted" vs "Awaiting payment".
  * `MODULE_STATUS_LABELS` alone can't express this — it's keyed on
  * `status` only — so this helper combines both fields, falling back to
  * the plain status map for every other status where payment_status is
- * irrelevant.
+ * irrelevant. Reviewer-facing views keep richer detail (distinguishing
+ * "not yet checked" from "confirmed unpaid" at a glance) directly in
+ * their own JSX rather than through this client-facing helper.
  */
 export function moduleClientStatusLabel(status: string, paymentStatus: string | null | undefined): string {
-  if (status === "awaiting_payment" && paymentStatus === "unpaid") return "Unpaid";
+  if (status === "awaiting_payment" && paymentStatus === "unpaid") return "Awaiting payment";
   return MODULE_STATUS_LABELS[status] ?? status;
 }

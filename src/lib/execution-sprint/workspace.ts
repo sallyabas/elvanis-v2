@@ -109,22 +109,27 @@ export async function proposeSprintFinding(reportId: string, findingId: string):
 }
 
 /**
- * The real confirm-or-reselect step (confirmed 2026-08-18) — runs the
- * task-drafting work that used to happen immediately inside
- * createSprintFromFinding(), but only now, once the client has actually
- * confirmed which finding the sprint should address. `confirmedFindingId`
+ * The real confirm-or-reselect step (confirmed 2026-08-18). `confirmedFindingId`
  * must be either the reviewer's originally-proposed finding, or a finding
  * the client had previously marked "interested in help" on for the SAME
  * report (via sprint_interest_requests) — this isn't opened up to a free
  * choice from scratch, the client is choosing among findings they've
  * already flagged real interest in, or sticking with the reviewer's own
  * pick. Re-verified here defensively (not just trusted from the caller),
- * since this function's caller is a client-facing Server Action. The
- * reviewer still does the actual task-scoping work (Accept/Edit/Reject)
- * from here via the existing mandatory gate — this only decides WHICH
- * finding gets scoped, never skips that review pass.
+ * since this function's caller is a client-facing Server Action.
+ *
+ * Real payment gate inserted (confirmed 2026-09-07, unified flow spec) —
+ * this used to run the real Groq task-drafting call immediately on
+ * confirm, the same real cost-exposure gap already closed for the core
+ * audit and the three standalone modules, just found later here. Task
+ * drafting is now deferred to runSprintTaskDraftingAfterPayment() (see
+ * payment-gate.ts), which only ever runs once a reviewer marks this
+ * sprint paid — this function now only records which finding was
+ * confirmed and moves the sprint to 'awaiting_payment'. The reviewer
+ * still does the actual task-scoping review (Accept/Edit/Reject) via the
+ * existing mandatory gate once tasks exist — this never skips that pass.
  */
-export async function confirmSprintFinding(sprintId: string, confirmedFindingId: string): Promise<CreateSprintResult> {
+export async function confirmSprintFinding(sprintId: string, confirmedFindingId: string): Promise<ProposeSprintResult> {
   const supabase = createAdminClient();
 
   const { data: sprint, error: sprintError } = await supabase
@@ -153,7 +158,7 @@ export async function confirmSprintFinding(sprintId: string, confirmedFindingId:
 
   const { data: findingRow, error: findingError } = await supabase
     .from("lens_findings")
-    .select("id, report_id, reviewer_status, ai_draft, reviewer_edited_content")
+    .select("id, report_id, reviewer_status")
     .eq("id", confirmedFindingId)
     .single();
   if (findingError || !findingRow) throw new Error(`confirmSprintFinding: finding not found: ${findingError?.message}`);
@@ -161,10 +166,78 @@ export async function confirmSprintFinding(sprintId: string, confirmedFindingId:
   if (findingRow.reviewer_status !== "approved" && findingRow.reviewer_status !== "edited") {
     throw new Error("confirmSprintFinding: only a reviewer-approved or reviewer-edited finding can be selected");
   }
+
+  const { error: updateError } = await supabase
+    .from("execution_sprints")
+    .update({ selected_finding_id: confirmedFindingId, confirmed_at: new Date().toISOString(), status: "awaiting_payment" })
+    .eq("id", sprintId);
+  if (updateError) throw new Error(`confirmSprintFinding: failed to update sprint: ${updateError.message}`);
+
+  return { sprintId };
+}
+
+/**
+ * Real, eligible-finding validation shared by every entry point that lets
+ * a finding be chosen for a sprint (confirmed 2026-09-07) — reviewer-
+ * proposed, client "I'll choose myself," or the reviewer picking one for
+ * a "Let Elvanis decide" request. Same "critical/high, non-missing-data,
+ * reviewer-approved/edited" rule already used for SprintInterestButton's
+ * own eligibility gate on the report page — kept as one function so the
+ * three entry points can't silently drift on what counts as eligible.
+ */
+export async function loadEligibleSprintFinding(
+  supabase: ReturnType<typeof createAdminClient>,
+  reportId: string,
+  findingId: string,
+): Promise<{ finding: LensFinding; reportId: string } | { error: string }> {
+  const { data: findingRow, error: findingError } = await supabase
+    .from("lens_findings")
+    .select("id, report_id, reviewer_status, ai_draft, reviewer_edited_content")
+    .eq("id", findingId)
+    .maybeSingle();
+  if (findingError || !findingRow) return { error: "Finding not found." };
+  if (findingRow.report_id !== reportId) return { error: "This finding does not belong to the given report." };
+  if (findingRow.reviewer_status !== "approved" && findingRow.reviewer_status !== "edited") {
+    return { error: "Only a reviewer-approved or reviewer-edited finding can be selected." };
+  }
+  const finding = (findingRow.reviewer_edited_content ?? findingRow.ai_draft) as LensFinding;
+  if (finding.isMissingDataFinding) return { error: "A missing-evidence finding can't be scoped into a sprint." };
+  if (finding.severity !== "critical" && finding.severity !== "high") {
+    return { error: "Only critical or high-severity findings are eligible for an Execution Sprint." };
+  }
+  return { finding, reportId };
+}
+
+/**
+ * The real, shared post-payment step (confirmed 2026-09-07, unified flow
+ * spec) — the actual Groq task-drafting call, moved out of
+ * confirmSprintFinding() so it only ever runs once a reviewer has marked
+ * a sprint paid (see payment-gate.ts's claim/dispatch logic). Requires a
+ * finding to already be selected — the caller (markSprintPaidAndDraftTasks)
+ * refuses to claim an 'elvanis_chooses' request with no finding chosen
+ * yet, so this should never be called without one.
+ */
+export async function runSprintTaskDraftingAfterPayment(sprintId: string): Promise<CreateSprintResult> {
+  const supabase = createAdminClient();
+
+  const { data: sprint, error: sprintError } = await supabase
+    .from("execution_sprints")
+    .select("id, report_id, company_id, selected_finding_id")
+    .eq("id", sprintId)
+    .single();
+  if (sprintError || !sprint) throw new Error(`runSprintTaskDraftingAfterPayment: sprint not found: ${sprintError?.message}`);
+  if (!sprint.selected_finding_id) throw new Error("runSprintTaskDraftingAfterPayment: no finding has been chosen for this sprint yet");
+
+  const { data: findingRow, error: findingError } = await supabase
+    .from("lens_findings")
+    .select("ai_draft, reviewer_edited_content")
+    .eq("id", sprint.selected_finding_id)
+    .single();
+  if (findingError || !findingRow) throw new Error(`runSprintTaskDraftingAfterPayment: finding not found: ${findingError?.message}`);
   const finding = (findingRow.reviewer_edited_content ?? findingRow.ai_draft) as LensFinding;
 
   const { data: reportRow, error: reportRowError } = await supabase.from("reports").select("goal_id").eq("id", sprint.report_id).single();
-  if (reportRowError || !reportRow) throw new Error(`confirmSprintFinding: report not found: ${reportRowError?.message}`);
+  if (reportRowError || !reportRow) throw new Error(`runSprintTaskDraftingAfterPayment: report not found: ${reportRowError?.message}`);
 
   const companyProfile = await loadCompanyProfileForLens(supabase, sprint.company_id as string);
   const goalContext = await loadGoalContext(supabase, reportRow.goal_id as string);
@@ -187,15 +260,113 @@ export async function confirmSprintFinding(sprintId: string, confirmedFindingId:
   }));
 
   const { error: tasksError } = await supabase.from("sprint_tasks").insert(taskRows);
-  if (tasksError) throw new Error(`confirmSprintFinding: failed to persist drafted tasks: ${tasksError.message}`);
+  if (tasksError) throw new Error(`runSprintTaskDraftingAfterPayment: failed to persist drafted tasks: ${tasksError.message}`);
 
-  const { error: updateError } = await supabase
-    .from("execution_sprints")
-    .update({ selected_finding_id: confirmedFindingId, confirmed_at: new Date().toISOString(), status: "scoped" })
-    .eq("id", sprintId);
-  if (updateError) throw new Error(`confirmSprintFinding: failed to update sprint: ${updateError.message}`);
+  const { error: updateError } = await supabase.from("execution_sprints").update({ status: "scoped" }).eq("id", sprintId);
+  if (updateError) throw new Error(`runSprintTaskDraftingAfterPayment: failed to update sprint: ${updateError.message}`);
 
   return { sprintId, taskCount: taskRows.length };
+}
+
+/**
+ * Client-initiated entry point #1: "I'll choose the finding myself"
+ * (confirmed 2026-09-07, unified flow spec) — a genuinely new,
+ * client-initiated path alongside the reviewer-proactive
+ * proposeSprintFinding()/confirmSprintFinding() pair above (kept
+ * unchanged for that older flow). The client picks a specific eligible
+ * finding directly; no reviewer proposal or prior "interested" marking is
+ * required, since the client is the one initiating here.
+ */
+export async function requestSprintChooseOwnFinding(reportId: string, findingId: string): Promise<ProposeSprintResult> {
+  const supabase = createAdminClient();
+
+  const eligible = await loadEligibleSprintFinding(supabase, reportId, findingId);
+  if ("error" in eligible) throw new Error(`requestSprintChooseOwnFinding: ${eligible.error}`);
+
+  const { data: report, error: reportError } = await supabase.from("reports").select("company_id, status").eq("id", reportId).single();
+  if (reportError || !report) throw new Error(`requestSprintChooseOwnFinding: report not found: ${reportError?.message}`);
+  if (report.status !== "approved" && report.status !== "sent") {
+    throw new Error(`requestSprintChooseOwnFinding: report must be approved or delivered first (current status: ${report.status})`);
+  }
+
+  const { data: sprintRow, error: sprintError } = await supabase
+    .from("execution_sprints")
+    .insert({
+      company_id: report.company_id,
+      report_id: reportId,
+      selected_finding_id: findingId,
+      status: "awaiting_payment",
+      choice_mode: "client_chosen",
+    })
+    .select("id")
+    .single();
+  if (sprintError || !sprintRow) throw new Error(`requestSprintChooseOwnFinding: failed to create sprint: ${sprintError?.message}`);
+
+  await notifyReviewersOfSprintRequested(supabase);
+
+  return { sprintId: sprintRow.id as string };
+}
+
+/**
+ * Client-initiated entry point #2: "Let Elvanis decide" (confirmed
+ * 2026-09-07, unified flow spec) — no finding chosen yet; a reviewer
+ * picks one afterwards (see chooseSprintFindingForRequest below),
+ * independent of payment.
+ */
+export async function requestSprintLetElvanisChoose(reportId: string): Promise<ProposeSprintResult> {
+  const supabase = createAdminClient();
+
+  const { data: report, error: reportError } = await supabase.from("reports").select("company_id, status").eq("id", reportId).single();
+  if (reportError || !report) throw new Error(`requestSprintLetElvanisChoose: report not found: ${reportError?.message}`);
+  if (report.status !== "approved" && report.status !== "sent") {
+    throw new Error(`requestSprintLetElvanisChoose: report must be approved or delivered first (current status: ${report.status})`);
+  }
+
+  const { data: sprintRow, error: sprintError } = await supabase
+    .from("execution_sprints")
+    .insert({ company_id: report.company_id, report_id: reportId, selected_finding_id: null, status: "awaiting_payment", choice_mode: "elvanis_chooses" })
+    .select("id")
+    .single();
+  if (sprintError || !sprintRow) throw new Error(`requestSprintLetElvanisChoose: failed to create sprint: ${sprintError?.message}`);
+
+  await notifyReviewersOfSprintRequested(supabase);
+
+  return { sprintId: sprintRow.id as string };
+}
+
+async function notifyReviewersOfSprintRequested(supabase: ReturnType<typeof createAdminClient>): Promise<void> {
+  const { data: reviewers } = await supabase.from("users").select("id").eq("role", "reviewer");
+  if ((reviewers ?? []).length > 0) {
+    await supabase.from("notifications").insert(
+      (reviewers ?? []).map((reviewer) => ({
+        recipient_type: "reviewer",
+        recipient_id: reviewer.id,
+        event_type: "sprint_requested",
+        channel: "email",
+        sent_at: null,
+      })),
+    );
+  }
+}
+
+/**
+ * The reviewer's own finding pick for a "Let Elvanis decide" request
+ * (confirmed 2026-09-07) — only valid while no finding has been chosen
+ * yet; independent of payment (the flat £3,000 price doesn't depend on
+ * which finding gets scoped, so there's no reason to block this on
+ * payment status either direction).
+ */
+export async function chooseSprintFindingForRequest(sprintId: string, findingId: string): Promise<void> {
+  const supabase = createAdminClient();
+  const { data: sprint, error: sprintError } = await supabase.from("execution_sprints").select("report_id, selected_finding_id").eq("id", sprintId).single();
+  if (sprintError || !sprint) throw new Error(`chooseSprintFindingForRequest: sprint not found: ${sprintError?.message}`);
+  if (sprint.selected_finding_id) throw new Error("chooseSprintFindingForRequest: a finding has already been chosen for this sprint");
+
+  const eligible = await loadEligibleSprintFinding(supabase, sprint.report_id as string, findingId);
+  if ("error" in eligible) throw new Error(`chooseSprintFindingForRequest: ${eligible.error}`);
+
+  const { error } = await supabase.from("execution_sprints").update({ selected_finding_id: findingId }).eq("id", sprintId);
+  if (error) throw new Error(`chooseSprintFindingForRequest failed: ${error.message}`);
 }
 
 // ── Per-task review (Accept/Edit/Reject) ────────────────────────────────

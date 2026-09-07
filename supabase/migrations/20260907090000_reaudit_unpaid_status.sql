@@ -1,0 +1,11 @@
+-- Unified payment-status flow, part 1 (confirmed 2026-09-07) — re-audits
+-- get the same 'unpaid' concept modules already have: a real, reviewer-
+-- confirmed "checked, not paid yet" outcome, distinct from 'pending'
+-- (nobody has looked yet). The raw enum value stays 'unpaid', matching
+-- module_payment_status's own naming — the reviewer-facing queue still
+-- needs to distinguish "not yet checked" (pending) from "confirmed
+-- unpaid" at a glance; the client-facing label collapses both into the
+-- unified three-word vocabulary (Submitted / Awaiting payment / Under
+-- review), applied at the display layer, not by hiding the distinction
+-- here.
+alter type reaudit_payment_status add value 'unpaid';

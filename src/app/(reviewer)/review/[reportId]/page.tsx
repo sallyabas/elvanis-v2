@@ -10,6 +10,7 @@ import { computeStalenessWarnings } from "@/lib/reviewer/regulatory-staleness";
 import { computeJurisdictionApplicability as computeTenderReadinessApplicability } from "@/lib/modules/tender-readiness/jurisdiction";
 import { computeJurisdictionApplicability as computeDataProtectionApplicability } from "@/lib/modules/data-protection-compliance/jurisdiction";
 import { ReviewWorkspaceClient } from "./ReviewWorkspaceClient";
+import { chooseSprintFindingForRequestAction } from "./actions";
 
 export default async function ReviewWorkspacePage({ params }: { params: Promise<{ reportId: string }> }) {
   const { reportId } = await params;
@@ -134,6 +135,25 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
     ? await sessionSupabase.from("users").select("name").eq("id", currentReviewer.id).maybeSingle()
     : { data: null };
 
+  // Execution Sprint payment gate (confirmed 2026-09-07, unified flow
+  // spec) — a real "Let Elvanis decide" request with no finding chosen
+  // yet needs a real place for the reviewer to pick one. Deliberately a
+  // small, plain server-rendered form here rather than adding to the
+  // already-large ReviewWorkspaceClient.tsx client component.
+  const { data: sprintsNeedingFinding } = await supabase
+    .from("execution_sprints")
+    .select("id")
+    .eq("report_id", reportId)
+    .eq("status", "awaiting_payment")
+    .eq("choice_mode", "elvanis_chooses")
+    .is("selected_finding_id", null);
+  const eligibleFindingsForSprint = findings.filter((f) => {
+    if (f.reviewer_status !== "approved" && f.reviewer_status !== "edited") return false;
+    if (f.is_missing_data_finding) return false;
+    const content = (f.reviewer_edited_content ?? f.ai_draft) as { title?: string; severity?: string } | null;
+    return content?.severity === "critical" || content?.severity === "high";
+  });
+
   return (
     <>
       {/* Real navigation-audit fix (confirmed 2026-08-26) — the three
@@ -152,6 +172,34 @@ export default async function ReviewWorkspacePage({ params }: { params: Promise<
           ← {company?.name ?? "Unknown company"}
         </Link>
       </div>
+      {/* Execution Sprint payment gate (confirmed 2026-09-07, unified flow
+          spec) — a real "Let Elvanis decide" request needs a real finding
+          picked before it can ever be marked paid. Plain server-rendered
+          form, one per pending request. */}
+      {(sprintsNeedingFinding ?? []).length > 0 && eligibleFindingsForSprint.length > 0 && (
+        <div className="mx-auto max-w-3xl px-6 pt-4">
+          {(sprintsNeedingFinding ?? []).map((s) => (
+            <form key={s.id as string} action={chooseSprintFindingForRequestAction} className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-accent bg-[#fffbf0] p-3 text-sm dark:bg-accent/10">
+              <input type="hidden" name="sprintId" value={s.id as string} />
+              <input type="hidden" name="reportId" value={reportId} />
+              <span className="font-medium text-neutral-900 dark:text-neutral-50">A client asked you to pick a finding for an Execution Sprint:</span>
+              <select name="findingId" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+                {eligibleFindingsForSprint.map((f) => {
+                  const content = (f.reviewer_edited_content ?? f.ai_draft) as { title?: string } | null;
+                  return (
+                    <option key={f.id} value={f.id}>
+                      {content?.title ?? "Untitled finding"}
+                    </option>
+                  );
+                })}
+              </select>
+              <button type="submit" className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover">
+                Choose this finding
+              </button>
+            </form>
+          ))}
+        </div>
+      )}
       <ReviewWorkspaceClient
         reportId={report.id}
         companyName={company?.name ?? "Unknown company"}

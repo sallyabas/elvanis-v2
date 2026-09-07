@@ -19,6 +19,23 @@ import { TYPE_LABELS, sessionTypeToItemType } from "@/lib/item-type-badge";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
+/**
+ * Real gap closed (confirmed 2026-09-07) while adding the first
+ * reviewer-authored free-text fields (cancellation/decline reasons) this
+ * file ever interpolates directly into HTML — same helper already used
+ * for the identical reason in execution-sprint/workspace.ts's own
+ * immediate-send path, duplicated locally rather than exported from
+ * there since that module has its own unrelated concerns.
+ */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 type Admin = ReturnType<typeof createAdminClient>;
 
 interface FindingTitleLookup {
@@ -189,6 +206,53 @@ async function templateFor(
         bodyHtml: `<p style="margin:0 0 16px 0;">A re-audit${detail} has its evidence window closed and is ready to run, but hasn't been marked as paid yet — the analysis is deliberately on hold until you confirm it.</p><p style="margin:0;"><a href="${SITE_URL}/queue" style="color:#B87333;font-weight:600;">Open the reviewer queue →</a></p>`,
       };
     }
+    // Unified payment/status flow (confirmed 2026-09-07) — client-facing,
+    // real gap: markReaduitUnpaid()/markModuleUnpaid() previously only
+    // touched the DB, nothing told the client.
+    case "reaudit_unpaid":
+      return {
+        subject: "Your re-audit is awaiting payment",
+        bodyHtml: `${greeting}<p style="margin:0;">We checked, and this re-audit hasn't been marked as paid yet — it's on hold until payment is confirmed. Reach out if you've already paid and this hasn't updated.</p>${loginReminder}`,
+      };
+    case "module_unpaid":
+      return {
+        subject: "Your module request is awaiting payment",
+        bodyHtml: `${greeting}<p style="margin:0;">We checked, and this request hasn't been marked as paid yet — it's on hold until payment is confirmed. Reach out if you've already paid and this hasn't updated.</p>${loginReminder}`,
+      };
+    // Cancellation, everywhere it's tracked (confirmed 2026-09-07) — the
+    // real cancellation reason is always included, never generic
+    // boilerplate, same non-fabrication discipline already applied to
+    // every other notification in this file.
+    case "reaudit_canceled": {
+      let reason = "";
+      if (notification.related_pending_submission_id) {
+        const { data: submission } = await admin
+          .from("pending_evidence_submissions")
+          .select("cancellation_reason")
+          .eq("id", notification.related_pending_submission_id)
+          .maybeSingle();
+        reason = (submission?.cancellation_reason as string | null) ?? "";
+      }
+      return {
+        subject: "Your re-audit request was canceled",
+        bodyHtml: `${greeting}<p style="margin:0 0 12px 0;">This re-audit request has been canceled.</p>${reason ? `<p style="margin:0 0 16px 0;padding:12px 16px;background:#F1EFE8;border-radius:6px;">${escapeHtml(reason)}</p>` : ""}<p style="margin:0;">Submit new evidence any time to start a fresh cycle.</p>${loginReminder}`,
+      };
+    }
+    case "module_canceled": {
+      let reason = "";
+      if (notification.related_module_request_id) {
+        const { data: request } = await admin
+          .from("module_requests")
+          .select("cancellation_reason")
+          .eq("id", notification.related_module_request_id)
+          .maybeSingle();
+        reason = (request?.cancellation_reason as string | null) ?? "";
+      }
+      return {
+        subject: "Your module request was canceled",
+        bodyHtml: `${greeting}<p style="margin:0 0 12px 0;">This request has been canceled.</p>${reason ? `<p style="margin:0 0 16px 0;padding:12px 16px;background:#F1EFE8;border-radius:6px;">${escapeHtml(reason)}</p>` : ""}<p style="margin:0;">Submit a new request any time from the Services page.</p>${loginReminder}`,
+      };
+    }
     case "sprint_interest_requested":
       return {
         subject: "A client is interested in an Execution Sprint",
@@ -204,11 +268,27 @@ async function templateFor(
         subject: "A client signed off on their Execution Sprint",
         bodyHtml: `<p style="margin:0 0 16px 0;">A client has signed off on their Execution Sprint — a final wrap-up commentary is still owed.</p><p style="margin:0;"><a href="${SITE_URL}/queue" style="color:#B87333;font-weight:600;">Open the reviewer queue →</a></p>`,
       };
-    case "session_declined":
+    case "session_declined": {
+      // Real gap found and fixed (confirmed 2026-09-07, unified flow
+      // spec, "include the reason in that email") — reviewer_notes has
+      // always captured the real decline reason (a real, required field
+      // since 2026-08-11), but this template never surfaced it, leaving
+      // the client with generic boilerplate ("timing didn't line up")
+      // even when a real, specific reason was on file.
+      let reason = "";
+      if (notification.related_session_request_id) {
+        const { data: request } = await admin
+          .from("session_requests")
+          .select("reviewer_notes")
+          .eq("id", notification.related_session_request_id)
+          .maybeSingle();
+        reason = (request?.reviewer_notes as string | null) ?? "";
+      }
       return {
         subject: "Update on your session request",
-        bodyHtml: `${greeting}<p style="margin:0;">We can't schedule your session request right now — timing didn't line up on our end, not anything about your submission. Send a new request whenever works, and we'll get it on the calendar.</p>${loginReminder}`,
+        bodyHtml: `${greeting}<p style="margin:0 0 12px 0;">We can't take this session request forward right now.</p>${reason ? `<p style="margin:0 0 16px 0;padding:12px 16px;background:#F1EFE8;border-radius:6px;">${escapeHtml(reason)}</p>` : ""}<p style="margin:0;">Send a new request whenever works, and we'll get it on the calendar.</p>${loginReminder}`,
       };
+    }
     case "sprint_reply":
       // Client-facing — normally sent immediately by replyToSprintQueueItem
       // itself (its own call site now shares this same shell/preference
@@ -242,6 +322,48 @@ async function templateFor(
       return {
         subject: "Your reviewer suggests an Execution Sprint",
         bodyHtml: `${greeting}<p style="margin:0 0 16px 0;">Your reviewer suggests starting an Execution Sprint on ${findingHint}. Confirm it, or pick a different finding you'd previously marked "interested in help" on instead.</p><p style="margin:0;"><a href="${sprintUrl}" style="color:#B87333;font-weight:600;">Review and confirm →</a></p>${loginReminder}`,
+      };
+    }
+    // Execution Sprint payment gate (confirmed 2026-09-07, unified flow
+    // spec) — reviewer-facing, the sprint equivalent of
+    // module_awaiting_payment/reaudit_awaiting_payment: fired once at
+    // request time (either "I'll choose the finding" or "Let Elvanis
+    // decide"), never repeated.
+    case "sprint_requested":
+      return {
+        subject: "New Execution Sprint request",
+        bodyHtml: `<p style="margin:0 0 16px 0;">A client has requested an Execution Sprint — check the queue to pick a finding (if not already chosen) and confirm payment.</p><p style="margin:0;"><a href="${SITE_URL}/queue" style="color:#B87333;font-weight:600;">Open the reviewer queue →</a></p>`,
+      };
+    // Reviewer-facing, the sprint equivalent of module_new_submission —
+    // fired once payment clears and the real task-drafting completes,
+    // telling the reviewer there's a plan ready for their own mandatory
+    // Accept/Edit/Reject/Approve pass.
+    case "sprint_tasks_ready_for_review": {
+      let sprintUrl = `${SITE_URL}/queue`;
+      if (notification.related_sprint_id) sprintUrl = `${SITE_URL}/review-sprint/${notification.related_sprint_id}`;
+      return {
+        subject: "Execution Sprint tasks ready for review",
+        bodyHtml: `<p style="margin:0 0 16px 0;">Payment cleared and a task plan has been drafted for an Execution Sprint — it needs your review before the client sees it.</p><p style="margin:0;"><a href="${sprintUrl}" style="color:#B87333;font-weight:600;">Review the plan →</a></p>`,
+      };
+    }
+    case "sprint_unpaid":
+      return {
+        subject: "Your Execution Sprint request is awaiting payment",
+        bodyHtml: `${greeting}<p style="margin:0;">We checked, and this Execution Sprint request hasn't been marked as paid yet — it's on hold until payment is confirmed. Reach out if you've already paid and this hasn't updated.</p>${loginReminder}`,
+      };
+    case "sprint_canceled": {
+      let reason = "";
+      if (notification.related_sprint_id) {
+        const { data: sprint } = await admin
+          .from("execution_sprints")
+          .select("cancellation_reason")
+          .eq("id", notification.related_sprint_id)
+          .maybeSingle();
+        reason = (sprint?.cancellation_reason as string | null) ?? "";
+      }
+      return {
+        subject: "Your Execution Sprint request was canceled",
+        bodyHtml: `${greeting}<p style="margin:0 0 12px 0;">This Execution Sprint request has been canceled.</p>${reason ? `<p style="margin:0 0 16px 0;padding:12px 16px;background:#F1EFE8;border-radius:6px;">${escapeHtml(reason)}</p>` : ""}<p style="margin:0;">You can request one again any time from your report.</p>${loginReminder}`,
       };
     }
     case "module_new_submission":

@@ -190,12 +190,14 @@ export default async function DashboardPage() {
       .order("requested_at", { ascending: false }),
     supabase
       .from("execution_sprints")
-      .select("id, status, target_end_date, selected_finding_id, report_id")
+      .select("id, status, payment_status, target_end_date, selected_finding_id, report_id")
       .eq("company_id", companyId)
       // "proposed" added 2026-08-18 — the new leading stage, awaiting the
       // client's own confirm-or-reselect step, is non-terminal too and
       // belongs in "active status" same as "scoped"/"in_progress".
-      .in("status", ["proposed", "scoped", "in_progress"])
+      // "awaiting_payment" added 2026-09-07 (unified flow spec) — the new
+      // leading stage before 'proposed', equally non-terminal.
+      .in("status", ["awaiting_payment", "proposed", "scoped", "in_progress"])
       .order("start_date", { ascending: false, nullsFirst: false }),
     supabase.from("reports").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "sent"),
     admin.from("module_requests").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "sent"),
@@ -355,10 +357,16 @@ export default async function DashboardPage() {
   } else if (journeyStatus.stage === "queued_for_audit") {
     subtitleLine1 = "Your edit window has closed — your evidence is queued for analysis.";
   } else if (journeyStatus.stage === "awaiting_payment") {
-    // Re-audit payment gate (confirmed 2026-09-06) — a real, distinct
-    // stage from queued_for_audit above: the window has closed, but
-    // analysis is deliberately withheld until payment is confirmed.
-    subtitleLine1 = "Your edit window has closed — this re-audit is awaiting payment confirmation before analysis begins.";
+    // Re-audit payment gate (confirmed 2026-09-06, relabeled 2026-09-07
+    // for the unified flow) — a real, distinct stage from
+    // queued_for_audit above: the window has closed, but analysis is
+    // deliberately withheld until payment is confirmed. "Submitted" for
+    // "nothing checked yet" vs "Awaiting payment" for "reviewer confirmed
+    // unpaid" — same split as NextStepBanner.tsx.
+    subtitleLine1 =
+      journeyStatus.paymentStatus === "unpaid"
+        ? "We checked, and this re-audit hasn't been marked as paid yet — it's on hold until payment is confirmed."
+        : "Submitted — your edit window has closed and this re-audit is queued, waiting on payment confirmation.";
   } else if (journeyStatus.stage === "audit_in_progress") {
     subtitleLine1 = "Your evidence is being analyzed right now.";
   } else if (journeyStatus.stage === "in_review") {
@@ -487,33 +495,45 @@ export default async function DashboardPage() {
 
   // activeSessionRequestRows/sprintRows are also already available from
   // the batch above.
-  const activeSprint = (sprintRows ?? []).find((s) => s.status === "in_progress") ?? (sprintRows ?? [])[0] ?? null;
-  let sprintFindingTitle: string | null = null;
-  let sprintTaskCounts: { done: number; total: number } | null = null;
-  if (activeSprint) {
-    const { data: findingRow } = await supabase
-      .from("lens_findings")
-      .select("ai_draft, reviewer_edited_content")
-      .eq("id", activeSprint.selected_finding_id)
-      .maybeSingle();
-    const findingContent = (findingRow?.reviewer_edited_content ?? findingRow?.ai_draft) as LensFinding | undefined;
-    sprintFindingTitle = findingContent?.title ?? null;
+  //
+  // Real, confirmed fix (2026-09-07, unified flow spec, "fix the
+  // Dashboard to show multiple active sprints as a list") — this used to
+  // pick exactly ONE sprint (`.find(in_progress) ?? [0]`) even though a
+  // client can now genuinely have several sprints in flight at once
+  // (item 5 of the confirmed spec: "not gated by whether a prior Sprint
+  // is finished"). A real list, not a single tile.
+  const activeSprints = await Promise.all(
+    (sprintRows ?? []).map(async (sprint) => {
+      let findingTitle: string | null = null;
+      if (sprint.selected_finding_id) {
+        const { data: findingRow } = await supabase
+          .from("lens_findings")
+          .select("ai_draft, reviewer_edited_content")
+          .eq("id", sprint.selected_finding_id)
+          .maybeSingle();
+        const findingContent = (findingRow?.reviewer_edited_content ?? findingRow?.ai_draft) as LensFinding | undefined;
+        findingTitle = findingContent?.title ?? null;
+      }
 
-    // No tasks exist yet while 'proposed' — skip the query rather than
-    // render a confusing "0 of 0 tasks done."
-    if (activeSprint.status !== "proposed") {
-      const { data: sprintTasks } = await supabase
-        .from("sprint_tasks")
-        .select("status")
-        .eq("execution_sprint_id", activeSprint.id)
-        .neq("reviewer_status", "rejected");
-      const total = sprintTasks?.length ?? 0;
-      const done = (sprintTasks ?? []).filter((t) => t.status === "done").length;
-      sprintTaskCounts = { done, total };
-    }
-  }
+      // No tasks exist yet while 'awaiting_payment'/'proposed' — skip the
+      // query rather than render a confusing "0 of 0 tasks done."
+      let taskCounts: { done: number; total: number } | null = null;
+      if (sprint.status !== "awaiting_payment" && sprint.status !== "proposed") {
+        const { data: sprintTasks } = await supabase
+          .from("sprint_tasks")
+          .select("status")
+          .eq("execution_sprint_id", sprint.id)
+          .neq("reviewer_status", "rejected");
+        const total = sprintTasks?.length ?? 0;
+        const done = (sprintTasks ?? []).filter((t) => t.status === "done").length;
+        taskCounts = { done, total };
+      }
 
-  const hasAnyStatusTiles = (activeModuleRequestRows?.length ?? 0) > 0 || (activeSessionRequestRows?.length ?? 0) > 0 || activeSprint;
+      return { ...sprint, findingTitle, taskCounts };
+    }),
+  );
+
+  const hasAnyStatusTiles = (activeModuleRequestRows?.length ?? 0) > 0 || (activeSessionRequestRows?.length ?? 0) > 0 || activeSprints.length > 0;
 
   // Real "delivered/completed services" summary counts (item 4) — kept as
   // a lightweight line, not full cards, precisely because the confirmed
@@ -533,10 +553,15 @@ export default async function DashboardPage() {
   const sprintSummaryCount = completeSprintsCount ?? 0;
 
   const SPRINT_STATUS_LABELS: Record<string, string> = {
+    // 'awaiting_payment' deliberately absent here — its label depends on
+    // payment_status too (Submitted vs Awaiting payment, unified flow
+    // spec, confirmed 2026-09-07), computed inline in the render loop
+    // below, same split already used for modules.
     proposed: "Awaiting your confirmation",
     scoped: "Being scoped by your reviewer",
     in_progress: "In progress",
     complete: "Complete",
+    canceled: "Canceled",
   };
   // Real explanatory copy per active-request card type (item 9) — one
   // plain-language line saying what the thing IS and what happens next,
@@ -554,6 +579,18 @@ export default async function DashboardPage() {
     scoped: "Your reviewer is drafting a real task breakdown for this — you'll see it once it's ready to start.",
     in_progress: "A bounded, paid implementation engagement fixing this one finding — track task progress on the sprint page.",
   };
+  function sprintStatusLabel(status: string, paymentStatus: string | null | undefined): string {
+    if (status === "awaiting_payment") return paymentStatus === "unpaid" ? "Awaiting payment" : "Submitted";
+    return SPRINT_STATUS_LABELS[status] ?? status;
+  }
+  function sprintExplanation(status: string, paymentStatus: string | null | undefined): string {
+    if (status === "awaiting_payment") {
+      return paymentStatus === "unpaid"
+        ? "We checked, and this hasn't been marked as paid yet — the plan is on hold until payment is confirmed."
+        : "No plan has been drafted yet — that starts once a finding is confirmed and payment is received.";
+    }
+    return SPRINT_EXPLANATION[status] ?? "";
+  }
 
   const activeRequestsCount = inProgressCount;
   // Diagnosis headline vs. operational-status count — deliberately two
@@ -991,10 +1028,10 @@ export default async function DashboardPage() {
           delivered/in-progress count above. It's a categorically different
           kind of engagement (a bounded, paid implementation project, not a
           document/analysis delivery) and deserves to read as one. */}
-      {(sprintSummaryCount > 0 || activeSprint) && (
+      {(sprintSummaryCount > 0 || activeSprints.length > 0) && (
         <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-          Execution Sprint: {sprintSummaryCount > 0 && `${sprintSummaryCount} complete${activeSprint ? ", " : ""}`}
-          {activeSprint && "1 in progress"} —{" "}
+          Execution Sprint: {sprintSummaryCount > 0 && `${sprintSummaryCount} complete${activeSprints.length > 0 ? ", " : ""}`}
+          {activeSprints.length > 0 && `${activeSprints.length} in progress`} —{" "}
           <Link href="/reports" className="font-medium text-accent hover:underline">
             View in Reports &amp; History
           </Link>
@@ -1019,18 +1056,21 @@ export default async function DashboardPage() {
             </p>
           )}
           <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {activeSprint && (
-              <div className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
+            {/* Real, confirmed fix (2026-09-07, unified flow spec) — every
+                genuinely active sprint renders its own tile now, not just
+                one; a client can have several in flight in parallel. */}
+            {activeSprints.map((sprint) => (
+              <div key={sprint.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
                 <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">Execution Sprint</h3>
-                <p className="mb-1 text-neutral-600 dark:text-neutral-400">{sprintFindingTitle ?? "In progress"}</p>
-                <p className="mb-1 text-accent">{SPRINT_STATUS_LABELS[activeSprint.status] ?? activeSprint.status}</p>
-                <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">{SPRINT_EXPLANATION[activeSprint.status] ?? ""}</p>
-                {sprintTaskCounts && (
+                <p className="mb-1 text-neutral-600 dark:text-neutral-400">{sprint.findingTitle ?? "In progress"}</p>
+                <p className="mb-1 text-accent">{sprintStatusLabel(sprint.status as string, sprint.payment_status as string | null)}</p>
+                <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">{sprintExplanation(sprint.status as string, sprint.payment_status as string | null)}</p>
+                {sprint.taskCounts && (
                   <p className="mb-1 text-neutral-500 dark:text-neutral-400">
-                    {sprintTaskCounts.done} of {sprintTaskCounts.total} tasks done
+                    {sprint.taskCounts.done} of {sprint.taskCounts.total} tasks done
                   </p>
                 )}
-                <Link href={`/execution-sprint/${activeSprint.id}`} className="mt-1 inline-block font-medium text-accent hover:underline">
+                <Link href={`/execution-sprint/${sprint.id}`} className="mt-1 inline-block font-medium text-accent hover:underline">
                   View sprint
                 </Link>
                 {/* Real gap closed (confirmed 2026-08-19, direct founder
@@ -1039,20 +1079,20 @@ export default async function DashboardPage() {
                     report page and already routes to the reviewer queue,
                     but nothing on Dashboard ever pointed a client back to
                     it. Only shown once the sprint is genuinely under way
-                    (scoped/in_progress) — during "proposed", the client is
-                    already being asked to pick a finding on the sprint's
-                    own confirm-or-reselect page, so a second, separate
+                    (scoped/in_progress) — during "awaiting_payment"/
+                    "proposed", the client is already being asked to
+                    pick/confirm a finding elsewhere, so a second, separate
                     "want something else" link here would be redundant. */}
-                {activeSprint.status !== "proposed" && (
+                {sprint.status !== "awaiting_payment" && sprint.status !== "proposed" && (
                   <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-                    <Link href={`/reports/${activeSprint.report_id}`} className="font-medium text-accent hover:underline">
+                    <Link href={`/reports/${sprint.report_id}`} className="font-medium text-accent hover:underline">
                       Want to work on a different priority instead?
                     </Link>{" "}
                     Mark another finding &quot;Interested in help&quot; on your full report — your reviewer will follow up.
                   </p>
                 )}
               </div>
-            )}
+            ))}
 
             {(activeModuleRequestRows ?? []).map((r) => {
               const meta = MODULE_META[r.module_type as ModuleType];

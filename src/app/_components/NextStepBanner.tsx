@@ -43,15 +43,17 @@ const COPY: Record<JourneyStatus["stage"], { title: string; body: string; ctaLab
     ctaLabel: "Check status",
     href: () => "/evidence-intake",
   },
-  // Re-audit payment gate (confirmed 2026-09-06) — a real, distinct stage
-  // from queued_for_audit above: the window has closed, but analysis is
-  // deliberately withheld until payment is confirmed. body is overridden
-  // below with the real re-audit price + Payoneer link, same treatment as
-  // "editing"'s own live countdown override — this static string is only
-  // the defensive fallback.
+  // Re-audit payment gate (confirmed 2026-09-06, relabeled 2026-09-07 for
+  // the unified flow) — a real, distinct stage from queued_for_audit
+  // above: the window has closed, but analysis is deliberately withheld
+  // until payment is confirmed. This default entry covers the "nothing
+  // checked yet" case ("Submitted") — the "reviewer confirmed unpaid"
+  // case ("Awaiting payment") is a real override applied in the component
+  // body below, reading journeyStatus.paymentStatus, same treatment as
+  // "editing"'s own live countdown override.
   awaiting_payment: {
-    title: "Your evidence is saved — payment needed before analysis begins",
-    body: "This re-audit hasn't been marked as paid yet — pay via the link on the evidence page, and we'll start analyzing it once it's confirmed.",
+    title: "Submitted",
+    body: "This re-audit is queued, waiting on payment confirmation — pay via the link on the evidence page, and we'll start analyzing it once it's confirmed.",
     ctaLabel: "Check status",
     href: () => "/evidence-intake",
   },
@@ -76,10 +78,37 @@ const COPY: Record<JourneyStatus["stage"], { title: string; body: string; ctaLab
     ctaLabel: "View report",
     href: (reportId) => `/reports/${reportId}`,
   },
+  // 'Canceled' status (confirmed 2026-09-07) — defensive entry only:
+  // computeJourneyStatus() deliberately never returns this stage today (a
+  // canceled submission is excluded from "active" consideration entirely,
+  // so the client falls back to no_evidence and can start fresh — a
+  // perpetual "Canceled" banner would be less useful than the normal
+  // submit-evidence prompt). Kept here so this Record stays exhaustive
+  // against SubmissionDisplayStage, which other callers (the reviewer
+  // queue) do use this value for.
+  canceled: {
+    title: "This request was canceled",
+    body: "Submit new evidence any time to start a fresh cycle.",
+    ctaLabel: "Submit evidence",
+    href: () => "/evidence-intake",
+  },
 };
 
 export function NextStepBanner({ journeyStatus }: { journeyStatus: JourneyStatus }) {
-  const copy = COPY[journeyStatus.stage];
+  // Unified flow label split (confirmed 2026-09-07) — 'awaiting_payment'
+  // alone is ambiguous between "nothing checked yet" and "reviewer
+  // confirmed unpaid," which read back as two different titles
+  // ("Submitted" vs "Awaiting payment"), same split already built for
+  // modules via moduleClientStatusLabel(). journeyStatus.paymentStatus is
+  // only ever set when stage is 'awaiting_payment'.
+  const copy =
+    journeyStatus.stage === "awaiting_payment" && journeyStatus.paymentStatus === "unpaid"
+      ? {
+          ...COPY.awaiting_payment,
+          title: "Awaiting payment",
+          body: "We checked, and this re-audit hasn't been marked as paid yet — pay via the link on the evidence page, and we'll start analyzing it once it's confirmed.",
+        }
+      : COPY[journeyStatus.stage];
   // Real live countdown (confirmed 2026-08-10, live testing pass) — closes
   // a real gap: this banner previously showed a one-time static message
   // with no ongoing indication of how much of the edit window was left.

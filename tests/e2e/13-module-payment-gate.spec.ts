@@ -70,9 +70,9 @@ test("Module payment gate: price shown, no analysis until paid, reviewer Mark Un
   const { count: findingCountBeforePayment } = await supabase.from("module_findings").select("id", { count: "exact", head: true }).eq("request_id", requestId);
   expect(findingCountBeforePayment).toBe(0);
 
-  // --- Client Dashboard: real "awaiting payment" status shown, before any reviewer action ---
+  // --- Client Dashboard: real "Submitted" status shown, before any reviewer action (unified flow, confirmed 2026-09-07) ---
   await page.goto("/dashboard");
-  await expect(page.getByText("Submitted — awaiting payment")).toBeVisible();
+  await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
   await step(page, testInfo, "12-module-payment-gate", "03-dashboard-awaiting-payment");
 
   // --- Reviewer: the request shows in the new "Module requests awaiting payment" section ---
@@ -94,10 +94,10 @@ test("Module payment gate: price shown, no analysis until paid, reviewer Mark Un
   expect(rowAfterUnpaid?.status).toBe("awaiting_payment");
   expect(rowAfterUnpaid?.payment_status).toBe("unpaid");
 
-  // --- Client sees the real "Unpaid" status, not a stuck "awaiting payment" ---
+  // --- Client sees the real "Awaiting payment" status, not a stuck "Submitted" (unified flow, confirmed 2026-09-07) ---
   await loginAsTestUser(page, fixture.clientEmail);
   await page.goto("/dashboard");
-  await expect(page.getByText("Unpaid", { exact: true })).toBeVisible();
+  await expect(page.getByText("Awaiting payment", { exact: true })).toBeVisible();
   await expect(page.getByText("Your reviewer checked and hasn't received payment yet")).toBeVisible();
   await step(page, testInfo, "12-module-payment-gate", "06-client-sees-unpaid");
 

@@ -6,8 +6,9 @@ import { updatePricingItem } from "@/lib/pricing";
 import { replyToSprintQueueItem } from "@/lib/execution-sprint/workspace";
 import { resolveSprintInterestRequest } from "@/lib/execution-sprint/interest-requests";
 import { resolveContactRequest } from "@/lib/reviewer/contact-requests";
-import { markReaduitPaid } from "@/lib/reviewer/reaudit-payment";
-import { markModulePaidAndRunAnalysis, markModuleUnpaid } from "@/lib/reviewer/module-payment-gate";
+import { markReaduitPaid, markReaduitUnpaid, cancelReaudit } from "@/lib/reviewer/reaudit-payment";
+import { markModulePaidAndRunAnalysis, markModuleUnpaid, cancelModuleRequest } from "@/lib/reviewer/module-payment-gate";
+import { markSprintPaidAndDraftTasks, markSprintUnpaid, cancelSprintRequest } from "@/lib/execution-sprint/payment-gate";
 import { createClient } from "@/lib/supabase/server";
 
 // Same independent session+role re-check as every other reviewer Server
@@ -148,6 +149,68 @@ export async function markModulePaidAction(requestId: string) {
   await getReviewerId();
   const result = await markModulePaidAndRunAnalysis(requestId);
   if (!result.success) throw new Error(result.error ?? "Failed to mark as paid.");
+  revalidatePath("/queue");
+}
+
+/**
+ * Unified flow (confirmed 2026-09-07) — the reviewer's "Mark as unpaid"
+ * action for re-audits, mirroring markModulePaidAction/markModuleUnpaidAction
+ * above.
+ */
+export async function markReaduitUnpaidAction(pendingSubmissionId: string) {
+  await getReviewerId();
+  const result = await markReaduitUnpaid(pendingSubmissionId);
+  if (!result.success) throw new Error(result.error ?? "Failed to mark as unpaid.");
+  revalidatePath("/queue");
+}
+
+/**
+ * 'Canceled' status (confirmed 2026-09-07, unified flow spec) — FormData,
+ * not a bound arg, since this carries a real, required reason (same
+ * pattern as declineSessionRequestAction below).
+ */
+export async function cancelReaduitAction(formData: FormData) {
+  await getReviewerId();
+  const pendingSubmissionId = String(formData.get("pendingSubmissionId"));
+  const reason = String(formData.get("reason") ?? "");
+  const result = await cancelReaudit(pendingSubmissionId, reason);
+  if (!result.success) throw new Error(result.error ?? "Failed to cancel.");
+  revalidatePath("/queue");
+}
+
+export async function cancelModuleRequestAction(formData: FormData) {
+  await getReviewerId();
+  const requestId = String(formData.get("requestId"));
+  const reason = String(formData.get("reason") ?? "");
+  const result = await cancelModuleRequest(requestId, reason);
+  if (!result.success) throw new Error(result.error ?? "Failed to cancel.");
+  revalidatePath("/queue");
+}
+
+/**
+ * Execution Sprint payment gate (confirmed 2026-09-07, unified flow spec)
+ * — mirrors markModulePaidAction/markModuleUnpaidAction above.
+ */
+export async function markSprintPaidAction(sprintId: string) {
+  await getReviewerId();
+  const result = await markSprintPaidAndDraftTasks(sprintId);
+  if (!result.success) throw new Error(result.error ?? "Failed to mark as paid.");
+  revalidatePath("/queue");
+}
+
+export async function markSprintUnpaidAction(sprintId: string) {
+  await getReviewerId();
+  const result = await markSprintUnpaid(sprintId);
+  if (!result.success) throw new Error(result.error ?? "Failed to mark as unpaid.");
+  revalidatePath("/queue");
+}
+
+export async function cancelSprintRequestAction(formData: FormData) {
+  await getReviewerId();
+  const sprintId = String(formData.get("sprintId"));
+  const reason = String(formData.get("reason") ?? "");
+  const result = await cancelSprintRequest(sprintId, reason);
+  if (!result.success) throw new Error(result.error ?? "Failed to cancel.");
   revalidatePath("/queue");
 }
 

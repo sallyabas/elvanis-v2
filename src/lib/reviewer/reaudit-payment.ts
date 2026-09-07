@@ -41,12 +41,16 @@ export async function markReaduitPaid(pendingSubmissionId: string): Promise<Mark
   const supabase = createAdminClient();
   const now = new Date().toISOString();
 
+  // Widened 2026-09-07 (unified flow spec) to also accept 'unpaid' — a
+  // reviewer who earlier confirmed non-payment can come back and mark
+  // the same submission paid once it actually arrives, same claim
+  // mechanism either way.
   const { data, error } = await supabase
     .from("pending_evidence_submissions")
     .update({ payment_status: "paid", status: "audit_in_progress", last_attempted_at: now })
     .eq("id", pendingSubmissionId)
     .eq("status", "editing")
-    .eq("payment_status", "pending")
+    .in("payment_status", ["pending", "unpaid"])
     .select("id, company_id, goal_id, evidence_payload, submitted_at, edit_window_closes_at")
     .maybeSingle();
 
@@ -82,4 +86,94 @@ export async function markReaduitPaid(pendingSubmissionId: string): Promise<Mark
     success: false,
     error: "Marked as paid, but something went wrong starting the analysis. It's been queued for an automatic retry shortly — no need to try again.",
   };
+}
+
+export interface ReaduitPaymentActionResult {
+  success: boolean;
+  error?: string;
+}
+
+/** Loads the company's owning user id for a re-audit submission — the real recipient for every client-facing notification this file fires. */
+async function loadPendingSubmissionOwner(supabase: ReturnType<typeof createAdminClient>, pendingSubmissionId: string): Promise<string | null> {
+  const { data } = await supabase.from("pending_evidence_submissions").select("companies(user_id)").eq("id", pendingSubmissionId).maybeSingle();
+  const owner = data?.companies as unknown as { user_id: string } | null;
+  return owner?.user_id ?? null;
+}
+
+/**
+ * The reviewer's "Mark as unpaid" action (confirmed 2026-09-07, unified
+ * flow spec — mirrors markModuleUnpaid()). No separate 'processing' claim
+ * field exists here the way it does for modules — `status` itself is the
+ * real atomic lock for re-audits (markReaduitPaid() moves it straight
+ * from 'editing' to 'audit_in_progress'), so once a paid claim succeeds,
+ * `status` is no longer 'editing' and this WHERE clause naturally can't
+ * match — no extra race window to close.
+ */
+export async function markReaduitUnpaid(pendingSubmissionId: string): Promise<ReaduitPaymentActionResult> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("pending_evidence_submissions")
+    .update({ payment_status: "unpaid" })
+    .eq("id", pendingSubmissionId)
+    .eq("status", "editing")
+    .eq("payment_status", "pending")
+    .select("id")
+    .maybeSingle();
+  if (error) return { success: false, error: error.message };
+  if (!data) return { success: false, error: "This submission is no longer awaiting payment, or is already being processed." };
+
+  const recipientId = await loadPendingSubmissionOwner(supabase, pendingSubmissionId);
+  if (recipientId) {
+    const { error: notifError } = await supabase.from("notifications").insert({
+      recipient_type: "client",
+      recipient_id: recipientId,
+      event_type: "reaudit_unpaid",
+      channel: "email",
+      related_pending_submission_id: pendingSubmissionId,
+      sent_at: null,
+    });
+    if (notifError) throw new Error(`markReaduitUnpaid: failed to log notification: ${notifError.message}`);
+  }
+
+  return { success: true };
+}
+
+/**
+ * The reviewer's "Cancel" action (confirmed 2026-09-07, unified flow
+ * spec) — the real case where a reviewer has followed up about unpaid
+ * status and either side decides to give up. Only reachable from
+ * 'editing'/pending-or-unpaid (a submission whose audit is already
+ * running or done goes through the normal review pipeline instead).
+ * Setting status to 'canceled' correctly frees this company's one-active-
+ * submission slot (see the partial unique index rebuild in
+ * 20260907092500) — a canceled re-audit doesn't block a genuinely new one.
+ */
+export async function cancelReaudit(pendingSubmissionId: string, reason: string): Promise<ReaduitPaymentActionResult> {
+  if (!reason.trim()) return { success: false, error: "A cancellation reason is required." };
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("pending_evidence_submissions")
+    .update({ status: "canceled", cancellation_reason: reason.trim() })
+    .eq("id", pendingSubmissionId)
+    .eq("status", "editing")
+    .in("payment_status", ["pending", "unpaid"])
+    .select("id")
+    .maybeSingle();
+  if (error) return { success: false, error: error.message };
+  if (!data) return { success: false, error: "This submission is no longer awaiting payment — it may already be past cancellation." };
+
+  const recipientId = await loadPendingSubmissionOwner(supabase, pendingSubmissionId);
+  if (recipientId) {
+    const { error: notifError } = await supabase.from("notifications").insert({
+      recipient_type: "client",
+      recipient_id: recipientId,
+      event_type: "reaudit_canceled",
+      channel: "email",
+      related_pending_submission_id: pendingSubmissionId,
+      sent_at: null,
+    });
+    if (notifError) throw new Error(`cancelReaudit: failed to log notification: ${notifError.message}`);
+  }
+
+  return { success: true };
 }

@@ -23,21 +23,32 @@
  * whole time — it only ever advances to 'audit_in_progress' once payment
  * clears.
  */
-export type SubmissionDisplayStage = "editing" | "queued_for_audit" | "audit_in_progress" | "awaiting_payment";
+export type SubmissionDisplayStage = "editing" | "queued_for_audit" | "audit_in_progress" | "awaiting_payment" | "canceled";
 
 export interface PendingSubmissionStatusInput {
-  status: "editing" | "audit_in_progress" | "completed";
+  status: "editing" | "audit_in_progress" | "completed" | "canceled";
   edit_window_closes_at: string;
-  /** Optional — omitting it (e.g. a caller that never needed to know) behaves exactly as before this field existed, never derives "awaiting_payment". */
-  payment_status?: "not_required" | "pending" | "paid";
+  /**
+   * Optional — omitting it (e.g. a caller that never needed to know)
+   * behaves exactly as before this field existed, never derives
+   * "awaiting_payment". 'unpaid' added 2026-09-07 (unified flow spec) —
+   * both 'pending' and 'unpaid' collapse into the same "awaiting_payment"
+   * STAGE here (the real gate behavior — no analysis runs — is identical
+   * for both); the client/reviewer display layer (NextStepBanner,
+   * Dashboard's subtitle) distinguishes the two LABELS ("Submitted" vs
+   * "Awaiting payment") by reading the raw payment_status separately,
+   * same split already built for modules via moduleClientStatusLabel().
+   */
+  payment_status?: "not_required" | "pending" | "paid" | "unpaid";
 }
 
 export function computeSubmissionDisplayStage(row: PendingSubmissionStatusInput, now: Date = new Date()): SubmissionDisplayStage | null {
   if (row.status === "completed") return null; // a real report exists now — not a "pending" stage anymore
+  if (row.status === "canceled") return "canceled";
   if (row.status === "audit_in_progress") return "audit_in_progress";
   const closesAt = new Date(row.edit_window_closes_at);
   if (closesAt.getTime() > now.getTime()) return "editing";
-  return row.payment_status === "pending" ? "awaiting_payment" : "queued_for_audit";
+  return row.payment_status === "pending" || row.payment_status === "unpaid" ? "awaiting_payment" : "queued_for_audit";
 }
 
 export const SUBMISSION_STAGE_LABELS: Record<SubmissionDisplayStage, string> = {
@@ -45,4 +56,5 @@ export const SUBMISSION_STAGE_LABELS: Record<SubmissionDisplayStage, string> = {
   queued_for_audit: "Queued for audit",
   audit_in_progress: "Audit in progress",
   awaiting_payment: "Awaiting payment",
+  canceled: "Canceled",
 };

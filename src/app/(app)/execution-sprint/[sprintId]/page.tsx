@@ -26,7 +26,9 @@ export default async function ExecutionSprintPage({ params }: { params: Promise<
 
   const { data: sprint, error: sprintError } = await supabase
     .from("execution_sprints")
-    .select("id, status, start_date, target_end_date, signed_off_at, reviewer_commentary, selected_finding_id, report_id, companies(name)")
+    .select(
+      "id, status, payment_status, choice_mode, start_date, target_end_date, signed_off_at, reviewer_commentary, selected_finding_id, report_id, companies(name)",
+    )
     .eq("id", sprintId)
     .maybeSingle();
 
@@ -79,6 +81,41 @@ export default async function ExecutionSprintPage({ params }: { params: Promise<
         }}
         alternatives={alternatives}
       />
+    );
+  }
+
+  // Execution Sprint payment gate (confirmed 2026-09-07, unified flow
+  // spec) — a real, new branch: confirmSprintFinding()/
+  // requestSprintChooseOwnFinding()/requestSprintLetElvanisChoose() all
+  // land here now, with no tasks drafted yet (deferred until a reviewer
+  // marks this sprint paid). Same "Submitted" vs "Awaiting payment"
+  // three-word vocabulary as re-audits/modules.
+  if (sprint.status === "awaiting_payment") {
+    let findingTitle: string | null = null;
+    if (sprint.selected_finding_id) {
+      const { data: chosenFinding } = await supabase
+        .from("lens_findings")
+        .select("ai_draft, reviewer_edited_content")
+        .eq("id", sprint.selected_finding_id)
+        .maybeSingle();
+      const content = (chosenFinding?.reviewer_edited_content ?? chosenFinding?.ai_draft) as LensFinding | undefined;
+      findingTitle = content?.title ?? null;
+    }
+    const isUnpaid = sprint.payment_status === "unpaid";
+    return (
+      <div className="mx-auto max-w-2xl px-6 py-16 text-center">
+        <h1 className="mb-2 text-xl font-semibold">{isUnpaid ? "Awaiting payment" : "Submitted"}</h1>
+        <p className="mb-2 text-sm text-neutral-500 dark:text-neutral-400">
+          {findingTitle
+            ? `Your Execution Sprint on "${findingTitle}" is confirmed.`
+            : "Your reviewer will pick the finding this Execution Sprint focuses on."}
+        </p>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+          {isUnpaid
+            ? "We checked, and this hasn't been marked as paid yet — the plan is on hold until payment is confirmed."
+            : "No plan has been drafted yet — that starts once payment is confirmed."}
+        </p>
+      </div>
     );
   }
 

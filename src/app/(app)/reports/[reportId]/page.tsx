@@ -12,6 +12,7 @@ import { SessionRequestButton } from "@/app/_components/SessionRequestButton";
 import { DeliveryFeedbackPrompt } from "@/app/_components/DeliveryFeedbackPrompt";
 import { hasSubmittedFeedbackFor } from "@/lib/reviewer/delivery-feedback";
 import { SprintInterestButton } from "@/app/_components/SprintInterestButton";
+import { SprintRequestSection, type SprintEligibleFinding } from "@/app/_components/SprintRequestSection";
 import { FindingNotApplicableButton } from "@/app/_components/FindingNotApplicableButton";
 import { loadFlaggedFindingIds } from "@/lib/reports/finding-feedback";
 import { EvidenceSubmittedDisclosure, type EvidenceSnapshotShape } from "@/app/_components/EvidenceSubmittedDisclosure";
@@ -177,6 +178,16 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
   if (findingsError) throw new Error(`Failed to load findings: ${findingsError.message}`);
 
   const visibleFindings = ((findings ?? []) as FindingRow[]).filter((f) => f.reviewer_status === "approved" || f.reviewer_status === "edited");
+  // Execution Sprint request section (confirmed 2026-09-07, unified flow
+  // spec) — same eligibility rule as SprintInterestButton below
+  // (critical/high, not a missing-evidence placeholder), computed once
+  // here rather than duplicated: the client's "I'll choose myself"
+  // dropdown must only ever offer findings a sprint can genuinely be
+  // scoped against.
+  const sprintEligibleFindings: SprintEligibleFinding[] = visibleFindings
+    .map((f) => ({ id: f.id, finding: displayedContent(f) }))
+    .filter(({ finding }) => !finding.isMissingDataFinding && (finding.severity === "critical" || finding.severity === "high"))
+    .map(({ id, finding }) => ({ id, title: finding.title }));
   // Real, ranked, capped-at-3 resolution (confirmed 2026-08-20) — see
   // top3.ts's own docblock for the real bug this fixes: the old code here
   // filtered visibleFindings by Set membership, discarding the reviewer's
@@ -326,6 +337,12 @@ export default async function ClientReportPage({ params }: { params: Promise<{ r
           </ol>
         </section>
       )}
+
+      {/* Execution Sprint request section (confirmed 2026-09-07, unified
+          flow spec) — a real, single, report-level entry point, distinct
+          from SprintInterestButton's per-finding "interested?" signal
+          below. Only rendered when at least one eligible finding exists. */}
+      <SprintRequestSection companyId={company.id} reportId={reportId} eligibleFindings={sprintEligibleFindings} />
 
       {top3.length > 0 && (
         <section className="mb-10">

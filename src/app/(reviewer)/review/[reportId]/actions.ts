@@ -16,7 +16,7 @@ import type { LensFinding } from "@/lib/lenses/types";
 import { createClient } from "@/lib/supabase/server";
 import { rerunAudit } from "@/lib/audit/rerun-audit";
 import { setPlanTier, type PlanTier } from "@/lib/service-layer/plan-tier";
-import { proposeSprintFinding } from "@/lib/execution-sprint/workspace";
+import { proposeSprintFinding, chooseSprintFindingForRequest } from "@/lib/execution-sprint/workspace";
 import { saveFindingConciergeNote } from "@/lib/reviewer/finding-notes";
 import { requestFinancialLensSecondOpinion } from "@/lib/reviewer/second-opinion-workspace";
 import { requestReportTop3SecondOpinion } from "@/lib/reviewer/report-second-opinion-workspace";
@@ -180,6 +180,22 @@ export async function startExecutionSprintAction(reportId: string, findingId: st
   } catch (e) {
     return { success: false as const, error: e instanceof Error ? e.message : "Something went wrong." };
   }
+}
+
+/**
+ * The reviewer's own finding pick for a client's "Let Elvanis decide"
+ * sprint request (confirmed 2026-09-07, unified flow spec) — FormData,
+ * not bound args, since this is called from a plain server-rendered form
+ * (page.tsx), the same pattern already used elsewhere for forms carrying
+ * a real user-entered value.
+ */
+export async function chooseSprintFindingForRequestAction(formData: FormData) {
+  await getReviewerId();
+  const sprintId = String(formData.get("sprintId"));
+  const findingId = String(formData.get("findingId"));
+  await chooseSprintFindingForRequest(sprintId, findingId);
+  revalidatePath(`/review/${String(formData.get("reportId"))}`);
+  revalidatePath("/queue");
 }
 
 /**

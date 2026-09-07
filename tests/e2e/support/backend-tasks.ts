@@ -17,6 +17,7 @@
  */
 import { sendPendingNotifications } from "@/lib/notifications/dispatch";
 import { proposeSprintFinding, confirmSprintFinding, approveSprintTasks } from "@/lib/execution-sprint/workspace";
+import { markSprintPaidAndDraftTasks } from "@/lib/execution-sprint/payment-gate";
 import { createClient } from "@supabase/supabase-js";
 
 function adminClient() {
@@ -33,9 +34,17 @@ async function main() {
   }
 
   if (task === "create-and-approve-sprint") {
+    // Real payment gate inserted (confirmed 2026-09-07, unified flow
+    // spec) — confirmSprintFinding() no longer drafts tasks immediately;
+    // that only happens once a reviewer marks the sprint paid (see
+    // execution-sprint/payment-gate.ts). Without this step, the old
+    // version of this task would have found zero tasks and trivially
+    // "approved" an empty sprint.
     const [reportId, findingId] = args;
     const proposeResult = await proposeSprintFinding(reportId, findingId);
     await confirmSprintFinding(proposeResult.sprintId, findingId);
+    const paidResult = await markSprintPaidAndDraftTasks(proposeResult.sprintId);
+    if (!paidResult.success) throw new Error(`markSprintPaidAndDraftTasks failed: ${paidResult.error}`);
     const supabase = adminClient();
     const { error: updateError } = await supabase.from("sprint_tasks").update({ reviewer_status: "approved" }).eq("execution_sprint_id", proposeResult.sprintId);
     if (updateError) throw new Error(`sprint_tasks bulk-approve failed: ${updateError.message}`);

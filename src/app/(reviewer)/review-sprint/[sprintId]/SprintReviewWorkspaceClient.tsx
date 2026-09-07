@@ -90,6 +90,33 @@ export function SprintReviewWorkspaceClient({ sprintId, companyName, findingTitl
     );
   }
 
+  // Execution Sprint payment gate (confirmed 2026-09-07, unified flow
+  // spec) — the same "nothing to review yet" holding state as 'proposed'
+  // above, for the real reason nothing exists here now: task drafting is
+  // deliberately withheld until a reviewer marks this sprint paid — see
+  // "Mark as paid" on /queue's own "Execution Sprint requests awaiting
+  // payment" section, which does the actual claiming and drafting.
+  if (sprintStatus === "awaiting_payment") {
+    return (
+      <div className="mx-auto max-w-2xl px-6 py-16 text-center">
+        <h1 className="mb-2 text-xl font-semibold text-neutral-900 dark:text-neutral-50">{companyName}</h1>
+        <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
+          {findingTitle ? (
+            <>
+              Confirmed: <span className="font-medium text-neutral-700 dark:text-neutral-300">{findingTitle}</span>
+            </>
+          ) : (
+            "No finding has been chosen yet — check the report's own workspace to pick one."
+          )}
+        </p>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+          No plan has been drafted yet — this sprint is awaiting payment confirmation. Mark it paid on the reviewer
+          queue to draft the real task plan.
+        </p>
+      </div>
+    );
+  }
+
   async function handleAccept(taskId: string) {
     setPending(true);
     setActionError(null);

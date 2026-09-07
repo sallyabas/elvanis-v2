@@ -63,14 +63,32 @@ export interface JourneyStatus {
   latestReportId: string | null;
   /** Set only when stage is editing/queued_for_audit/audit_in_progress — the client's own edit-window deadline, for "X hours remaining" copy without a second query. */
   editWindowClosesAt: string | null;
+  /**
+   * Raw payment_status (confirmed 2026-09-07, unified flow spec) — set
+   * only when stage is 'awaiting_payment'. The stage alone can't
+   * distinguish "nothing checked yet" (pending) from "reviewer confirmed
+   * not paid" (unpaid), which the display layer (NextStepBanner,
+   * Dashboard's subtitle) needs to show "Submitted" vs "Awaiting payment"
+   * respectively — same split already built for modules.
+   */
+  paymentStatus: "pending" | "unpaid" | null;
 }
 
 export async function computeJourneyStatus(supabase: SupabaseClient, companyId: string): Promise<JourneyStatus> {
+  // Real fix needed alongside 'canceled' (confirmed 2026-09-07) — the
+  // original `.neq("status", "completed")` treated a canceled row as
+  // still "active," which would collide with the partial unique index
+  // now correctly letting a NEW submission exist alongside an old
+  // canceled one (see 20260907092500's own docblock: canceled frees the
+  // slot, same as completed). Two real rows could then match this query
+  // at once. Explicit allow-list of the genuinely-active statuses instead
+  // of a negative exclusion, so this can't silently drift again the next
+  // time a new terminal status is added.
   const { data: pendingSubmission } = await supabase
     .from("pending_evidence_submissions")
     .select("status, edit_window_closes_at, submitted_at, payment_status")
     .eq("company_id", companyId)
-    .neq("status", "completed")
+    .in("status", ["editing", "audit_in_progress"])
     .maybeSingle();
 
   if (pendingSubmission) {
@@ -88,19 +106,25 @@ export async function computeJourneyStatus(supabase: SupabaseClient, companyId: 
 
       if (reportForThisSubmission) {
         if (reportForThisSubmission.status === "sent") {
-          return { stage: "has_report", latestReportId: reportForThisSubmission.id as string, editWindowClosesAt: null };
+          return { stage: "has_report", latestReportId: reportForThisSubmission.id as string, editWindowClosesAt: null, paymentStatus: null };
         }
-        return { stage: "in_review", latestReportId: reportForThisSubmission.id as string, editWindowClosesAt: null };
+        return { stage: "in_review", latestReportId: reportForThisSubmission.id as string, editWindowClosesAt: null, paymentStatus: null };
       }
     }
 
+    const rawPaymentStatus = pendingSubmission.payment_status as "not_required" | "pending" | "paid" | "unpaid";
     const stage = computeSubmissionDisplayStage({
-      status: pendingSubmission.status as "editing" | "audit_in_progress" | "completed",
+      status: pendingSubmission.status as "editing" | "audit_in_progress" | "completed" | "canceled",
       edit_window_closes_at: pendingSubmission.edit_window_closes_at as string,
-      payment_status: pendingSubmission.payment_status as "not_required" | "pending" | "paid",
+      payment_status: rawPaymentStatus,
     });
     if (stage) {
-      return { stage, latestReportId: null, editWindowClosesAt: pendingSubmission.edit_window_closes_at as string };
+      return {
+        stage,
+        latestReportId: null,
+        editWindowClosesAt: pendingSubmission.edit_window_closes_at as string,
+        paymentStatus: stage === "awaiting_payment" && rawPaymentStatus === "unpaid" ? "unpaid" : stage === "awaiting_payment" ? "pending" : null,
+      };
     }
   }
 
@@ -113,12 +137,12 @@ export async function computeJourneyStatus(supabase: SupabaseClient, companyId: 
     .maybeSingle();
 
   if (!latestReport) {
-    return { stage: "no_evidence", latestReportId: null, editWindowClosesAt: null };
+    return { stage: "no_evidence", latestReportId: null, editWindowClosesAt: null, paymentStatus: null };
   }
 
   if (latestReport.status === "sent") {
-    return { stage: "has_report", latestReportId: latestReport.id as string, editWindowClosesAt: null };
+    return { stage: "has_report", latestReportId: latestReport.id as string, editWindowClosesAt: null, paymentStatus: null };
   }
 
-  return { stage: "in_review", latestReportId: latestReport.id as string, editWindowClosesAt: null };
+  return { stage: "in_review", latestReportId: latestReport.id as string, editWindowClosesAt: null, paymentStatus: null };
 }

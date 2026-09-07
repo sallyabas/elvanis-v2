@@ -53,6 +53,15 @@ function currentStepIndex(stage: JourneyStatus["stage"]): number {
       return 2; // Under Review
     case "has_report":
       return 3; // Report
+    case "canceled":
+      // Defensive only (confirmed 2026-09-07) — computeJourneyStatus()
+      // deliberately never returns this stage (a canceled submission is
+      // excluded from "active" consideration entirely, so the client
+      // falls back to no_evidence and can start fresh); kept here so this
+      // switch stays exhaustive against SubmissionDisplayStage, which
+      // other callers (the reviewer queue) do use this value for. Same
+      // slot as "start over."
+      return 1; // Evidence
   }
 }
 

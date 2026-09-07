@@ -103,24 +103,101 @@ async function revertModuleClaimOnFailure(supabase: SupabaseClient, requestId: s
   if (error) throw new Error(`revertModuleClaimOnFailure failed: ${error.message}`);
 }
 
+/** Loads the company's owning user id for a module request — the real recipient for every client-facing notification this file fires. */
+async function loadModuleRequestOwner(supabase: SupabaseClient, requestId: string): Promise<string | null> {
+  const { data } = await supabase.from("module_requests").select("companies(user_id)").eq("id", requestId).maybeSingle();
+  const owner = data?.companies as unknown as { user_id: string } | null;
+  return owner?.user_id ?? null;
+}
+
 /**
  * The reviewer's "Mark as unpaid" action — a real, explicit, visible
  * outcome ("I checked, this hasn't been paid"), genuinely revisable later
  * (a reviewer can come back and mark the same request paid once payment
  * actually arrives — same claim mechanism either way, since 'unpaid' is
  * one of the two states claimModuleRequestForAnalysis() accepts from).
+ *
+ * Fires a real client-facing notification (confirmed 2026-09-07, unified
+ * flow spec) — a real, previously-confirmed gap: this only ever touched
+ * the DB before, telling the client nothing.
  */
 export async function markModuleUnpaid(requestId: string): Promise<ModulePaymentActionResult> {
   const supabase = createAdminClient();
+  // Real, narrow concurrency bug found and fixed while extending this
+  // function (confirmed 2026-09-07): the original WHERE clause only
+  // checked `status`, not `payment_status` — a "Mark as unpaid" click
+  // landing WHILE a concurrent "Mark as paid" claim was mid-flight
+  // (payment_status: 'processing', the real Groq call still running)
+  // could silently overwrite it back to 'unpaid', which would then make
+  // the analysis's own finalize step (`.eq("payment_status","processing")`)
+  // match zero rows — findings would still get inserted, but the request
+  // would incorrectly stay stuck at 'awaiting_payment'/'unpaid'. Scoping
+  // this to `payment_status = 'pending'` closes the window: a request
+  // already 'processing' (claimed) or already 'paid' correctly refuses.
   const { data, error } = await supabase
     .from("module_requests")
     .update({ payment_status: "unpaid" })
     .eq("id", requestId)
     .eq("status", "awaiting_payment")
+    .eq("payment_status", "pending")
     .select("id")
     .maybeSingle();
   if (error) return { success: false, error: error.message };
-  if (!data) return { success: false, error: "This request is no longer awaiting payment." };
+  if (!data) return { success: false, error: "This request is no longer awaiting payment, or is already being processed." };
+
+  const recipientId = await loadModuleRequestOwner(supabase, requestId);
+  if (recipientId) {
+    const { error: notifError } = await supabase.from("notifications").insert({
+      recipient_type: "client",
+      recipient_id: recipientId,
+      event_type: "module_unpaid",
+      channel: "email",
+      related_module_request_id: requestId,
+      sent_at: null,
+    });
+    if (notifError) throw new Error(`markModuleUnpaid: failed to log notification: ${notifError.message}`);
+  }
+
+  return { success: true };
+}
+
+/**
+ * The reviewer's "Cancel" action (confirmed 2026-09-07, unified flow spec)
+ * — the real case where a reviewer has followed up about unpaid status and
+ * either side decides to give up rather than leave the request open
+ * indefinitely. Only reachable from 'awaiting_payment' (a request already
+ * analyzed and in the normal review pipeline goes through the existing
+ * Accept/Edit/Reject/Approve/Deliver flow instead — canceling something
+ * already reviewable isn't this action's job). A real, required reason,
+ * same discipline as session_requests' own decline-reason field, and a
+ * real client-facing email carrying it.
+ */
+export async function cancelModuleRequest(requestId: string, reason: string): Promise<ModulePaymentActionResult> {
+  if (!reason.trim()) return { success: false, error: "A cancellation reason is required." };
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("module_requests")
+    .update({ status: "canceled", cancellation_reason: reason.trim() })
+    .eq("id", requestId)
+    .eq("status", "awaiting_payment")
+    .select("id")
+    .maybeSingle();
+  if (error) return { success: false, error: error.message };
+  if (!data) return { success: false, error: "This request is no longer awaiting payment — it may already be past cancellation." };
+
+  const recipientId = await loadModuleRequestOwner(supabase, requestId);
+  if (recipientId) {
+    const { error: notifError } = await supabase.from("notifications").insert({
+      recipient_type: "client",
+      recipient_id: recipientId,
+      event_type: "module_canceled",
+      channel: "email",
+      related_module_request_id: requestId,
+      sent_at: null,
+    });
+    if (notifError) throw new Error(`cancelModuleRequest: failed to log notification: ${notifError.message}`);
+  }
+
   return { success: true };
 }
 

@@ -19,8 +19,14 @@ import {
   resolveSprintInterestRequestAction,
   resolveContactRequestAction,
   markReaduitPaidAction,
+  markReaduitUnpaidAction,
+  cancelReaduitAction,
   markModulePaidAction,
   markModuleUnpaidAction,
+  cancelModuleRequestAction,
+  markSprintPaidAction,
+  markSprintUnpaidAction,
+  cancelSprintRequestAction,
 } from "./actions";
 import { Card } from "@/app/_components/ui/Card";
 import { Input } from "@/app/_components/ui/Input";
@@ -93,6 +99,7 @@ export default async function ReviewerQueuePage() {
     { data: awaitingDeliveryModules, error: awaitingDeliveryError },
     { data: awaitingPaymentModules, error: awaitingPaymentModulesError },
     { data: scopedSprints, error: sprintsError },
+    { data: awaitingPaymentSprints, error: awaitingPaymentSprintsError },
     sessionRequests,
     pricing,
     deliveryFeedback,
@@ -161,6 +168,16 @@ export default async function ReviewerQueuePage() {
       .select("id, module_type, payment_status, created_at, company_id, companies(name)")
       .eq("status", "awaiting_payment"),
     supabase.from("execution_sprints").select("id, created_at, companies(name)").eq("status", "scoped"),
+    // Execution Sprint payment gate (confirmed 2026-09-07, unified flow
+    // spec) — a real request (either "I'll choose the finding" or "Let
+    // Elvanis decide") sits here until a reviewer picks a finding (if not
+    // already chosen) and confirms payment.
+    supabase
+      .from("execution_sprints")
+      .select(
+        "id, report_id, company_id, choice_mode, payment_status, selected_finding_id, created_at, companies(name), lens_findings(ai_draft, reviewer_edited_content)",
+      )
+      .eq("status", "awaiting_payment"),
     listPendingSessionRequests(),
     listPricing(),
     listDeliveryFeedback(),
@@ -187,6 +204,9 @@ export default async function ReviewerQueuePage() {
   }
   if (sprintsError) {
     return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {sprintsError.message}</div>;
+  }
+  if (awaitingPaymentSprintsError) {
+    return <div className="p-6 text-sm text-red-600">Failed to load reviewer queue: {awaitingPaymentSprintsError.message}</div>;
   }
 
   const MODULE_LABELS: Record<string, string> = {
@@ -263,9 +283,9 @@ export default async function ReviewerQueuePage() {
   const pendingByCompany = (pendingSubmissions ?? []).map((r) => {
     const name = (r.companies as unknown as { name: string } | null)?.name ?? "Unknown company";
     const stage = computeSubmissionDisplayStage({
-      status: r.status as "editing" | "audit_in_progress" | "completed",
+      status: r.status as "editing" | "audit_in_progress" | "completed" | "canceled",
       edit_window_closes_at: r.edit_window_closes_at as string,
-      payment_status: r.payment_status as "not_required" | "pending" | "paid",
+      payment_status: r.payment_status as "not_required" | "pending" | "paid" | "unpaid",
     });
     return {
       id: r.id as string,
@@ -273,6 +293,7 @@ export default async function ReviewerQueuePage() {
       stage,
       submittedAt: r.submitted_at as string,
       editWindowClosesAt: r.edit_window_closes_at as string,
+      paymentStatus: r.payment_status as string,
     };
   });
 
@@ -783,22 +804,61 @@ export default async function ReviewerQueuePage() {
             analysis is deliberately on hold until you confirm it below.
           </p>
           <ul className="space-y-2">
-            {awaitingPayment.map((p) => (
-              <li
-                key={p.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900"
-              >
-                <span>
-                  <span className="font-medium text-neutral-700 dark:text-neutral-300">{p.companyName}</span>{" "}
-                  <span className="text-neutral-500 dark:text-neutral-400">· submitted {new Date(p.submittedAt).toLocaleString()}</span>
-                </span>
-                <form action={markReaduitPaidAction.bind(null, p.id)}>
-                  <Button type="submit" className="px-2 py-1 text-xs">
-                    Mark as paid — start audit
-                  </Button>
-                </form>
-              </li>
-            ))}
+            {awaitingPayment.map((p) => {
+              const isUnpaid = p.paymentStatus === "unpaid";
+              return (
+                <li
+                  key={p.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900"
+                >
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-neutral-700 dark:text-neutral-300">{p.companyName}</span>
+                    {/* Reviewer-facing detail (confirmed 2026-09-07, unified
+                        flow spec) — distinguishes "nothing checked yet" from
+                        "confirmed unpaid" at a glance; the client's own
+                        Dashboard shows the simpler three-word vocabulary. */}
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isUnpaid ? "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300" : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"}`}
+                    >
+                      {isUnpaid ? "Unpaid" : "Not yet checked"}
+                    </span>
+                    <span className="text-neutral-500 dark:text-neutral-400">· submitted {new Date(p.submittedAt).toLocaleString()}</span>
+                  </span>
+                  <span className="flex flex-wrap items-center gap-2">
+                    <form action={markReaduitPaidAction.bind(null, p.id)}>
+                      <Button type="submit" className="px-2 py-1 text-xs">
+                        Mark as paid — start audit
+                      </Button>
+                    </form>
+                    {!isUnpaid && (
+                      <form action={markReaduitUnpaidAction.bind(null, p.id)}>
+                        <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
+                          Mark as unpaid
+                        </Button>
+                      </form>
+                    )}
+                    {/* 'Canceled' status (confirmed 2026-09-07) — the real
+                        case where you've followed up about unpaid status
+                        and either side decides to give up. A required
+                        reason, same discipline as session_requests' own
+                        decline form. */}
+                    <form action={cancelReaduitAction} className="flex items-center gap-1">
+                      <input type="hidden" name="pendingSubmissionId" value={p.id} />
+                      <input
+                        type="text"
+                        name="reason"
+                        required
+                        placeholder="Cancellation reason"
+                        className="w-40 rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                      />
+                      <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
+                        Cancel
+                      </Button>
+                    </form>
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
@@ -830,16 +890,19 @@ export default async function ReviewerQueuePage() {
                       {companyName}
                     </Link>
                     <TypeBadge type={moduleTypeToItemType(r.module_type as string)} />
-                    {isUnpaid && (
-                      <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-950 dark:text-red-300">
-                        Unpaid
-                      </span>
-                    )}
+                    {/* Reviewer-facing detail (confirmed 2026-09-07, unified
+                        flow spec) — distinguishes "nothing checked yet"
+                        from "confirmed unpaid" at a glance. */}
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isUnpaid ? "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300" : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"}`}
+                    >
+                      {isUnpaid ? "Unpaid" : "Not yet checked"}
+                    </span>
                     <span className="text-neutral-500 dark:text-neutral-400">
                       · submitted {new Date(r.created_at as string).toLocaleString()}
                     </span>
                   </span>
-                  <span className="flex gap-2">
+                  <span className="flex flex-wrap items-center gap-2">
                     <form action={markModulePaidAction.bind(null, r.id as string)}>
                       <Button type="submit" className="px-2 py-1 text-xs">
                         Mark as paid — run analysis
@@ -852,7 +915,103 @@ export default async function ReviewerQueuePage() {
                         </Button>
                       </form>
                     )}
+                    {/* 'Canceled' status (confirmed 2026-09-07) — a required reason, same discipline as session_requests' own decline form. */}
+                    <form action={cancelModuleRequestAction} className="flex items-center gap-1">
+                      <input type="hidden" name="requestId" value={r.id as string} />
+                      <input
+                        type="text"
+                        name="reason"
+                        required
+                        placeholder="Cancellation reason"
+                        className="w-40 rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                      />
+                      <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
+                        Cancel
+                      </Button>
+                    </form>
                   </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {/* Execution Sprint payment gate (confirmed 2026-09-07, unified flow
+          spec) — a real request (either "I'll choose the finding" or "Let
+          Elvanis decide") sits here until a reviewer picks a finding (if
+          not already chosen — "Let Elvanis decide" requests) and confirms
+          payment. */}
+      {(awaitingPaymentSprints ?? []).length > 0 && (
+        <div className="mt-8">
+          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">Execution Sprint requests awaiting payment</h2>
+          <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
+            Submitted, but no task plan has been drafted yet — deliberately on hold until a finding is chosen (if not
+            already) and payment is confirmed.
+          </p>
+          <ul className="space-y-2">
+            {(awaitingPaymentSprints ?? []).map((s) => {
+              const companyName = (s.companies as unknown as { name: string } | null)?.name ?? "Unknown company";
+              const isUnpaid = s.payment_status === "unpaid";
+              const finding = s.lens_findings as unknown as { ai_draft: { title?: string } | null; reviewer_edited_content: { title?: string } | null } | null;
+              const findingTitle = finding?.reviewer_edited_content?.title ?? finding?.ai_draft?.title ?? null;
+              const needsFinding = s.choice_mode === "elvanis_chooses" && !s.selected_finding_id;
+              return (
+                <li
+                  key={s.id as string}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900"
+                >
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Link href={`/company/${s.company_id ?? ""}`} className="font-medium text-accent hover:underline">
+                      {companyName}
+                    </Link>
+                    <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                      {s.choice_mode === "elvanis_chooses" ? "Let Elvanis decide" : s.choice_mode === "client_chosen" ? "Client chose the finding" : "Reviewer-proposed"}
+                    </span>
+                    {!needsFinding && (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isUnpaid ? "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300" : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"}`}
+                      >
+                        {isUnpaid ? "Unpaid" : "Not yet checked"}
+                      </span>
+                    )}
+                    <span className="text-neutral-500 dark:text-neutral-400">
+                      · {findingTitle ?? "no finding chosen yet"} · submitted {new Date(s.created_at as string).toLocaleString()}
+                    </span>
+                  </span>
+                  {needsFinding ? (
+                    <LinkButton href={`/review/${s.report_id}`} className="px-3 py-1.5 text-sm">
+                      Pick a finding →
+                    </LinkButton>
+                  ) : (
+                    <span className="flex flex-wrap items-center gap-2">
+                      <form action={markSprintPaidAction.bind(null, s.id as string)}>
+                        <Button type="submit" className="px-2 py-1 text-xs">
+                          Mark as paid — draft plan
+                        </Button>
+                      </form>
+                      {!isUnpaid && (
+                        <form action={markSprintUnpaidAction.bind(null, s.id as string)}>
+                          <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
+                            Mark as unpaid
+                          </Button>
+                        </form>
+                      )}
+                      <form action={cancelSprintRequestAction} className="flex items-center gap-1">
+                        <input type="hidden" name="sprintId" value={s.id as string} />
+                        <input
+                          type="text"
+                          name="reason"
+                          required
+                          placeholder="Cancellation reason"
+                          className="w-40 rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                        />
+                        <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
+                          Cancel
+                        </Button>
+                      </form>
+                    </span>
+                  )}
                 </li>
               );
             })}

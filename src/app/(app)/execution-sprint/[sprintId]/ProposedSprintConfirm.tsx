@@ -57,7 +57,11 @@ export function ProposedSprintConfirm({
     return (
       <div className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="mb-2 text-xl font-semibold text-neutral-900 dark:text-neutral-50">{companyName}</h1>
-        <Alert variant="success">Confirmed — thanks. Your reviewer is now finalizing the task plan; we&apos;ll let you know once it&apos;s ready.</Alert>
+        {/* Real copy fix (confirmed 2026-09-07, unified flow spec) — task
+            drafting no longer starts immediately on confirm; it's
+            deliberately withheld until payment is confirmed (see
+            confirmSprintFinding()'s own docblock). */}
+        <Alert variant="success">Confirmed — thanks. This is now awaiting payment confirmation before the task plan gets drafted; we&apos;ll let you know once it&apos;s ready.</Alert>
       </div>
     );
   }
