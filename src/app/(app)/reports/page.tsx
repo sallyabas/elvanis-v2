@@ -6,6 +6,8 @@ import { NextStepBanner } from "@/app/_components/NextStepBanner";
 import { ProgressStepper } from "@/app/_components/ProgressStepper";
 import { type ItemType, sessionTypeToItemType } from "@/lib/item-type-badge";
 import { SESSION_STATUS_LABELS } from "@/lib/format";
+import { loadServiceStatusRecords } from "@/lib/reviewer/service-status";
+import { CONTACT_SALES_SESSION_TYPES, CONTACT_SALES_STATUS_LABELS } from "@/lib/reviewer/service-status-types";
 import { ReportsHistoryClient, type HistoryItem } from "./ReportsHistoryClient";
 
 /**
@@ -98,8 +100,33 @@ export default async function ReportsHistoryPage() {
     .eq("company_id", company.id)
     .order("requested_at", { ascending: false });
   const historicalSessionRequests = (allSessionRequests ?? []).filter(
-    (r) => r.session_type === "discovery" || r.status === "completed" || r.status === "declined",
+    (r) =>
+      // Concierge/Training & Advisory excluded here (confirmed 2026-09-07,
+      // Contact Sales flow) — their real terminal status lives in
+      // service_status_records now (loaded separately below), never
+      // session_requests.status, which is permanently frozen at
+      // 'requested' for these two types going forward.
+      !CONTACT_SALES_SESSION_TYPES.includes(r.session_type as (typeof CONTACT_SALES_SESSION_TYPES)[number]) &&
+      (r.session_type === "discovery" || r.status === "completed" || r.status === "declined"),
   );
+
+  // Contact Sales (Concierge/Training & Advisory) history, confirmed
+  // 2026-09-07 — "a completed, refunded, or canceled booking must remain
+  // visible to the client permanently." Their real terminal status source
+  // is service_status_records, not session_requests.status.
+  const { data: contactSalesSessionRows } = await supabase
+    .from("session_requests")
+    .select("id, session_type, requested_at")
+    .eq("company_id", company.id)
+    .in("session_type", [...CONTACT_SALES_SESSION_TYPES])
+    .order("requested_at", { ascending: false });
+  const contactSalesStatusRecords = await loadServiceStatusRecords(
+    "session_request",
+    (contactSalesSessionRows ?? []).map((r) => r.id as string),
+  );
+  const historicalContactSalesRequests = (contactSalesSessionRows ?? [])
+    .map((r) => ({ ...r, record: contactSalesStatusRecords.get(r.id as string) }))
+    .filter((r) => r.record?.status === "completed" || r.record?.status === "canceled" || r.record?.status === "refunded");
 
   // Execution Sprints — only `complete` (terminal) lands here; `scoped`/
   // `in_progress`/`proposed` stay Dashboard-only, same reasoning as module
@@ -159,8 +186,8 @@ export default async function ReportsHistoryPage() {
     })),
   ].sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
 
-  const sessions: HistoryItem[] = historicalSessionRequests
-    .map((r) => {
+  const sessions: HistoryItem[] = [
+    ...historicalSessionRequests.map((r) => {
       const date = (r.completed_at as string | null) ?? (r.scheduled_at as string | null) ?? (r.requested_at as string | null);
       const dateLabel = r.completed_at ? "Completed" : r.scheduled_at ? "Scheduled" : "Requested";
       // Real bug found and fixed while adding training_advisory (confirmed
@@ -191,8 +218,27 @@ export default async function ReportsHistoryPage() {
         // new one.
         reviewerNotes: (r.reviewer_notes as string | null) ?? null,
       };
-    })
-    .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
+    }),
+    // Contact Sales (Concierge/Training & Advisory) terminal history,
+    // confirmed 2026-09-07 — same shape, sourced from service_status_records
+    // instead of session_requests. reason (cancel/refund) shown the same
+    // way a decline reason already is above.
+    ...historicalContactSalesRequests.map((r) => {
+      // Filtered above to completed/canceled/refunded only — always a
+      // real terminal status by construction here.
+      const status = r.record!.status;
+      return {
+        id: r.id as string,
+        type: sessionTypeToItemType(r.session_type as string),
+        group: "session" as const,
+        subLabel: CONTACT_SALES_STATUS_LABELS[status],
+        date: r.record?.completedAt ?? (r.requested_at as string | null),
+        dateLabel: CONTACT_SALES_STATUS_LABELS[status],
+        href: null,
+        reviewerNotes: r.record?.reason ?? r.record?.note ?? null,
+      };
+    }),
+  ].sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
 
   const isEmpty = deliverables.length === 0 && sessions.length === 0;
 

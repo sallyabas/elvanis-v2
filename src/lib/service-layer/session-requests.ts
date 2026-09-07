@@ -2,6 +2,9 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getPricingItem } from "@/lib/pricing";
+import { isContactSalesSessionType, CONTACT_SALES_SESSION_TYPES, SESSION_TYPE_PRICING_KEY } from "@/lib/reviewer/service-status-types";
+import { ensureContactSalesStatusRecord } from "@/lib/reviewer/service-status";
 
 /**
  * Service Layer: Discovery/Delivery Session, F2F Workshop request handling
@@ -151,6 +154,21 @@ export async function requestSession(
     .single();
   if (insertError) return { success: false, error: `Couldn't submit request: ${insertError.message}` };
 
+  // Eager service_status_records creation for Contact Sales (Concierge/
+  // Training & Advisory), confirmed 2026-09-07 — service_status_records
+  // is now the ONE authoritative, client-visible status system for these
+  // two types (see service-status.ts's own docblock), and needs to exist
+  // from the moment of request, not lazily on a reviewer's first touch —
+  // otherwise a client would see nothing at all until a reviewer happened
+  // to open this row. Every other session type is unaffected (nothing
+  // changes for Discovery/Delivery/F2F Workshop/compliance_consultation,
+  // which keep their existing session_requests.status-driven flow).
+  if (isContactSalesSessionType(sessionType)) {
+    const pricingKey = SESSION_TYPE_PRICING_KEY[sessionType];
+    const defaultPrice = pricingKey ? ((await getPricingItem(pricingKey))?.priceAmount ?? null) : null;
+    await ensureContactSalesStatusRecord(insertedRequest.id as string, defaultPrice);
+  }
+
   // Notify every reviewer, same pattern as checkEvidenceCompletenessNudges
   // — real personal follow-up is how this actually gets scheduled today,
   // no calendar integration exists to automate it.
@@ -215,6 +233,15 @@ export async function listPendingSessionRequests(): Promise<(SessionRequestRow &
     .from("session_requests")
     .select("*, companies(name)")
     .in("status", ["requested", "scheduled"])
+    // Concierge/Training & Advisory excluded here (confirmed 2026-09-07,
+    // Contact Sales flow) — their real status/actions now live entirely
+    // on service_status_records (ContactSalesStatusRow on
+    // /company/[companyId]), superseding this Schedule/Complete/Decline
+    // mechanism for these two types. Without this exclusion they'd show
+    // up here forever (session_requests.status is permanently frozen at
+    // 'requested' for them going forward) with buttons that no longer
+    // represent the real, authoritative status.
+    .not("session_type", "in", `(${CONTACT_SALES_SESSION_TYPES.join(",")})`)
     .order("requested_at", { ascending: true });
   if (error) throw new Error(`listPendingSessionRequests: ${error.message}`);
 

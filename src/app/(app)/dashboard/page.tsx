@@ -15,6 +15,8 @@ import { MODULE_META, MODULE_ORDER, moduleClientStatusLabel, type ModuleType } f
 import { getSettingNumber } from "@/lib/app-settings";
 import { TYPE_LABELS, sessionTypeToItemType } from "@/lib/item-type-badge";
 import { humanizeStatus, SESSION_STATUS_LABELS } from "@/lib/format";
+import { loadServiceStatusRecords } from "@/lib/reviewer/service-status";
+import { CONTACT_SALES_SESSION_TYPES, CONTACT_SALES_STATUS_LABELS } from "@/lib/reviewer/service-status-types";
 import { hasCompletedPathBSetup } from "@/lib/onboarding/path-b-completion";
 import { NextStepBanner } from "@/app/_components/NextStepBanner";
 import { HubResume } from "@/app/onboarding/HubResume";
@@ -113,6 +115,7 @@ export default async function DashboardPage() {
     { data: currentGoal },
     { data: activeModuleRequestRows },
     { data: activeSessionRequestRows },
+    { data: contactSalesSessionRows },
     { data: sprintRows },
     { count: deliveredReportsCount },
     { count: deliveredModulesCount },
@@ -186,7 +189,24 @@ export default async function DashboardPage() {
       .select("id, session_type, status, requested_at, scheduled_at")
       .eq("company_id", companyId)
       .neq("session_type", "discovery")
+      // Concierge/Training & Advisory excluded here (confirmed 2026-09-07,
+      // Contact Sales flow) — session_requests.status is now permanently
+      // frozen at 'requested' for these two types (the real status lives
+      // entirely in service_status_records instead, loaded separately
+      // below), so this query would otherwise show them as "active"
+      // forever, even once booked/completed/canceled/refunded.
+      .not("session_type", "in", `(${CONTACT_SALES_SESSION_TYPES.join(",")})`)
       .in("status", ["requested", "scheduled"])
+      .order("requested_at", { ascending: false }),
+    // Contact Sales (Concierge/Training & Advisory), confirmed 2026-09-07
+    // — every request for this company, any raw session_requests status
+    // (irrelevant now — see above), so their real service_status_records
+    // rows can be loaded and filtered by the ACTUAL status just below.
+    admin
+      .from("session_requests")
+      .select("id, session_type, requested_at")
+      .eq("company_id", companyId)
+      .in("session_type", [...CONTACT_SALES_SESSION_TYPES])
       .order("requested_at", { ascending: false }),
     supabase
       .from("execution_sprints")
@@ -204,6 +224,20 @@ export default async function DashboardPage() {
     supabase.from("session_requests").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "completed"),
     supabase.from("execution_sprints").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "complete"),
   ]);
+
+  // Contact Sales (Concierge/Training & Advisory) real status, confirmed
+  // 2026-09-07 — a genuine dependency on the ids just loaded above, so it
+  // can't join the same Promise.all. Small volume (a client only ever has
+  // a handful of these at once), so one extra round-trip here is fine.
+  const contactSalesStatusRecords = await loadServiceStatusRecords(
+    "session_request",
+    (contactSalesSessionRows ?? []).map((r) => r.id as string),
+  );
+  const activeContactSalesRows = (contactSalesSessionRows ?? [])
+    .map((r) => ({ ...r, record: contactSalesStatusRecords.get(r.id as string) }))
+    .filter((r) => (r.record?.status ?? "requested") === "requested" || r.record?.status === "booked");
+  const completedContactSalesCount = [...contactSalesStatusRecords.values()].filter((r) => r.status === "completed").length;
+
   const mostRecentModuleRequest = (allModuleRequestsForAiStatus ?? [])[0] ?? null;
   const hasAnyModuleRequest = (allModuleRequestsForAiStatus ?? []).length > 0;
 
@@ -533,7 +567,8 @@ export default async function DashboardPage() {
     }),
   );
 
-  const hasAnyStatusTiles = (activeModuleRequestRows?.length ?? 0) > 0 || (activeSessionRequestRows?.length ?? 0) > 0 || activeSprints.length > 0;
+  const hasAnyStatusTiles =
+    (activeModuleRequestRows?.length ?? 0) > 0 || (activeSessionRequestRows?.length ?? 0) > 0 || activeContactSalesRows.length > 0 || activeSprints.length > 0;
 
   // Real "delivered/completed services" summary counts (item 4) — kept as
   // a lightweight line, not full cards, precisely because the confirmed
@@ -548,8 +583,8 @@ export default async function DashboardPage() {
   // project reads as materially different from "we sent you a report," and
   // a bare combined number obscured that. It gets its own line below.
   // All four counts are already available from the batch above.
-  const deliveredCount = (deliveredReportsCount ?? 0) + (deliveredModulesCount ?? 0) + (completedSessionsCount ?? 0);
-  const inProgressCount = (activeModuleRequestRows?.length ?? 0) + (activeSessionRequestRows?.length ?? 0);
+  const deliveredCount = (deliveredReportsCount ?? 0) + (deliveredModulesCount ?? 0) + (completedSessionsCount ?? 0) + completedContactSalesCount;
+  const inProgressCount = (activeModuleRequestRows?.length ?? 0) + (activeSessionRequestRows?.length ?? 0) + activeContactSalesRows.length;
   const sprintSummaryCount = completeSprintsCount ?? 0;
 
   const SPRINT_STATUS_LABELS: Record<string, string> = {
@@ -573,6 +608,14 @@ export default async function DashboardPage() {
   const SESSION_EXPLANATION: Record<string, string> = {
     requested: "You asked for this call — your reviewer will follow up personally to find a time.",
     scheduled: "Confirmed — check your email for the details, or see the time above.",
+  };
+  // Contact Sales (Concierge/Training & Advisory), confirmed 2026-09-07 —
+  // same explanatory-copy pattern, keyed on the real service_status_records
+  // status rather than session_requests.status (see the Contact Sales
+  // query above for why).
+  const CONTACT_SALES_EXPLANATION: Record<string, string> = {
+    requested: "You asked for this — your reviewer will follow up personally to confirm details and payment.",
+    booked: "Confirmed — your reviewer will be in touch with next steps.",
   };
   const SPRINT_EXPLANATION: Record<string, string> = {
     proposed: "Your reviewer suggests starting here — confirm it, or pick a different finding you'd marked \"interested in help\" on.",
@@ -1159,6 +1202,21 @@ export default async function DashboardPage() {
                 {r.scheduled_at && <p className="text-neutral-500 dark:text-neutral-400">Scheduled {new Date(r.scheduled_at as string).toLocaleString()}</p>}
               </div>
             ))}
+
+            {/* Contact Sales (Concierge/Training & Advisory), confirmed
+                2026-09-07 — the real status source is service_status_records,
+                not session_requests.status (see the query above). */}
+            {activeContactSalesRows.map((r) => {
+              const status = r.record?.status ?? "requested";
+              return (
+                <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
+                  <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{TYPE_LABELS[sessionTypeToItemType(r.session_type as string)]}</h3>
+                  <p className="mb-1 text-accent">{CONTACT_SALES_STATUS_LABELS[status]}</p>
+                  <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">{CONTACT_SALES_EXPLANATION[status] ?? ""}</p>
+                  <p className="text-neutral-500 dark:text-neutral-400">Requested {new Date(r.requested_at as string).toLocaleDateString()}</p>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}

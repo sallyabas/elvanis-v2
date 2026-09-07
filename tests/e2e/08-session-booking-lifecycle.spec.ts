@@ -23,15 +23,26 @@ import { step } from "./support/screenshot";
  * "Request Concierge — £{price}" button, real DB-backed pricing unified
  * with the landing page's own price 2026-09-05 — same SessionRequestButton
  * wrapper used on evidence-intake/the report page, just with a real
- * priceLabel passed in) and also walked through schedule -> complete,
- * since the mechanism is now proven and the marginal cost of covering the
- * third type is low.
+ * priceLabel passed in).
+ *
+ * Concierge's REVIEWER-side flow updated 2026-09-07 (Contact Sales status
+ * flow, final spec) — no longer walked through /queue's generic
+ * Schedule/Complete/Decline panel, which now deliberately excludes
+ * Concierge/Training & Advisory entirely (session_requests.status is
+ * permanently frozen at 'requested' for these two types going forward;
+ * service_status_records is the one true, authoritative status source
+ * instead). Walked through the real ContactSalesStatusRow on
+ * /company/[companyId] instead: Requested -> Booked (plain Update) ->
+ * Completed (note field unlocks only once Completed is selected, Option
+ * A UX, then "Add note" persists status+note together in one action).
  *
  * Client-side rendering is checked against the real, confirmed split:
  * Discovery never appears on Dashboard (any state) and always appears on
- * Reports & History (any state); Delivery/Concierge appear on Dashboard
- * only while requested/scheduled and move to Reports & History once
- * terminal (completed/declined).
+ * Reports & History (any state); Delivery appears on Dashboard only while
+ * requested/scheduled and moves to Reports & History once terminal
+ * (completed/declined); Concierge appears on Dashboard only while
+ * requested/booked (service_status_records-driven) and moves to Reports &
+ * History once terminal (completed/canceled/refunded).
  */
 function sessionItem(page: Page, companyName: string, sessionTypeLabel: string) {
   return page.locator("li", { hasText: companyName }).filter({ hasText: sessionTypeLabel });
@@ -90,11 +101,13 @@ test("Session requests: Discovery (schedule->complete), Delivery (decline), Conc
 
   const discoveryItem = sessionItem(page, fixtures.companyName, "Discovery Session");
   const deliveryItem = sessionItem(page, fixtures.companyName, "Delivery Session");
-  const conciergeItem = sessionItem(page, fixtures.companyName, "Concierge Inquiry");
 
   await expect(discoveryItem.getByText("Requested — awaiting scheduling")).toBeVisible();
   await expect(deliveryItem.getByText("Requested — awaiting scheduling")).toBeVisible();
-  await expect(conciergeItem.getByText("Requested — awaiting scheduling")).toBeVisible();
+  // Concierge deliberately absent from this panel (confirmed 2026-09-07,
+  // Contact Sales flow) — its real status lives on /company/[companyId]
+  // instead, verified in its own block below.
+  await expect(page.getByText("Concierge Inquiry")).not.toBeVisible();
   await step(page, testInfo, "08-session-lifecycle", "04-queue-all-requested");
 
   // Discovery: schedule with a real future date/time + notes.
@@ -127,15 +140,51 @@ test("Session requests: Discovery (schedule->complete), Delivery (decline), Conc
   await expect(discoveryItem).not.toBeVisible({ timeout: 10_000 });
   await step(page, testInfo, "08-session-lifecycle", "06-discovery-completed-dropped-from-queue");
 
-  // Concierge: same schedule -> complete path, proving the mechanism generically, not just for Discovery.
-  await conciergeItem.getByLabel("Schedule for").fill("2027-01-20T10:00");
-  await conciergeItem.getByRole("button", { name: "Schedule" }).click();
-  await expect(conciergeItem.getByText("Scheduled").first()).toBeVisible({ timeout: 10_000 });
+  // Concierge: real Contact Sales flow (confirmed 2026-09-07), driven via
+  // ContactSalesStatusRow on /company/[companyId], not /queue.
+  await page.goto(`/company/${fixtures.companyId}`);
+  const conciergeRow = page.locator("li", { hasText: "Concierge Inquiry" });
+  const conciergeStatusSelect = conciergeRow.locator("select").first();
+  await expect(conciergeStatusSelect).toHaveValue("requested");
+
+  // Requested -> Booked, plain status update (no note involved yet).
+  // Checked via the select's own persisted value, not getByText("Booked")
+  // — that ambiguously also matches the dropdown's own <option> text,
+  // which Playwright correctly reports as "hidden" while the select is
+  // closed (a real test-authoring correction, not an app bug).
+  await conciergeStatusSelect.selectOption("booked");
+  await conciergeRow.getByRole("button", { name: "Update" }).click();
+  // Locators re-resolve against the current page on every action (not a
+  // stale captured DOM handle) — reload forces the fresh, revalidated
+  // server-rendered value through, then the SAME locator recipe confirms
+  // it persisted.
   await page.waitForTimeout(500);
-  await conciergeItem.getByPlaceholder("Outcome notes").fill("Scoped Concierge terms, sending a proposal.");
-  await conciergeItem.getByRole("button", { name: "Mark completed" }).click();
-  await expect(conciergeItem).not.toBeVisible({ timeout: 10_000 });
-  await step(page, testInfo, "08-session-lifecycle", "07-concierge-completed-dropped-from-queue");
+  await page.reload();
+  await expect(conciergeStatusSelect).toHaveValue("booked", { timeout: 10_000 });
+  await step(page, testInfo, "08-session-lifecycle", "07a-concierge-booked");
+
+  // Note field UX Option A (confirmed 2026-09-07, item 5) — disabled/
+  // guiding-placeholder until 'Completed' is selected; only then does it
+  // (and the "Add note" button) become usable, and one submit persists
+  // status + note together.
+  const conciergeNoteField = conciergeRow.getByPlaceholder("Change status to Completed to add a note");
+  await expect(conciergeNoteField).toBeDisabled();
+  await conciergeStatusSelect.selectOption("completed");
+  const conciergeActiveNoteField = conciergeRow.getByPlaceholder("Add a note (also logs a Reviewer Notes entry)");
+  await expect(conciergeActiveNoteField).toBeEnabled();
+  await conciergeActiveNoteField.fill("Scoped Concierge terms, sending a proposal.");
+  await conciergeRow.getByRole("button", { name: "Add note" }).click();
+  // The note text itself is unambiguous real content (unlike "Completed",
+  // which also matches the dropdown's own <option> text) — real proof the
+  // note-add succeeded and locked.
+  await expect(conciergeRow.getByText(/Scoped Concierge terms, sending a proposal/i)).toBeVisible({ timeout: 10_000 });
+  await page.reload();
+  await expect(conciergeStatusSelect).toHaveValue("completed");
+  await step(page, testInfo, "08-session-lifecycle", "07b-concierge-completed-via-company-page");
+
+  // Back to /queue for the remaining Delivery decline step — the
+  // Concierge block above navigated away to /company/[companyId].
+  await page.goto("/queue");
 
   // Delivery: decline with a real, required reason.
   await deliveryItem.getByPlaceholder("Reason (required)").fill("Client's report was just delivered same-day — following up in 2 weeks once they've had time to review.");

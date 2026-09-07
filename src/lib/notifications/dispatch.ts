@@ -253,6 +253,44 @@ async function templateFor(
         bodyHtml: `${greeting}<p style="margin:0 0 12px 0;">This request has been canceled.</p>${reason ? `<p style="margin:0 0 16px 0;padding:12px 16px;background:#F1EFE8;border-radius:6px;">${escapeHtml(reason)}</p>` : ""}<p style="margin:0;">Submit a new request any time from the Services page.</p>${loginReminder}`,
       };
     }
+    case "contact_sales_canceled": {
+      // Contact Sales (Concierge/Training & Advisory), confirmed
+      // 2026-09-07 — the real reason lives on service_status_records
+      // (entity_type='session_request'), not session_requests itself
+      // (which has no cancellation_reason column — that's the older,
+      // separate reviewer_notes/'declined' mechanism, unrelated to this
+      // new flow).
+      let reason = "";
+      if (notification.related_session_request_id) {
+        const { data: record } = await admin
+          .from("service_status_records")
+          .select("reason")
+          .eq("entity_type", "session_request")
+          .eq("entity_id", notification.related_session_request_id)
+          .maybeSingle();
+        reason = (record?.reason as string | null) ?? "";
+      }
+      return {
+        subject: "Your request was canceled",
+        bodyHtml: `${greeting}<p style="margin:0 0 12px 0;">This request has been canceled.</p>${reason ? `<p style="margin:0 0 16px 0;padding:12px 16px;background:#F1EFE8;border-radius:6px;">${escapeHtml(reason)}</p>` : ""}<p style="margin:0;">Submit a new request any time from the Services page.</p>${loginReminder}`,
+      };
+    }
+    case "contact_sales_refunded": {
+      let reason = "";
+      if (notification.related_session_request_id) {
+        const { data: record } = await admin
+          .from("service_status_records")
+          .select("reason")
+          .eq("entity_type", "session_request")
+          .eq("entity_id", notification.related_session_request_id)
+          .maybeSingle();
+        reason = (record?.reason as string | null) ?? "";
+      }
+      return {
+        subject: "You've been refunded",
+        bodyHtml: `${greeting}<p style="margin:0 0 12px 0;">This has been refunded.</p>${reason ? `<p style="margin:0 0 16px 0;padding:12px 16px;background:#F1EFE8;border-radius:6px;">${escapeHtml(reason)}</p>` : ""}<p style="margin:0;">Reach out any time if you have questions.</p>${loginReminder}`,
+      };
+    }
     case "sprint_interest_requested":
       return {
         subject: "A client is interested in an Execution Sprint",

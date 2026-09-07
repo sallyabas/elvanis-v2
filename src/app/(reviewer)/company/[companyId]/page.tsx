@@ -4,9 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { loadActivePendingEvidenceSubmission } from "@/lib/evidence/pending-submission";
 import { loadPaymentRecords, type PaymentEntityType, type PaymentRecord } from "@/lib/reviewer/payment-records";
 import { loadServiceStatusRecords } from "@/lib/reviewer/service-status";
+import { isContactSalesSessionType, SESSION_TYPE_PRICING_KEY } from "@/lib/reviewer/service-status-types";
 import { listReviewerNotes } from "@/lib/reviewer/reviewer-notes";
 import { listPricing } from "@/lib/pricing";
-import { MODULE_META, type ModuleType } from "@/lib/modules/module-meta";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import type { PrimaryGoal } from "@/lib/lenses/types";
 import { TypeBadge, moduleTypeToItemType, sessionTypeToItemType } from "@/lib/item-type-badge";
@@ -18,17 +18,8 @@ import { Select } from "@/app/_components/ui/Select";
 import { Button } from "@/app/_components/ui/Button";
 import { setPilotClientAction, setPaymentRecordAction, addManualReviewerNoteAction, editReviewerNoteAction, deleteReviewerNoteAction } from "./actions";
 import { ServiceStatusRow } from "./ServiceStatusRow";
+import { ContactSalesStatusRow } from "./ContactSalesStatusRow";
 import { ReviewerNotesPanel } from "./ReviewerNotesPanel";
-
-// Real, fixed-price lookups per service type (confirmed 2026-09-05) —
-// used to auto-populate ServiceStatusRow's price field for fixed-price
-// services; Contact Sales services (Training & Advisory, discovery/
-// delivery/compliance_consultation — genuinely free calls with no
-// catalog price) correctly fall through to null (manual entry).
-const SESSION_TYPE_PRICING_KEY: Record<string, string> = {
-  concierge_inquiry: "concierge_tier",
-  f2f_workshop: "f2f_workshop",
-};
 
 /**
  * One shared payment-status row, reused across every payable item on this
@@ -153,17 +144,17 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
   // real payment record among reports; module requests, sessions, and
   // sprints are all real, priced items regardless.
   const paidReportIds = (reports ?? []).filter((r) => r.rerun_of_report_id !== null).map((r) => r.id as string);
-  const [reportPayments, modulePayments, sessionPayments, sprintPayments, reportServiceStatus, moduleServiceStatus, sessionServiceStatus, sprintServiceStatus, pricing, reviewerNotes] =
+  const [reportPayments, modulePayments, sessionPayments, sprintPayments, reportServiceStatus, sessionServiceStatus, sprintServiceStatus, pricing, reviewerNotes] =
     await Promise.all([
       loadPaymentRecords("report", paidReportIds),
       loadPaymentRecords("module_request", (moduleRequests ?? []).map((m) => m.id as string)),
       loadPaymentRecords("session_request", (sessionRequests ?? []).map((s) => s.id as string)),
       loadPaymentRecords("execution_sprint", (executionSprints ?? []).map((s) => s.id as string)),
-      // Service status (confirmed 2026-09-05) — same 4-entity-type
-      // batching pattern as payment records above, kept in the same
-      // Promise.all rather than a second round-trip.
+      // Service status (confirmed 2026-09-05) — same batching pattern as
+      // payment records above, kept in the same Promise.all rather than a
+      // second round-trip. module_request removed here (confirmed
+      // 2026-09-07) — ServiceStatusRow no longer renders for modules.
       loadServiceStatusRecords("report", paidReportIds),
-      loadServiceStatusRecords("module_request", (moduleRequests ?? []).map((m) => m.id as string)),
       loadServiceStatusRecords("session_request", (sessionRequests ?? []).map((s) => s.id as string)),
       loadServiceStatusRecords("execution_sprint", (executionSprints ?? []).map((s) => s.id as string)),
       listPricing(),
@@ -378,14 +369,15 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
                   {m.cancellation_reason && (
                     <p className="mt-0.5 text-xs italic text-neutral-500 dark:text-neutral-400">Cancellation reason: {m.cancellation_reason as string}</p>
                   )}
+                  {/* ServiceStatusRow removed from module requests specifically
+                      (confirmed 2026-09-07) — modules now have their own real,
+                      automated payment-gate + mandatory review pipeline
+                      (status/payment_status columns, cancelModuleRequest());
+                      the generic manual Requested/Booked/Scheduled/Completed/
+                      Canceled overlay was redundant tracking of the same
+                      thing. PaymentStatusRow (a genuinely different, older
+                      manual invoicing tracker) stays untouched here. */}
                   <PaymentStatusRow companyId={companyId} entityType="module_request" entityId={m.id as string} record={modulePayments.get(m.id as string)} />
-                  <ServiceStatusRow
-                    companyId={companyId}
-                    entityType="module_request"
-                    entityId={m.id as string}
-                    defaultPrice={pricingByKey.get(MODULE_META[m.module_type as ModuleType].pricingKey) ?? null}
-                    record={moduleServiceStatus.get(m.id as string)}
-                  />
                 </li>
               ))}
             </ul>
@@ -402,42 +394,67 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
         <Card title="Sessions & Concierge requests">
           {sessionRequests && sessionRequests.length > 0 ? (
             <ul className="space-y-2 text-sm">
-              {sessionRequests.map((s) => (
-                <li key={s.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0 dark:border-neutral-800">
-                  <span className="flex flex-wrap items-center gap-2 text-neutral-800 dark:text-neutral-200">
-                    <TypeBadge type={sessionTypeToItemType(s.session_type as string)} />
-                    {SESSION_STATUS_LABELS[s.status as string] ?? humanizeStatus(s.status as string)} · requested{" "}
-                    {s.requested_at ? new Date(s.requested_at).toLocaleDateString() : "—"}
-                    {s.scheduled_at && <> · scheduled {new Date(s.scheduled_at).toLocaleString()}</>}
-                    {s.completed_at && <> · completed {new Date(s.completed_at).toLocaleDateString()}</>}
-                  </span>
-                  {/* Phone snapshot (confirmed 2026-09-03) — the number on file at request time, not a live profile reference. */}
-                  {s.phone_snapshot && <p className="text-xs text-neutral-500 dark:text-neutral-400">Phone: {s.phone_snapshot as string}</p>}
-                  {/* Decline/cancellation reason (confirmed 2026-09-07) —
-                      session_requests' own 'declined' status is the reused
-                      "Canceled" status for Concierge/Training & Advisory
-                      (confirmed design: one status, not two); reviewer_notes
-                      is where the real reason lives on this table. Shown
-                      whenever present, not only when declined, since a
-                      reviewer may leave a note on a scheduled/completed
-                      session too. */}
-                  {s.reviewer_notes && (
-                    <p className="text-xs italic text-neutral-500 dark:text-neutral-400">
-                      {s.status === "declined" ? "Cancellation reason" : "Reviewer notes"}: {s.reviewer_notes as string}
-                    </p>
-                  )}
-                  <PaymentStatusRow companyId={companyId} entityType="session_request" entityId={s.id as string} record={sessionPayments.get(s.id as string)} />
-                  <ServiceStatusRow
-                    companyId={companyId}
-                    entityType="session_request"
-                    entityId={s.id as string}
-                    defaultPrice={
-                      SESSION_TYPE_PRICING_KEY[s.session_type as string] ? (pricingByKey.get(SESSION_TYPE_PRICING_KEY[s.session_type as string]) ?? null) : null
-                    }
-                    record={sessionServiceStatus.get(s.id as string)}
-                  />
-                </li>
-              ))}
+              {sessionRequests.map((s) => {
+                const isContactSales = isContactSalesSessionType(s.session_type as string);
+                return (
+                  <li key={s.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0 dark:border-neutral-800">
+                    {isContactSales ? (
+                      // Contact Sales (Concierge/Training & Advisory), confirmed
+                      // 2026-09-07 — service_status_records is now the ONE,
+                      // authoritative status source for these two types.
+                      // session_requests.status is intentionally left
+                      // untouched/frozen at 'requested' going forward (its own
+                      // Schedule/Complete/Decline mechanism no longer applies
+                      // here — see /queue's own Session requests panel, which
+                      // now excludes these two types for the same reason), so
+                      // it's deliberately NOT shown here anymore — the real
+                      // status lives entirely in ContactSalesStatusRow below.
+                      <span className="flex flex-wrap items-center gap-2 text-neutral-800 dark:text-neutral-200">
+                        <TypeBadge type={sessionTypeToItemType(s.session_type as string)} />
+                        requested {s.requested_at ? new Date(s.requested_at).toLocaleDateString() : "—"}
+                      </span>
+                    ) : (
+                      <span className="flex flex-wrap items-center gap-2 text-neutral-800 dark:text-neutral-200">
+                        <TypeBadge type={sessionTypeToItemType(s.session_type as string)} />
+                        {SESSION_STATUS_LABELS[s.status as string] ?? humanizeStatus(s.status as string)} · requested{" "}
+                        {s.requested_at ? new Date(s.requested_at).toLocaleDateString() : "—"}
+                        {s.scheduled_at && <> · scheduled {new Date(s.scheduled_at).toLocaleString()}</>}
+                        {s.completed_at && <> · completed {new Date(s.completed_at).toLocaleDateString()}</>}
+                      </span>
+                    )}
+                    {/* Phone snapshot (confirmed 2026-09-03) — the number on file at request time, not a live profile reference. */}
+                    {s.phone_snapshot && <p className="text-xs text-neutral-500 dark:text-neutral-400">Phone: {s.phone_snapshot as string}</p>}
+                    {!isContactSales && s.reviewer_notes && (
+                      <p className="text-xs italic text-neutral-500 dark:text-neutral-400">
+                        {s.status === "declined" ? "Cancellation reason" : "Reviewer notes"}: {s.reviewer_notes as string}
+                      </p>
+                    )}
+                    {isContactSales ? (
+                      <ContactSalesStatusRow
+                        companyId={companyId}
+                        entityId={s.id as string}
+                        defaultPrice={
+                          SESSION_TYPE_PRICING_KEY[s.session_type as string] ? (pricingByKey.get(SESSION_TYPE_PRICING_KEY[s.session_type as string]) ?? null) : null
+                        }
+                        record={sessionServiceStatus.get(s.id as string)}
+                      />
+                    ) : (
+                      <>
+                        <PaymentStatusRow companyId={companyId} entityType="session_request" entityId={s.id as string} record={sessionPayments.get(s.id as string)} />
+                        <ServiceStatusRow
+                          companyId={companyId}
+                          entityType="session_request"
+                          entityId={s.id as string}
+                          defaultPrice={
+                            SESSION_TYPE_PRICING_KEY[s.session_type as string] ? (pricingByKey.get(SESSION_TYPE_PRICING_KEY[s.session_type as string]) ?? null) : null
+                          }
+                          record={sessionServiceStatus.get(s.id as string)}
+                        />
+                      </>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p className="text-sm text-neutral-500 dark:text-neutral-400">No session or Concierge requests yet.</p>

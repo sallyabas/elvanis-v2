@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { setPaymentRecord, type PaymentEntityType, type PaymentStatusValue } from "@/lib/reviewer/payment-records";
-import { updateServiceStatus, addServiceStatusNote, type ServiceStatusValue } from "@/lib/reviewer/service-status";
+import { updateServiceStatus, addServiceStatusNote, updateContactSalesStatus, cancelContactSalesService, refundContactSalesService, type ServiceStatusValue } from "@/lib/reviewer/service-status";
 import { addManualReviewerNote, editReviewerNote, deleteReviewerNote } from "@/lib/reviewer/reviewer-notes";
 
 // Same independent session+role re-check as every other reviewer Server
@@ -74,7 +74,16 @@ export async function addServiceStatusNoteAction(
 ): Promise<{ success: boolean; error?: string }> {
   await assertReviewer();
   const result = await addServiceStatusNote(entityType, entityId, note, price, currency, defaultPrice);
-  if (result.success) revalidatePath(`/company/${companyId}`);
+  if (result.success) {
+    revalidatePath(`/company/${companyId}`);
+    // Contact Sales rows (confirmed 2026-09-07) are now client-visible on
+    // Dashboard/Reports & History too — reaching 'completed' via this
+    // path (same as updateContactSalesStatusAction) needs those revalidated
+    // too. A no-op extra revalidation for every other entity type, which
+    // was never shown on those two pages via service_status_records.
+    revalidatePath(`/dashboard`);
+    revalidatePath(`/reports`);
+  }
   return result;
 }
 
@@ -111,4 +120,48 @@ export async function setPilotClientAction(companyId: string, isPilotClient: boo
   const { error } = await admin.from("companies").update({ is_pilot_client: isPilotClient }).eq("id", companyId);
   if (error) throw new Error(`setPilotClientAction: ${error.message}`);
   revalidatePath(`/company/${companyId}`);
+}
+
+/**
+ * Contact Sales (Concierge/Training & Advisory) status flow (confirmed
+ * 2026-09-07, final spec) — three real actions, not one generic "Update"
+ * covering everything: a plain Requested/Booked/Completed status change,
+ * plus two dedicated actions (Cancel/Refund) each with their own
+ * reason-requirement rule, enforced by service-status.ts itself, not
+ * just this thin action wrapper.
+ */
+export async function updateContactSalesStatusAction(
+  companyId: string,
+  entityId: string,
+  status: "requested" | "booked" | "completed",
+  price: number | null,
+  currency: string,
+): Promise<void> {
+  await assertReviewer();
+  await updateContactSalesStatus(entityId, status, price, currency);
+  revalidatePath(`/company/${companyId}`);
+  revalidatePath(`/dashboard`);
+  revalidatePath(`/reports`);
+}
+
+export async function cancelContactSalesServiceAction(companyId: string, entityId: string, reason: string): Promise<{ success: boolean; error?: string }> {
+  await assertReviewer();
+  const result = await cancelContactSalesService(entityId, reason);
+  if (result.success) {
+    revalidatePath(`/company/${companyId}`);
+    revalidatePath(`/dashboard`);
+    revalidatePath(`/reports`);
+  }
+  return result;
+}
+
+export async function refundContactSalesServiceAction(companyId: string, entityId: string, reason: string | null): Promise<{ success: boolean; error?: string }> {
+  await assertReviewer();
+  const result = await refundContactSalesService(entityId, reason);
+  if (result.success) {
+    revalidatePath(`/company/${companyId}`);
+    revalidatePath(`/dashboard`);
+    revalidatePath(`/reports`);
+  }
+  return result;
 }

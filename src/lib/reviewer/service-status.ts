@@ -29,6 +29,8 @@ interface ServiceStatusRow {
   currency: string | null;
   note: string | null;
   note_locked_at: string | null;
+  /** Cancel/refund reason (confirmed 2026-09-07, Contact Sales flow) — see service-status-types.ts's own docblock. */
+  reason: string | null;
   requested_at: string;
   completed_at: string | null;
 }
@@ -42,6 +44,7 @@ function mapRow(row: ServiceStatusRow): ServiceStatusRecord {
     currency: row.currency,
     note: row.note,
     noteLocked: row.note_locked_at !== null,
+    reason: row.reason ?? null,
     requestedAt: row.requested_at,
     completedAt: row.completed_at,
   };
@@ -191,4 +194,137 @@ export async function addServiceStatusNote(
   }
 
   return { success: true };
+}
+
+/**
+ * Contact Sales (Concierge/Training & Advisory) — simplified status flow
+ * (confirmed 2026-09-07, final spec). All three functions below are only
+ * ever called with `entityType: "session_request"` for a
+ * concierge_inquiry/training_advisory row — every other entity type/
+ * session type keeps using updateServiceStatus()/addServiceStatusNote()
+ * above, unchanged.
+ */
+export interface ContactSalesActionResult {
+  success: boolean;
+  error?: string;
+}
+
+/** Loads the company/owning-user for a session_requests row — the real recipient for the two new client-facing notifications below. */
+async function loadSessionRequestOwner(entityId: string): Promise<{ companyId: string; userId: string | null } | null> {
+  const admin = createAdminClient();
+  const { data } = await admin.from("session_requests").select("company_id, companies(user_id)").eq("id", entityId).maybeSingle();
+  if (!data) return null;
+  const owner = data.companies as unknown as { user_id: string } | null;
+  return { companyId: data.company_id as string, userId: owner?.user_id ?? null };
+}
+
+/**
+ * Plain status update, restricted to Requested/Booked/Completed
+ * (confirmed 2026-09-07) — the Contact Sales equivalent of
+ * updateServiceStatus() above, but never accepts 'scheduled'/'canceled'/
+ * 'refunded' (those two are only ever reachable via their own dedicated
+ * actions below, each with its own reason-requirement rule). Reaching
+ * 'completed' this way still triggers the same real Reviewer Notes
+ * auto-entry as the generic path — "a service can be completed without a
+ * note" stays true here too.
+ */
+export async function updateContactSalesStatus(
+  entityId: string,
+  status: "requested" | "booked" | "completed",
+  price: number | null,
+  currency: string,
+): Promise<void> {
+  await updateServiceStatus("session_request", entityId, status, price, currency);
+}
+
+/**
+ * Cancel — only reachable from 'requested', never once Booked (confirmed
+ * 2026-09-07: "nothing in this app auto-detects payment... once Booked,
+ * Canceled is no longer available" — the same rule as the AI-driven
+ * services' pre-payment-only cancellation gate, applied here with
+ * 'requested' standing in for their 'awaiting_payment'). A required
+ * reason, same discipline as cancelModuleRequest()/cancelSprintRequest()/
+ * cancelReaudit(), and a real client-facing email.
+ */
+export async function cancelContactSalesService(entityId: string, reason: string): Promise<ContactSalesActionResult> {
+  if (!reason.trim()) return { success: false, error: "A cancellation reason is required." };
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("service_status_records")
+    .update({ status: "canceled", reason: reason.trim(), updated_at: new Date().toISOString() })
+    .eq("entity_type", "session_request")
+    .eq("entity_id", entityId)
+    .eq("status", "requested")
+    .select("id")
+    .maybeSingle();
+  if (error) return { success: false, error: error.message };
+  if (!data) return { success: false, error: "This request has already moved past 'Requested' — it can no longer be canceled." };
+
+  const owner = await loadSessionRequestOwner(entityId);
+  if (owner?.userId) {
+    const { error: notifError } = await admin.from("notifications").insert({
+      recipient_type: "client",
+      recipient_id: owner.userId,
+      event_type: "contact_sales_canceled",
+      channel: "email",
+      related_session_request_id: entityId,
+      sent_at: null,
+    });
+    if (notifError) throw new Error(`cancelContactSalesService: failed to log notification: ${notifError.message}`);
+  }
+
+  return { success: true };
+}
+
+/**
+ * Refund — only reachable from 'completed' ("if something needs undoing
+ * after the fact", confirmed 2026-09-07). Reason is optional here,
+ * deliberately unlike Cancel — a real, confirmed difference: something
+ * that already happened and is being unwound doesn't always need a
+ * documented reason the way declining upfront does. A real client-facing
+ * email fires either way.
+ */
+export async function refundContactSalesService(entityId: string, reason: string | null): Promise<ContactSalesActionResult> {
+  const admin = createAdminClient();
+  const trimmedReason = reason?.trim() || null;
+  const { data, error } = await admin
+    .from("service_status_records")
+    .update({ status: "refunded", reason: trimmedReason, updated_at: new Date().toISOString() })
+    .eq("entity_type", "session_request")
+    .eq("entity_id", entityId)
+    .eq("status", "completed")
+    .select("id")
+    .maybeSingle();
+  if (error) return { success: false, error: error.message };
+  if (!data) return { success: false, error: "This request isn't at 'Completed' right now — it can only be refunded from there." };
+
+  const owner = await loadSessionRequestOwner(entityId);
+  if (owner?.userId) {
+    const { error: notifError } = await admin.from("notifications").insert({
+      recipient_type: "client",
+      recipient_id: owner.userId,
+      event_type: "contact_sales_refunded",
+      channel: "email",
+      related_session_request_id: entityId,
+      sent_at: null,
+    });
+    if (notifError) throw new Error(`refundContactSalesService: failed to log notification: ${notifError.message}`);
+  }
+
+  return { success: true };
+}
+
+/**
+ * Eager creation at request time (confirmed 2026-09-07, replaces the
+ * generic lazy get-or-create for Contact Sales specifically) — called
+ * directly from requestSession() right after the real session_requests
+ * insert, so a client sees a real, genuine status from the moment they
+ * submit, not "nothing" until a reviewer first happens to touch the row.
+ * Thin wrapper around the existing generic getOrCreateServiceStatusRecord
+ * — exported since that function itself isn't (this file's own module
+ * boundary), and this is the one legitimate external caller that needs
+ * to trigger creation without also updating anything.
+ */
+export async function ensureContactSalesStatusRecord(entityId: string, defaultPrice: number | null): Promise<void> {
+  await getOrCreateServiceStatusRecord("session_request", entityId, defaultPrice, "GBP");
 }
