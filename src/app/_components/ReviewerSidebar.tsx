@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { SidebarLink } from "@/app/_components/ui/SidebarLink";
 import { SidebarShell } from "@/app/_components/ui/SidebarShell";
 import { SignOutButton } from "@/app/(reviewer)/sign-out-button";
+import type { RegulatoryFrameworkStatusSummary } from "@/lib/reviewer/regulatory-frameworks";
 
 /**
  * "v2" briefing-document redesign (confirmed 2026-08-31) — reviewer-side
@@ -23,8 +25,18 @@ import { SignOutButton } from "@/app/(reviewer)/sign-out-button";
  * AppSidebar.tsx, same SidebarShell.tsx wrapper, same reasoning: this had
  * the identical unconditional `fixed w-[200px]` gap, squeezing every
  * reviewer-facing page below `lg` exactly like the client side did.
+ *
+ * Regulatory tracker summary (confirmed 2026-09-07) — placed here rather
+ * than on /queue (1000+ lines, already flagged as an oversized file to
+ * avoid growing further) or a distinct "reviewer dashboard" (no such page
+ * exists — /queue itself is the reviewer's landing page, so that
+ * suggested alternative doesn't actually exist as a separate entity).
+ * The sidebar is the genuinely lower-risk choice: two small files
+ * (this one, and the layout that fetches the summary), renders on every
+ * reviewer page rather than one, and sits right next to the
+ * "Regulatory frameworks" nav link it summarizes.
  */
-export function ReviewerSidebar({ displayName }: { displayName: string }) {
+export function ReviewerSidebar({ displayName, regulatorySummary }: { displayName: string; regulatorySummary: RegulatoryFrameworkStatusSummary }) {
   return (
     <SidebarShell mobileLabel="Elvanis">
       <div className="px-4 pb-3 pt-5">
@@ -39,6 +51,16 @@ export function ReviewerSidebar({ displayName }: { displayName: string }) {
         <SidebarLink href="/companies">Companies</SidebarLink>
         <SidebarLink href="/ideas">Ideas</SidebarLink>
         <SidebarLink href="/admin/regulatory-frameworks">Regulatory frameworks</SidebarLink>
+        <Link
+          href="/admin/regulatory-frameworks"
+          className="block px-3 pb-1 pt-0.5 text-xs leading-relaxed text-neutral-500 transition-colors hover:text-neutral-700"
+        >
+          <span className="text-emerald-600">{regulatorySummary.green} current</span>
+          {" · "}
+          <span className="text-amber-600">{regulatorySummary.amber} due soon</span>
+          {" · "}
+          <span className="text-red-600">{regulatorySummary.red} overdue</span>
+        </Link>
       </nav>
 
       <div className="border-t border-neutral-200 px-3 py-3">

@@ -200,3 +200,32 @@ export async function checkRegulatoryFrameworksDue(): Promise<{ shortCode: strin
 
   return due.map((r) => ({ shortCode: r.short_code }));
 }
+
+export interface RegulatoryFrameworkStatusSummary {
+  green: number;
+  amber: number;
+  red: number;
+}
+
+/**
+ * Sidebar summary widget (confirmed 2026-09-07) — a lightweight count-only
+ * read for a persistent, every-page nav element, deliberately NOT reusing
+ * listRegulatoryFrameworks()'s full row shape (name/jurisdiction/
+ * review_notes/source_url/etc.) for something rendered on every reviewer
+ * page load. Still reuses computeStatus() directly — the one real
+ * staleness-status computation this whole system hangs off — so this
+ * summary can never disagree with the full admin page about which
+ * framework is red/amber/green.
+ */
+export async function summarizeRegulatoryFrameworkStatus(): Promise<RegulatoryFrameworkStatusSummary> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("regulatory_frameworks").select("last_reviewed_at, staleness_threshold_days");
+  if (error) throw new Error(`summarizeRegulatoryFrameworkStatus: ${error.message}`);
+
+  const summary: RegulatoryFrameworkStatusSummary = { green: 0, amber: 0, red: 0 };
+  for (const row of (data ?? []) as Pick<FrameworkRow, "last_reviewed_at" | "staleness_threshold_days">[]) {
+    const { status } = computeStatus({ lastReviewedAt: row.last_reviewed_at, stalenessThresholdDays: row.staleness_threshold_days });
+    summary[status] += 1;
+  }
+  return summary;
+}
