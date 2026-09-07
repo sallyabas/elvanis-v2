@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ConfidenceLevel, GoalRelevance, LensFinding, LensType, Severity } from "@/lib/lenses/types";
 import { isFixFirstCandidate } from "@/lib/reviewer/prioritization";
 import {
   acceptFindingAction,
@@ -16,252 +15,42 @@ import {
   rerunAuditAction,
   setPlanTierAction,
   startExecutionSprintAction,
-  saveFindingConciergeNoteAction,
-  requestSecondOpinionAction,
-  requestReportSecondOpinionAction,
 } from "./actions";
 import type { DisputeResolution } from "@/lib/reviewer/workspace";
-import { matchRecommendationLibraryEntries, type RecommendationLibraryEntry } from "@/lib/recommendations/recommendation-library";
 import { computeCascadeSignals } from "@/lib/recommendations/cascade";
-import { GOAL_LABELS } from "@/lib/lenses/goals";
-import type { PrimaryGoal } from "@/lib/lenses/types";
-import { humanizeStatus } from "@/lib/format";
-import { SEVERITY_STYLES } from "@/lib/severity-badge";
-import { Card } from "@/app/_components/ui/Card";
-import { Input } from "@/app/_components/ui/Input";
-import { Textarea } from "@/app/_components/ui/Textarea";
-import { Select } from "@/app/_components/ui/Select";
-import { Button } from "@/app/_components/ui/Button";
-import { Alert } from "@/app/_components/ui/Alert";
-
-interface FindingRow {
-  id: string;
-  lens: LensType;
-  ai_draft: LensFinding;
-  reviewer_edited_content: LensFinding | null;
-  reviewer_status: "draft" | "edited" | "approved" | "rejected";
-  reviewer_notes: string | null;
-  confidence_level: ConfidenceLevel | null;
-  is_missing_data_finding: boolean;
-  origin: string | null;
-  client_confidence_marking: string | null;
-  is_disputed: boolean;
-  dispute_resolution_notes: string | null;
-}
-
-interface ConflictRow {
-  id: string;
-  finding_a_id: string;
-  finding_b_id: string;
-  conflict_description: string;
-  /** Nullable — older conflicts predate this field (confirmed 2026-08-12); always populated going forward. */
-  ai_suggested_resolution: string | null;
-  resolution_status: "unresolved" | "reviewer_resolved";
-  reviewer_notes: string | null;
-}
-
-interface TimingInfo {
-  createdAt: string;
-  submittedAt: string | null;
-  editWindowClosesAt: string | null;
-  approvedAt: string | null;
-}
+import { WorkspaceHeader } from "./WorkspaceHeader";
+import { AuditIntegrityWarnings } from "./AuditIntegrityWarnings";
+import { MandatoryDecisionBanner } from "./MandatoryDecisionBanner";
+import { Top3PrioritiesSection } from "./Top3PrioritiesSection";
+import { FixFirstSuggestionsSection } from "./FixFirstSuggestionsSection";
+import { FlaggedConflictsSection } from "./FlaggedConflictsSection";
+import { DisputedFindingsSection } from "./DisputedFindingsSection";
+import { LensFindingGroups } from "./LensFindingGroups";
+import { ApproveDeliverSection } from "./ApproveDeliverSection";
+import { ExecutionSprintProposalSection } from "./ExecutionSprintProposalSection";
+import { RerunAnalysisSection } from "./RerunAnalysisSection";
+import { SimilarPatternsSection } from "./SimilarPatternsSection";
+import { type EditFormValues, type FindingRow, type Props, displayedContent } from "./types";
 
 /**
- * Reviewer-authored finding note (confirmed 2026-08-24, Concierge tier
- * build) — a lightweight local shape, deliberately not importing
- * FindingConciergeNote from lib/reviewer/finding-notes.ts directly, since
- * that module imports the server-only admin client at module scope and
- * has no business being pulled into a client bundle.
+ * Decomposed 2026-09-07 (confirmed plan, full test-suite stabilization
+ * gate) — was a single 1567-line file (types, 7 sub-components, and one
+ * ~500-line JSX return, all in one place). Now: types.ts (shared
+ * shapes/labels/pure helpers), 7 sub-components in their own files
+ * (FindingCard, ConciergeNoteEditor, SecondOpinionPanel,
+ * ReportSecondOpinionPanel, EditForm, DisputeResolutionForm,
+ * ConflictResolutionForm), 12 new section components (one per visually/
+ * logically distinct block of the original JSX), and this orchestrator —
+ * state, the 12 handlers, and composition only.
+ *
+ * `pending` state, confirmed kept lifted here and threaded down to every
+ * section that needs it (Option A, direct founder decision) — preserves
+ * the exact original behavior (any one action in flight disables every
+ * other action-triggering button on the page simultaneously), not the
+ * alternative of each section managing its own local pending state
+ * (which would be a real, unasked-for behavior change letting multiple
+ * actions run concurrently).
  */
-interface ConciergeNote {
-  authorName: string;
-  note: string;
-  updatedAt: string;
-}
-
-/**
- * Reviewer second opinion (confirmed 2026-09-04) — a lightweight local
- * shape, same reasoning as ConciergeNote above (the server-only
- * second-opinion-workspace.ts module has no business in a client bundle).
- * v1 scope: Financial lens only — real, server-side enforcement lives in
- * requestFinancialLensSecondOpinion(), not just this component only
- * rendering the button for that lens.
- */
-type SecondOpinionCategory =
-  | "possible_duplicate"
-  | "unsupported_confidence"
-  | "healthy_finding_miscategorized"
-  | "goal_relevance_mismatch"
-  | "unactionable_recommendation"
-  | "other";
-
-interface SecondOpinionDisplay {
-  concern: boolean;
-  category: SecondOpinionCategory | null;
-  reasoning: string;
-  model: string;
-}
-
-const SECOND_OPINION_CATEGORY_LABELS: Record<SecondOpinionCategory, string> = {
-  possible_duplicate: "Possible duplicate",
-  unsupported_confidence: "Unsupported confidence",
-  healthy_finding_miscategorized: "Healthy finding miscategorized",
-  goal_relevance_mismatch: "Goal-relevance mismatch",
-  unactionable_recommendation: "Unactionable recommendation",
-  other: "Other concern",
-};
-
-/**
- * Reviewer report-level second opinion (confirmed 2026-09-04) — a real,
- * separate feature from the per-finding one above, checking the report's
- * actual Top 3 selection against the client's stated goal. Same
- * lightweight local-shape reasoning as SecondOpinionDisplay.
- */
-type ReportSecondOpinionCategory =
-  | "missing_fix_first_finding"
-  | "healthy_finding_in_top3"
-  | "top3_misaligned_with_goal"
-  | "recommendations_dont_match_goal"
-  | "other";
-
-interface ReportSecondOpinionConcernDisplay {
-  category: ReportSecondOpinionCategory;
-  findingIds: string[];
-  reasoning: string;
-}
-
-interface ReportSecondOpinionDisplay {
-  concerns: ReportSecondOpinionConcernDisplay[];
-  overallAssessment: string;
-  model: string;
-}
-
-const REPORT_SECOND_OPINION_CATEGORY_LABELS: Record<ReportSecondOpinionCategory, string> = {
-  missing_fix_first_finding: "Missing fix-first finding",
-  healthy_finding_in_top3: "Healthy finding in Top 3",
-  top3_misaligned_with_goal: "Top 3 misaligned with goal",
-  recommendations_dont_match_goal: "Recommendations don't match goal",
-  other: "Other concern",
-};
-
-interface Props {
-  reportId: string;
-  companyName: string;
-  companyUserId: string | null;
-  planTier: string;
-  reportStatus: string;
-  /**
-   * Real gap closed (confirmed 2026-09-03) — which of the 5 lenses
-   * genuinely failed to run during this audit, persisted for the first
-   * time (see run-audit.ts). Non-empty means the report is provably
-   * incomplete, not just thin — approveReport() now hard-blocks on this
-   * server-side too; the banner below just makes the reason visible
-   * before the reviewer even tries.
-   */
-  failedLenses: string[];
-  /**
-   * Real, new (confirmed 2026-09-03, direct founder request) — see
-   * regulatory-staleness.ts's own docblock for the full design: an
-   * AMBIENT signal about the company's current profile, computed in
-   * page.tsx, never a claim about this specific report's own findings
-   * (the core audit never does formal jurisdiction determination — see
-   * the warning's own copy below for the exact framing).
-   */
-  regulatoryStalenessWarnings: { shortCode: string; label: string; daysSinceReview: number | null; status: "red" | "amber" }[];
-  top3FindingIds: string[];
-  canRerun: boolean;
-  rerunOfReportId: string | null;
-  similarPatterns: { companyId: string; companyName: string; reportId: string; overlappingTags: string[]; similarityScore: number }[];
-  findings: FindingRow[];
-  conflicts: ConflictRow[];
-  timing: TimingInfo;
-  /**
-   * DB-backed as of 2026-08-06 (see recommendations/repository.ts) —
-   * fetched server-side in page.tsx and passed down here, since
-   * RECOMMENDATION_LIBRARY can no longer be imported directly into this
-   * client component now that it's an async DB read. Threaded through to
-   * EditForm below, same pattern as GOVERNANCE_DIMENSIONS in
-   * EvidenceIntakeForm.
-   */
-  recommendationLibrary: RecommendationLibraryEntry[];
-  /** Concierge tier build (confirmed 2026-08-24) — keyed by findingId, one query in page.tsx, not N. */
-  conciergeNotesByFindingId: Record<string, ConciergeNote>;
-  /** Prefills the "Your name" field when adding a note — real session lookup in page.tsx, may be blank. */
-  currentReviewerName: string;
-  /** Reviewer second opinion (confirmed 2026-09-04) — keyed by findingId, one query in page.tsx, not N. Only ever populated for Financial-lens findings in v1. */
-  secondOpinionsByFindingId: Record<string, SecondOpinionDisplay>;
-  /** Reviewer report-level second opinion (confirmed 2026-09-04) — the most recent one for this report, or null if never requested. */
-  reportSecondOpinion: ReportSecondOpinionDisplay | null;
-}
-
-function displayedContent(f: FindingRow): LensFinding {
-  return f.reviewer_edited_content ?? f.ai_draft;
-}
-
-// Softened 2026-08-28 (premium B2B redesign) — same restrained, no-border
-// treatment as the shared SEVERITY_STYLES (@/lib/severity-badge), applied
-// by extension since this workspace's own status/severity badges are the
-// same conceptual pattern.
-const STATUS_BADGE: Record<FindingRow["reviewer_status"], string> = {
-  draft: "bg-yellow-50 text-yellow-700 dark:bg-amber-950 dark:text-amber-300",
-  approved: "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-300",
-  edited: "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200",
-  rejected: "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300",
-};
-
-// SEVERITY_BADGE replaced by the shared SEVERITY_STYLES (@/lib/severity-badge)
-// — this file previously kept its own local copy with the old saturated
-// tones; now reads from the single source of truth like every other page.
-
-const LENS_LABELS: Record<LensType, string> = {
-  financial: "Financial",
-  commercial: "Commercial / Market",
-  execution: "Execution / Operating",
-  product: "Product / Customer",
-  ai_governance: "AI & Governance",
-};
-
-const LENS_ORDER: LensType[] = ["financial", "commercial", "execution", "product", "ai_governance"];
-
-/**
- * Humanizes a raw `case_library` tag (confirmed 2026-08-26, navigation-
- * audit fix batch, item 4) — real gap found live: "Similar patterns"
- * rendered these internal, machine-parseable tags verbatim (e.g.
- * `goal:growth_revenue_efficiency`, `lens:financial:severity:critical`),
- * which is exactly the format case-library.ts's own tag-building functions
- * produce (`goal:`/`industry:`/`stage:`/`lens:<key>:severity:<level>`) —
- * see that file for the source of truth these patterns match against.
- * Reuses this same file's own LENS_LABELS and the shared GOAL_LABELS
- * rather than inventing new copy.
- */
-function formatOverlapTag(tag: string): string {
-  const lensMatch = tag.match(/^lens:([a-z_]+):severity:([a-z]+)$/);
-  if (lensMatch) {
-    const [, lens, severity] = lensMatch;
-    return `${LENS_LABELS[lens as LensType] ?? lens}: ${severity} severity`;
-  }
-  if (tag.startsWith("goal:")) {
-    const goal = tag.slice("goal:".length);
-    return `Goal: ${GOAL_LABELS[goal as PrimaryGoal] ?? goal}`;
-  }
-  if (tag.startsWith("industry:")) return `Industry: ${tag.slice("industry:".length)}`;
-  if (tag.startsWith("stage:")) return `Stage: ${tag.slice("stage:".length)}`;
-  return humanizeStatus(tag);
-}
-
-function formatDuration(fromIso: string | null, toIso: string | null): string | null {
-  if (!fromIso) return null;
-  const from = new Date(fromIso).getTime();
-  const to = toIso ? new Date(toIso).getTime() : Date.now();
-  const ms = to - from;
-  if (ms < 0) return null;
-  const totalMinutes = Math.round(ms / 60000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `${hours}h ${minutes}m`;
-}
-
 export function ReviewWorkspaceClient({
   reportId,
   companyName,
@@ -525,1043 +314,104 @@ export function ReviewWorkspaceClient({
       isFixFirstCandidate(displayedContent(f), cascadeSignals.get(f.id)?.cascadeCount ?? 0),
   );
 
-  const fullCycle = formatDuration(timing.submittedAt, timing.approvedAt);
-  const reviewerOnly = formatDuration(timing.editWindowClosesAt, timing.approvedAt);
-
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <div className="mb-1 flex items-center gap-2">
-        <h1 className="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">{companyName}</h1>
-        <span
-          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-            planTier === "concierge"
-              ? "bg-[#fdf6ee] text-accent dark:bg-neutral-800 dark:text-accent"
-              : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
-          }`}
-        >
-          {planTier === "concierge" ? "Concierge" : "Standard"}
-        </span>
-        {companyUserId && (
-          <select
-            className="rounded-md border border-neutral-300 bg-white px-1.5 py-0.5 text-xs text-neutral-900 shadow-sm outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-            value={planTier}
-            disabled={tierPending}
-            onChange={(e) => handleSetPlanTier(e.target.value as "free" | "concierge")}
-          >
-            <option value="free">Standard</option>
-            <option value="concierge">Concierge</option>
-          </select>
-        )}
-      </div>
-      <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
-        Report status: <span className="font-medium">{reportStatus}</span>
-      </p>
-
-      {actionError && (
-        <Alert variant="error" className="mb-4">
-          {actionError}
-        </Alert>
-      )}
-
-      {(fullCycle || reviewerOnly) && (
-        <p className="mb-6 text-xs text-neutral-500 dark:text-neutral-400">
-          {reviewerOnly && (
-            <>
-              Reviewer time (queue → {timing.approvedAt ? "approval" : "now"}): <span className="font-medium">{reviewerOnly}</span>
-              {" · "}
-            </>
-          )}
-          {fullCycle && (
-            <>
-              Full audit cycle (submission → {timing.approvedAt ? "approval" : "now"}): <span className="font-medium">{fullCycle}</span>
-            </>
-          )}
-        </p>
-      )}
-
-      {/* Real gap closed (confirmed 2026-09-03, direct founder decision
-          following a full investigation into Groq failure handling) —
-          the mandatory-decision banner below covers "findings exist but
-          aren't decided yet"; it had nothing to say about "this audit is
-          missing entire lenses" or "this audit produced nothing at all,"
-          both of which previously passed the approval gate silently. Two
-          distinct treatments, per the confirmed design: a failed lens is
-          a HARD block (server-side too, see approveReport()) since the
-          report is provably incomplete — no override, only "Re-run
-          analysis" below. Zero findings with no lens failure is a real,
-          reachable state (confirmed: no lens schema requires at least one
-          finding, and none has a deterministic fallback forcing one) but
-          not necessarily wrong — a genuinely clean audit is possible — so
-          it's a visible warning only; Approve stays enabled and the
-          reviewer's own judgment decides. */}
-      {failedLenses.length > 0 && (
-        <section className="mb-6 rounded-lg bg-red-50 p-4 text-sm text-red-700 shadow-card-1 dark:bg-red-950 dark:text-red-300">
-          <p className="font-medium">
-            {failedLenses.length} lens{failedLenses.length === 1 ? "" : "es"} failed to generate during this audit:{" "}
-            {failedLenses.map((l) => LENS_LABELS[l as LensType] ?? l).join(", ")}.
-          </p>
-          <p className="mt-1">
-            This report is genuinely incomplete, not just thin — approval is blocked. Re-run the analysis below rather than deliver a report
-            missing whole sections with no disclosure.
-          </p>
-        </section>
-      )}
-
-      {failedLenses.length === 0 && findings.length === 0 && (
-        <Alert variant="warning" className="mb-6">
-          No findings were generated — all lenses ran successfully. Confirm this is genuinely correct before approving.
-        </Alert>
-      )}
-
-      {/* Migrated 2026-09-05 to a real RED (overdue)/AMBER (due soon)
-          two-tier treatment, reading from regulatory_frameworks — one
-          Alert per stale framework, per the brief's own explicit "if
-          multiple frameworks are stale, show one banner per stale
-          framework" instruction, rather than one combined list. Still
-          deliberately framed as an AMBIENT signal about the company's
-          profile, never a claim that this report's own findings address
-          these frameworks — the core audit doesn't do formal jurisdiction
-          determination, that's the standalone modules' job. Reviewer-only,
-          never client-facing. Links to the new standalone admin page. */}
-      {regulatoryStalenessWarnings.map((w) => (
-        <Alert key={w.shortCode} variant={w.status === "red" ? "warning" : "info"} className="mb-6">
-          {w.status === "red" ? (
-            <p>
-              ⚠️ Framework review overdue: <strong>{w.label}</strong>{" "}
-              {w.daysSinceReview === null ? "has not yet been reviewed under this tracker" : `was last reviewed ${w.daysSinceReview} days ago`}.
-              Consider checking for regulatory updates before approving this report.
-            </p>
-          ) : (
-            <p>
-              ℹ️ Framework review due soon: <strong>{w.label}</strong> is coming up for review.
-            </p>
-          )}
-          <p className="mt-1 text-xs italic">
-            An ambient signal from the company&apos;s current registration/customer-market profile, not a claim that this report&apos;s own
-            findings address this framework — this audit doesn&apos;t perform formal jurisdiction determination.{" "}
-            <a href="/admin/regulatory-frameworks" className="underline">
-              View the regulatory framework tracker →
-            </a>
-          </p>
-        </Alert>
-      ))}
-
-      {(draftFindings.length > 0 || unresolvedConflicts.length > 0) && (
-        <section className="mb-6 rounded-lg bg-red-50 p-4 text-sm text-red-700 shadow-card-1 dark:bg-red-950 dark:text-red-300">
-          <p className="font-medium">Mandatory before this report can be approved:</p>
-          <ul className="mt-1 list-inside list-disc">
-            {draftFindings.length > 0 && (
-              <li>{draftFindings.length} finding(s) still need a decision — Accept, Edit, or Reject each one below.</li>
-            )}
-            {unresolvedConflicts.length > 0 && <li>{unresolvedConflicts.length} flagged conflict(s) still unresolved.</li>}
-          </ul>
-        </section>
-      )}
-
-      {top3FindingIds.length > 0 && (
-        <Card title="Top 3 priorities" className="mb-8">
-          <ol className="space-y-2">
-            {top3FindingIds.map((id, i) => {
-              const f = findingById.get(id);
-              return (
-                <li key={id} className="flex items-center justify-between text-sm text-neutral-800 dark:text-neutral-200">
-                  <span>
-                    {i + 1}. {f ? displayedContent(f).title : id}
-                  </span>
-                  <span className="flex gap-1">
-                    <button
-                      disabled={pending || i === 0}
-                      onClick={() => handleMoveTop3(i, -1)}
-                      className="rounded-md border border-neutral-300 px-2 py-0.5 hover:bg-neutral-50 disabled:opacity-30 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      disabled={pending || i === top3FindingIds.length - 1}
-                      onClick={() => handleMoveTop3(i, 1)}
-                      className="rounded-md border border-neutral-300 px-2 py-0.5 hover:bg-neutral-50 disabled:opacity-30 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                    >
-                      ↓
-                    </button>
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-          <ReportSecondOpinionPanel reportId={reportId} findingById={findingById} initialOpinion={initialReportSecondOpinion} />
-        </Card>
-      )}
-
-      {fixFirstCandidates.length > 0 && (
-        <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-5 shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
-          <h2 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">Suggested fix-first (not yet in top 3)</h2>
-          <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
-            Deterministically flagged: critical severity, high severity directly tied to the client&apos;s stated goal, or upstream of 2+ other findings
-            on this report (see below). A suggestion only — promote manually if it belongs in the top 3.
-          </p>
-          <ul className="space-y-2">
-            {fixFirstCandidates.map((f) => {
-              const cascade = cascadeSignals.get(f.id);
-              return (
-                <li key={f.id} className="flex items-center justify-between text-sm text-neutral-800 dark:text-neutral-200">
-                  <span>
-                    <span className={`mr-2 rounded-full px-2 py-0.5 text-xs ${SEVERITY_STYLES[displayedContent(f).severity]}`}>
-                      {displayedContent(f).severity}
-                    </span>
-                    {displayedContent(f).title}
-                    {cascade && cascade.cascadeCount >= 2 && (
-                      <span className="ml-2 text-xs text-accent" title={cascade.cascadesToFindingTitles.join(", ")}>
-                        upstream of {cascade.cascadeCount} other finding{cascade.cascadeCount === 1 ? "" : "s"}
-                      </span>
-                    )}
-                  </span>
-                  {f.reviewer_status === "draft" ? (
-                    <span className="text-xs text-neutral-400 dark:text-neutral-500">decide this finding first</span>
-                  ) : (
-                    <Button variant="secondary" disabled={pending} onClick={() => handlePromoteToTop3(f.id)} className="px-2 py-0.5 text-xs">
-                      Add to top 3
-                    </Button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
-
-      {conflicts.length > 0 && (
-        <section className="mb-8 rounded-lg bg-orange-50 p-5 shadow-card-1 dark:bg-orange-950">
-          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">Flagged conflicts</h2>
-          <ul className="space-y-4">
-            {conflicts.map((c) => {
-              const a = findingById.get(c.finding_a_id);
-              const b = findingById.get(c.finding_b_id);
-              return (
-                <li key={c.id} className="text-sm">
-                  <p className="mb-1 text-neutral-900 dark:text-neutral-50">
-                    <strong>{a ? displayedContent(a).title : c.finding_a_id}</strong> vs.{" "}
-                    <strong>{b ? displayedContent(b).title : c.finding_b_id}</strong>
-                  </p>
-                  <p className="mb-2 text-neutral-600 dark:text-neutral-400">{c.conflict_description}</p>
-                  {/*
-                   * AI-suggested resolution (confirmed 2026-08-12, direct
-                   * founder request) — shown as its own distinct box, not
-                   * folded into conflict_description, so it's visually
-                   * clear this is a suggestion to evaluate, not a
-                   * statement of fact the way the conflict description
-                   * itself is. Reviewer still has final say — this only
-                   * prefills the resolution form below, it doesn't
-                   * resolve anything by itself.
-                   */}
-                  {c.ai_suggested_resolution && c.resolution_status === "unresolved" && (
-                    <p className="mb-2 rounded-md border-l-2 border-orange-400 bg-white px-2 py-1.5 text-xs text-neutral-700 shadow-card-1 dark:border-orange-700 dark:bg-neutral-900 dark:text-neutral-300">
-                      <span className="font-semibold text-orange-700 dark:text-orange-400">Suggested resolution: </span>
-                      {c.ai_suggested_resolution}
-                    </p>
-                  )}
-                  {c.resolution_status === "reviewer_resolved" ? (
-                    <p className="text-xs text-green-700 dark:text-green-400">Resolved: {c.reviewer_notes}</p>
-                  ) : resolvingConflictId === c.id ? (
-                    <ConflictResolutionForm
-                      initialNotes={c.ai_suggested_resolution ?? ""}
-                      onCancel={() => setResolvingConflictId(null)}
-                      onSave={(notes) => handleResolveConflict(c.id, notes)}
-                    />
-                  ) : (
-                    <Button variant="secondary" onClick={() => setResolvingConflictId(c.id)} className="px-2 py-1 text-xs">
-                      Resolve Conflict
-                    </Button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
-
-      {disputedFindings.length > 0 && (
-        <section className="mb-8 rounded-lg bg-neutral-100 p-5 shadow-card-1 dark:bg-neutral-800">
-          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-50">Disputed findings (client marked not confident)</h2>
-          <ul className="space-y-4">
-            {disputedFindings.map((f) => (
-              <li key={f.id}>
-                <FindingCard f={f} />
-                <ConciergeNoteEditor
-                  reportId={reportId}
-                  findingId={f.id}
-                  existingNote={conciergeNotesByFindingId[f.id]}
-                  defaultAuthorName={currentReviewerName}
-                />
-                {f.dispute_resolution_notes ? (
-                  <p className="mt-2 text-xs text-green-700 dark:text-green-400">Resolved: {f.dispute_resolution_notes}</p>
-                ) : disputingId === f.id ? (
-                  <DisputeResolutionForm
-                    initial={displayedContent(f)}
-                    onCancel={() => setDisputingId(null)}
-                    onSave={(resolution, notes, changes) => handleResolveDispute(f, resolution, notes, changes)}
-                  />
-                ) : (
-                  <Button variant="secondary" onClick={() => setDisputingId(f.id)} className="mt-2 px-2 py-1 text-xs">
-                    Resolve Dispute
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {LENS_ORDER.filter((lens) => undisputedFindings.some((f) => f.lens === lens)).map((lens) => (
-        <Card key={lens} title={LENS_LABELS[lens]} className="mb-8">
-          <ul className="space-y-4">
-            {undisputedFindings
-              .filter((f) => f.lens === lens)
-              .map((f) => {
-                const decisionControls =
-                  editingId === f.id ? (
-                    <EditForm
-                      lens={f.lens}
-                      initial={displayedContent(f)}
-                      recommendationLibrary={recommendationLibrary}
-                      onCancel={() => setEditingId(null)}
-                      onSave={(changes, notes) => handleSaveEdit(f, changes, notes)}
-                    />
-                  ) : (
-                    <div className="mt-2 flex gap-2">
-                      <Button variant="secondary" disabled={pending} onClick={() => handleAccept(f.id)} className="px-2 py-1 text-xs">
-                        Accept
-                      </Button>
-                      <Button variant="secondary" disabled={pending} onClick={() => setEditingId(f.id)} className="px-2 py-1 text-xs">
-                        Edit
-                      </Button>
-                      <Button variant="secondary" disabled={pending} onClick={() => handleReject(f.id)} className="px-2 py-1 text-xs">
-                        Reject
-                      </Button>
-                    </div>
-                  );
-
-                return (
-                  <li key={f.id}>
-                    <FindingCard f={f} />
-                    <ConciergeNoteEditor
-                      reportId={reportId}
-                      findingId={f.id}
-                      existingNote={conciergeNotesByFindingId[f.id]}
-                      defaultAuthorName={currentReviewerName}
-                    />
-                    {/* Second-opinion comparison view (confirmed 2026-09-05,
-                        direct founder request) — reviewer second opinion
-                        v1 scope is Financial lens only, so this is the
-                        only lens getting the real side-by-side layout;
-                        every other lens keeps the original stacked
-                        treatment below. Your own decision (accept/edit/
-                        reject) and Claude's second-opinion result sit in
-                        two columns on the same screen, using the exact
-                        same decisionControls/SecondOpinionPanel already
-                        built — no new data, purely a layout change. */}
-                    {f.lens === "financial" ? (
-                      <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                        <div>
-                          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Your decision</p>
-                          {decisionControls}
-                        </div>
-                        <div>
-                          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Second opinion (Claude)</p>
-                          <SecondOpinionPanel reportId={reportId} findingId={f.id} existingOpinion={secondOpinionsByFindingId[f.id]} />
-                        </div>
-                      </div>
-                    ) : (
-                      decisionControls
-                    )}
-                  </li>
-                );
-              })}
-          </ul>
-        </Card>
-      ))}
-
-      <Card>
-        {blockedReason && (
-          <Alert variant="warning" className="mb-3">
-            {blockedReason}
-          </Alert>
-        )}
-        {/* "Already approved" text (confirmed 2026-09-03, direct founder
-            feedback) — only swapped in for the reason that actually
-            matters here (the report has moved past pending_review, i.e.
-            genuinely already approved), not for the unrelated `pending`
-            in-flight-click case, which keeps the normal label — a
-            reviewer mid-click doesn't need to be told "already approved"
-            for a report that isn't. */}
-        <Button disabled={pending || reportStatus !== "pending_review"} onClick={handleApprove}>
-          {reportStatus !== "pending_review" ? "Already approved" : "Approve report"}
-        </Button>
-      </Card>
-
-      {/* Real "Deliver" button (confirmed 2026-08-06) — closes the gap flagged across multiple end-to-end passes where deliverReport() had no UI caller. */}
-      <Card title="Deliver to client" className="mt-6">
-        <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
-          Makes the report visible to the client and logs a real &quot;report ready&quot; notification. Separate from Approve on
-          purpose — the report is reviewer-done but not yet client-visible until this step.
-        </p>
-        {deliverError && (
-          <Alert variant="error" className="mb-3">
-            {deliverError}
-          </Alert>
-        )}
-        {delivered || reportStatus === "sent" ? (
-          <p className="text-sm text-green-700 dark:text-green-400">Delivered — the client can now see this report.</p>
-        ) : (
-          <>
-            <Button disabled={pending || reportStatus !== "approved"} onClick={handleDeliver}>
-              Deliver report
-            </Button>
-            {/* Real, disclosed condition (confirmed 2026-09-03) — only
-                shown for the actual reason the button is inactive here
-                (not yet approved), not for the unrelated in-flight
-                `pending` case. */}
-            {reportStatus !== "approved" && (
-              <p className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">Available after the report is approved.</p>
-            )}
-          </>
-        )}
-      </Card>
-
-      {/* Execution Sprint entry point (confirmed 2026-08-06, split into a
-          real client-confirmation step 2026-08-18 — direct founder
-          question, "does the client see any confirmation before a sprint
-          formally begins?" confirmed no, closed the gap) —
-          reviewer-triggered from an approved/edited finding, no in-app
-          checkout (payment confirmed externally first). */}
-      {(reportStatus === "approved" || reportStatus === "sent") && (
-        <Card title="Propose an Execution Sprint" className="mt-6">
-          <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
-            A bounded 2-4 week paid implementation engagement fixing ONE finding below — only once payment is
-            confirmed outside the app. Proposes the sprint to the client for confirmation first — once they confirm
-            (or pick a different finding they&apos;d previously marked &quot;interested in help&quot; on), you&apos;ll
-            land on a review pass before the client ever sees the actual task plan.
-          </p>
-          {sprintError && (
-            <Alert variant="error" className="mb-3">
-              {sprintError}
-            </Alert>
-          )}
-          <ul className="space-y-2">
-            {undisputedFindings
-              .filter((f) => f.reviewer_status === "approved" || f.reviewer_status === "edited")
-              .map((f) => (
-                <li key={f.id} className="flex items-center justify-between gap-2 text-sm text-neutral-800 dark:text-neutral-200">
-                  <span>{displayedContent(f).title}</span>
-                  <Button
-                    variant="secondary"
-                    disabled={pending || startingSprintFor !== null}
-                    onClick={() => handleStartSprint(f.id)}
-                    className="shrink-0 px-2 py-1 text-xs"
-                  >
-                    {startingSprintFor === f.id ? "Proposing…" : "Propose Execution Sprint"}
-                  </Button>
-                </li>
-              ))}
-          </ul>
-        </Card>
-      )}
-
-      {/* Basic re-run/refresh button (confirmed 2026-08-05) — reviewer-triggered, see rerun-audit.ts for why. */}
-      <Card title="Re-run analysis" className="mt-6">
-        {rerunOfReportId && (
-          <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">
-            This report is itself a re-run of{" "}
-            <a href={`/review/${rerunOfReportId}`} className="font-medium text-accent hover:underline">
-              an earlier report
-            </a>
-            .
-          </p>
-        )}
-        {canRerun ? (
-          <>
-            <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
-              Re-executes all five lenses fresh against the same evidence, using the company&apos;s current profile. Produces a new report in pending review — the mandatory review gate applies to it exactly as it does to this one.
-            </p>
-            {rerunError && (
-              <Alert variant="error" className="mb-3">
-                {rerunError}
-              </Alert>
-            )}
-            {rerunResultId ? (
-              <p className="text-sm text-green-700 dark:text-green-400">
-                New report created —{" "}
-                <a href={`/review/${rerunResultId}`} className="font-medium text-accent hover:underline">
-                  open it
-                </a>
-                .
-              </p>
-            ) : (
-              <Button variant="secondary" disabled={pending} onClick={handleRerun}>
-                Re-run analysis
-              </Button>
-            )}
-          </>
-        ) : (
-          // Reviewer-audience copy, confirmed 2026-09-03 — this message
-          // renders inside the reviewer's OWN workspace (there is no
-          // client-facing equivalent of "Re-run analysis" anywhere in the
-          // app; confirmed by grep — the client report page has no such
-          // feature), so the copy directs the reviewer to ask the client
-          // for new evidence, not the other way around.
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Re-run analysis is available on new audits. If the client needs updated findings on this one, ask them to submit new evidence.
-          </p>
-        )}
-      </Card>
-
-      {/* Dormant similar-patterns infrastructure, surfaced 2026-08-06 — genuinely empty until real case volume exists (see case-library.ts). Reviewer-only, never client-facing. */}
-      <Card title="Similar patterns across other companies" className="mt-6">
-        {similarPatterns.length === 0 ? (
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Not enough real case volume yet — this only surfaces once at least 3 genuinely distinct other companies
-            show real overlap, so it doesn&apos;t show a coincidental one-off match as if it were a pattern.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {similarPatterns.map((p) => (
-              <li key={p.reportId} className="text-sm text-neutral-800 dark:text-neutral-200">
-                <span className="font-medium">{p.companyName}</span>{" "}
-                <span className="text-neutral-500 dark:text-neutral-400">
-                  · {(p.similarityScore * 100).toFixed(0)}% overlap · {p.overlappingTags.map(formatOverlapTag).join(", ")}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-function FindingCard({ f }: { f: FindingRow }) {
-  const content = displayedContent(f);
-  const isDraft = f.reviewer_status === "draft";
-  return (
-    <div
-      className={`rounded-md border bg-white p-3 shadow-card-1 dark:bg-neutral-900 ${isDraft ? "border-amber-300 dark:border-amber-800" : "border-neutral-200 dark:border-neutral-700"}`}
-    >
-      <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
-        <span className={`rounded-full px-2 py-0.5 ${SEVERITY_STYLES[content.severity]}`}>{content.severity}</span>
-        {f.origin && <span>· {f.origin}</span>}
-        <span>· confidence: {content.confidenceLevel}</span>
-        <span className={`rounded-full px-2 py-0.5 ${STATUS_BADGE[f.reviewer_status]}`}>{isDraft ? "needs decision" : f.reviewer_status}</span>
-      </div>
-      <div className="font-medium text-neutral-900 dark:text-neutral-50">{content.title}</div>
-      <dl className="mt-2 space-y-1 text-sm">
-        <div>
-          <dt className="text-xs font-medium uppercase text-neutral-400 dark:text-neutral-500">Diagnosis</dt>
-          <dd className="text-neutral-600 dark:text-neutral-400">{content.diagnosis}</dd>
-        </div>
-        <div>
-          <dt className="text-xs font-medium uppercase text-neutral-400 dark:text-neutral-500">Root cause</dt>
-          <dd className="text-neutral-600 dark:text-neutral-400">{content.rootCause}</dd>
-        </div>
-        <div>
-          <dt className="text-xs font-medium uppercase text-neutral-400 dark:text-neutral-500">Recommended action</dt>
-          <dd className="text-neutral-600 dark:text-neutral-400">{content.recommendedAction}</dd>
-        </div>
-      </dl>
-    </div>
-  );
-}
-
-/**
- * Reviewer-authored finding note (confirmed 2026-08-24, Concierge tier
- * build) — genuinely new, not reused from an existing pattern. Separate
- * from FindingCard's AI-drafted diagnosis/rootCause/recommendedAction
- * above: real, personal context from an actual Discovery/Delivery call
- * that never makes it into the automated findings. One active note per
- * finding, upsert-on-save (see finding-notes.ts's own docblock) — saving
- * an empty textarea clears the note rather than needing a separate
- * delete action. Self-contained, same "own local state, revalidatePath
- * inside the Server Action does the real refresh" pattern as EditForm/
- * DisputeResolutionForm elsewhere in this file.
- */
-function ConciergeNoteEditor({
-  reportId,
-  findingId,
-  existingNote,
-  defaultAuthorName,
-}: {
-  reportId: string;
-  findingId: string;
-  existingNote: ConciergeNote | undefined;
-  defaultAuthorName: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [authorName, setAuthorName] = useState(existingNote?.authorName ?? defaultAuthorName);
-  const [noteText, setNoteText] = useState(existingNote?.note ?? "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSave() {
-    setSaving(true);
-    setError(null);
-    try {
-      await saveFindingConciergeNoteAction(reportId, findingId, authorName, noteText);
-      setEditing(false);
-    } catch {
-      setError("Something went wrong reaching the server — please try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function handleCancel() {
-    setAuthorName(existingNote?.authorName ?? defaultAuthorName);
-    setNoteText(existingNote?.note ?? "");
-    setError(null);
-    setEditing(false);
-  }
-
-  if (!editing) {
-    return existingNote ? (
-      <div className="mt-2 rounded-md border-l-2 border-accent bg-[#fffbf0] p-3 text-sm dark:border-accent dark:bg-accent/10">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-accent">Concierge note — {existingNote.authorName}</p>
-        <p className="whitespace-pre-wrap text-neutral-800 dark:text-neutral-200">{existingNote.note}</p>
-        <button type="button" onClick={() => setEditing(true)} className="mt-2 text-xs text-neutral-500 hover:text-neutral-700 hover:underline dark:text-neutral-400">
-          Edit note
-        </button>
-      </div>
-    ) : (
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        className="mt-2 text-xs text-neutral-500 hover:text-neutral-700 hover:underline dark:text-neutral-400"
-      >
-        + Add Concierge note
-      </button>
-    );
-  }
-
-  return (
-    <div className="mt-2 space-y-2 rounded-md border-l-2 border-accent bg-[#fffbf0] p-3 dark:border-accent dark:bg-accent/10">
-      <Input label="Your name" value={authorName} onChange={(e) => setAuthorName(e.target.value)} />
-      <Textarea
-        label="Note"
-        rows={3}
-        value={noteText}
-        onChange={(e) => setNoteText(e.target.value)}
-        placeholder="Real context from your Discovery/Delivery call that doesn't fit the automated finding — clear the box and save to remove."
+      <WorkspaceHeader
+        companyName={companyName}
+        planTier={planTier}
+        companyUserId={companyUserId}
+        tierPending={tierPending}
+        onSetPlanTier={handleSetPlanTier}
+        reportStatus={reportStatus}
+        actionError={actionError}
+        timing={timing}
       />
-      {error && (
-        <Alert variant="error" className="py-2 text-xs">
-          {error}
-        </Alert>
-      )}
-      <div className="flex gap-2">
-        <Button variant="secondary" className="px-2 py-1 text-xs" onClick={handleCancel} disabled={saving}>
-          Cancel
-        </Button>
-        <Button className="px-2 py-1 text-xs" onClick={handleSave} disabled={saving}>
-          {saving ? "Saving…" : "Save note"}
-        </Button>
-      </div>
-    </div>
-  );
-}
 
-/**
- * Reviewer "second opinion" (confirmed 2026-09-04) — reviewer-triggered on
- * demand, from a genuinely different model (Claude) than whatever drafted
- * the finding. Purely advisory display: a concern flag with a category and
- * reasoning, or an honest clean-pass confirmation — never a gate, never an
- * action this component can take on the finding itself. v1 scope
- * (Financial lens only) is enforced server-side in
- * requestFinancialLensSecondOpinion(), not here — this component would
- * simply surface whatever error that throws for any other lens.
- *
- * Until a real ANTHROPIC_API_KEY is configured, clicking this button
- * surfaces a clear "Something went wrong reaching the server" error (the
- * same honest failure path this codebase already uses everywhere else for
- * an uncaught RPC/provider failure) — expected and correct, not a bug,
- * same as GroqProvider's own "GROQ_API_KEY is not set" pattern.
- */
-function SecondOpinionPanel({
-  reportId,
-  findingId,
-  existingOpinion,
-}: {
-  reportId: string;
-  findingId: string;
-  existingOpinion: SecondOpinionDisplay | undefined;
-}) {
-  const [opinion, setOpinion] = useState(existingOpinion);
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
-  const [error, setError] = useState<string | null>(null);
-  // Real reentrancy guard, confirmed 2026-09-04 (full-platform E2E
-  // re-test — first attempted with `if (status === "loading") return;`,
-  // caught by this exact test as insufficient: two click EVENTS
-  // dispatched synchronously in the same JS tick both invoke the SAME
-  // handler closure from the SAME render, so both read the identical,
-  // still-"idle" `status` value — `setStatus("loading")` from the first
-  // invocation hasn't been committed to a new render yet, so the second
-  // invocation's closure never sees it. A ref mutates in place,
-  // synchronously, shared across both invocations regardless of React's
-  // render/commit timing — the actual fix, not the state check.
-  const isRequestingRef = useRef(false);
+      <AuditIntegrityWarnings failedLenses={failedLenses} hasNoFindings={findings.length === 0} regulatoryStalenessWarnings={regulatoryStalenessWarnings} />
 
-  async function handleRequest() {
-    if (isRequestingRef.current) return;
-    isRequestingRef.current = true;
-    setStatus("loading");
-    setError(null);
-    try {
-      const result = await requestSecondOpinionAction(reportId, findingId);
-      setOpinion(result);
-      setStatus("idle");
-    } catch {
-      setStatus("error");
-      setError("Something went wrong reaching the server — please try again.");
-    } finally {
-      isRequestingRef.current = false;
-    }
-  }
+      <MandatoryDecisionBanner draftFindingsCount={draftFindings.length} unresolvedConflictsCount={unresolvedConflicts.length} />
 
-  return (
-    <div className="mt-2">
-      {opinion ? (
-        <div
-          className={`rounded-md border p-2 text-xs ${
-            opinion.concern
-              ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950"
-              : "border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800"
-          }`}
-        >
-          <p className="font-medium text-neutral-800 dark:text-neutral-200">
-            {opinion.concern ? `⚠ Second opinion: ${SECOND_OPINION_CATEGORY_LABELS[opinion.category!]}` : "✓ Second opinion: no concerns"}
-            <span className="ml-2 font-normal text-neutral-400 dark:text-neutral-500">({opinion.model})</span>
-          </p>
-          <p className="mt-1 text-neutral-600 dark:text-neutral-400">{opinion.reasoning}</p>
-          <button
-            type="button"
-            onClick={handleRequest}
-            disabled={status === "loading"}
-            className="mt-1 text-neutral-400 hover:text-neutral-600 hover:underline dark:text-neutral-500 dark:hover:text-neutral-300"
-          >
-            {status === "loading" ? "Asking again…" : "Ask again"}
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={handleRequest}
-          disabled={status === "loading"}
-          className="text-xs text-neutral-500 hover:text-neutral-700 hover:underline dark:text-neutral-400"
-        >
-          {status === "loading" ? "Getting a second opinion…" : "Get a second opinion"}
-        </button>
-      )}
-      {status === "error" && error && (
-        <Alert variant="error" className="mt-1 py-1 text-xs">
-          {error}
-        </Alert>
-      )}
-    </div>
-  );
-}
+      <Top3PrioritiesSection
+        top3FindingIds={top3FindingIds}
+        findingById={findingById}
+        pending={pending}
+        onMoveTop3={handleMoveTop3}
+        reportId={reportId}
+        initialReportSecondOpinion={initialReportSecondOpinion}
+      />
 
-/**
- * Reviewer report-level second opinion (confirmed 2026-09-04) — a real,
- * separate feature from SecondOpinionPanel above: checks the report's
- * ACTUAL Top 3 selection against the client's stated goal, using the Goal
- * Relevance Ranking Rubric, rather than one finding's own internal
- * quality. Same self-contained-component/try-catch-finally pattern. The
- * response is a real array of concerns (a multi-finding selection can
- * have more than one thing wrong with it at once) plus a required overall
- * assessment — richer than the per-finding version's single concern/
- * category/reasoning triple, reflecting what's actually being checked.
- */
-function ReportSecondOpinionPanel({
-  reportId,
-  findingById,
-  initialOpinion,
-}: {
-  reportId: string;
-  findingById: Map<string, FindingRow>;
-  initialOpinion: ReportSecondOpinionDisplay | null;
-}) {
-  const [opinion, setOpinion] = useState(initialOpinion);
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
-  const [error, setError] = useState<string | null>(null);
-  // Real reentrancy guard (confirmed 2026-09-04) — see SecondOpinionPanel's
-  // own equivalent guard for why a plain `status` state check isn't
-  // sufficient (a stale-closure gap under two synchronous click events),
-  // and why a ref is the actual fix.
-  const isRequestingRef = useRef(false);
+      <FixFirstSuggestionsSection
+        fixFirstCandidates={fixFirstCandidates}
+        cascadeSignals={cascadeSignals}
+        pending={pending}
+        onPromoteToTop3={handlePromoteToTop3}
+      />
 
-  async function handleRequest() {
-    if (isRequestingRef.current) return;
-    isRequestingRef.current = true;
-    setStatus("loading");
-    setError(null);
-    try {
-      const result = await requestReportSecondOpinionAction(reportId);
-      setOpinion(result);
-      setStatus("idle");
-    } catch {
-      setStatus("error");
-      setError("Something went wrong reaching the server — please try again.");
-    } finally {
-      isRequestingRef.current = false;
-    }
-  }
+      <FlaggedConflictsSection
+        conflicts={conflicts}
+        findingById={findingById}
+        resolvingConflictId={resolvingConflictId}
+        onStartResolving={setResolvingConflictId}
+        onCancelResolving={() => setResolvingConflictId(null)}
+        onResolveConflict={handleResolveConflict}
+      />
 
-  function findingTitle(id: string): string {
-    const f = findingById.get(id);
-    return f ? displayedContent(f).title : id;
-  }
+      <DisputedFindingsSection
+        disputedFindings={disputedFindings}
+        reportId={reportId}
+        conciergeNotesByFindingId={conciergeNotesByFindingId}
+        currentReviewerName={currentReviewerName}
+        disputingId={disputingId}
+        onStartDisputing={setDisputingId}
+        onCancelDisputing={() => setDisputingId(null)}
+        onResolveDispute={handleResolveDispute}
+      />
 
-  return (
-    <div className="mt-4 border-t border-neutral-200 pt-3 dark:border-neutral-800">
-      {opinion ? (
-        <div className="space-y-2">
-          <p className="text-xs text-neutral-600 dark:text-neutral-400">
-            {opinion.overallAssessment} <span className="text-neutral-400 dark:text-neutral-500">({opinion.model})</span>
-          </p>
-          {opinion.concerns.length > 0 && (
-            <ul className="space-y-2">
-              {opinion.concerns.map((c, i) => (
-                <li
-                  key={i}
-                  className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs dark:border-amber-800 dark:bg-amber-950"
-                >
-                  <p className="font-medium text-neutral-800 dark:text-neutral-200">
-                    ⚠ {REPORT_SECOND_OPINION_CATEGORY_LABELS[c.category]}
-                    {c.findingIds.length > 0 && (
-                      <span className="ml-1 font-normal text-neutral-500 dark:text-neutral-400">
-                        — {c.findingIds.map(findingTitle).join(", ")}
-                      </span>
-                    )}
-                  </p>
-                  <p className="mt-1 text-neutral-600 dark:text-neutral-400">{c.reasoning}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-          <button
-            type="button"
-            onClick={handleRequest}
-            disabled={status === "loading"}
-            className="text-xs text-neutral-400 hover:text-neutral-600 hover:underline dark:text-neutral-500 dark:hover:text-neutral-300"
-          >
-            {status === "loading" ? "Asking again…" : "Ask again"}
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={handleRequest}
-          disabled={status === "loading"}
-          className="text-xs text-neutral-500 hover:text-neutral-700 hover:underline dark:text-neutral-400"
-        >
-          {status === "loading" ? "Getting a second opinion…" : "Get a second opinion on Top 3"}
-        </button>
-      )}
-      {status === "error" && error && (
-        <Alert variant="error" className="mt-1 py-1 text-xs">
-          {error}
-        </Alert>
-      )}
-    </div>
-  );
-}
+      <LensFindingGroups
+        undisputedFindings={undisputedFindings}
+        editingId={editingId}
+        onStartEditing={setEditingId}
+        onCancelEditing={() => setEditingId(null)}
+        onSaveEdit={handleSaveEdit}
+        onAccept={handleAccept}
+        onReject={handleReject}
+        recommendationLibrary={recommendationLibrary}
+        reportId={reportId}
+        conciergeNotesByFindingId={conciergeNotesByFindingId}
+        currentReviewerName={currentReviewerName}
+        secondOpinionsByFindingId={secondOpinionsByFindingId}
+        pending={pending}
+      />
 
-interface EditFormValues {
-  title: string;
-  diagnosis: string;
-  rootCause: string;
-  recommendedAction: string;
-  severity: Severity;
-  confidenceLevel: ConfidenceLevel;
-  goalRelevance: GoalRelevance;
-}
+      <ApproveDeliverSection
+        blockedReason={blockedReason}
+        pending={pending}
+        reportStatus={reportStatus}
+        onApprove={handleApprove}
+        deliverError={deliverError}
+        delivered={delivered}
+        onDeliver={handleDeliver}
+      />
 
-function EditForm({
-  lens,
-  initial,
-  recommendationLibrary,
-  onCancel,
-  onSave,
-}: {
-  lens: LensType;
-  initial: LensFinding;
-  recommendationLibrary: RecommendationLibraryEntry[];
-  onCancel: () => void;
-  onSave: (changes: EditFormValues, notes: string) => void;
-}) {
-  const [title, setTitle] = useState(initial.title);
-  const [diagnosis, setDiagnosis] = useState(initial.diagnosis);
-  const [rootCause, setRootCause] = useState(initial.rootCause);
-  const [recommendedAction, setRecommendedAction] = useState(initial.recommendedAction);
-  const [severity, setSeverity] = useState<Severity>(initial.severity);
-  const [confidenceLevel, setConfidenceLevel] = useState<ConfidenceLevel>(initial.confidenceLevel);
-  const [goalRelevance, setGoalRelevance] = useState<GoalRelevance>(initial.goalRelevance);
-  const [notes, setNotes] = useState("");
+      <ExecutionSprintProposalSection
+        reportStatus={reportStatus}
+        sprintError={sprintError}
+        undisputedFindings={undisputedFindings}
+        pending={pending}
+        startingSprintFor={startingSprintFor}
+        onStartSprint={handleStartSprint}
+      />
 
-  // Recommendation library, seed version (confirmed 2026-08-06) — a
-  // deterministic keyword match against this finding's title + diagnosis,
-  // computed fresh each render from current field values (not a stale
-  // computation from initial load) so it stays relevant as the reviewer
-  // edits. Reference only — never auto-fills recommendedAction, the
-  // reviewer decides whether/how to draw on it.
-  const suggestions = matchRecommendationLibraryEntries(recommendationLibrary, lens, title, diagnosis);
+      <RerunAnalysisSection
+        rerunOfReportId={rerunOfReportId}
+        canRerun={canRerun}
+        rerunError={rerunError}
+        rerunResultId={rerunResultId}
+        pending={pending}
+        onRerun={handleRerun}
+      />
 
-  return (
-    <div className="mt-2 space-y-3 rounded-md border-l-2 border-neutral-400 bg-white p-3 shadow-card-1 dark:border-neutral-600 dark:bg-neutral-900">
-      <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <Textarea label="Diagnosis" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} rows={2} />
-      <Textarea label="Root cause" value={rootCause} onChange={(e) => setRootCause(e.target.value)} rows={2} />
-      <Textarea label="Recommended action" value={recommendedAction} onChange={(e) => setRecommendedAction(e.target.value)} rows={2} />
-      {suggestions.length > 0 && (
-        <div className="rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-2 text-xs dark:border-neutral-700 dark:bg-neutral-900">
-          <p className="mb-1 font-medium text-neutral-500 dark:text-neutral-400">
-            Suggested playbook (reference only — not auto-applied):
-          </p>
-          {suggestions.slice(0, 2).map((s) => (
-            <div key={s.key} className="mb-1.5 last:mb-0">
-              <p className="font-medium text-neutral-600 dark:text-neutral-300">{s.label}</p>
-              <p className="text-neutral-500 dark:text-neutral-400">{s.recommendedActionTemplate}</p>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="flex gap-2">
-        <Select value={severity} onChange={(e) => setSeverity(e.target.value as Severity)} className="text-xs">
-          {(["critical", "high", "medium", "low"] as const).map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </Select>
-        <Select value={confidenceLevel} onChange={(e) => setConfidenceLevel(e.target.value as ConfidenceLevel)} className="text-xs">
-          {(["high", "medium", "low", "insufficient"] as const).map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </Select>
-        <Select value={goalRelevance} onChange={(e) => setGoalRelevance(e.target.value as GoalRelevance)} className="text-xs">
-          {(["directly_blocks", "directly_affects", "directly_supports", "indirectly_affects", "unrelated"] as const).map((g) => (
-            <option key={g} value={g}>
-              {g}
-            </option>
-          ))}
-        </Select>
-      </div>
-      <Input placeholder="Reviewer notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} className="text-xs" />
-      <div className="flex gap-2">
-        <Button variant="secondary" className="px-2 py-1 text-xs" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button className="px-2 py-1 text-xs" onClick={() => onSave({ title, diagnosis, rootCause, recommendedAction, severity, confidenceLevel, goalRelevance }, notes)}>
-          Save edit
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function DisputeResolutionForm({
-  initial,
-  onCancel,
-  onSave,
-}: {
-  initial: LensFinding;
-  onCancel: () => void;
-  onSave: (resolution: DisputeResolution, notes: string, changes?: EditFormValues) => void;
-}) {
-  const [resolution, setResolution] = useState<DisputeResolution>("keep_ai_version");
-  const [notes, setNotes] = useState("");
-  const [title, setTitle] = useState(initial.title);
-  const [diagnosis, setDiagnosis] = useState(initial.diagnosis);
-  const [rootCause, setRootCause] = useState(initial.rootCause);
-  const [recommendedAction, setRecommendedAction] = useState(initial.recommendedAction);
-  const [severity, setSeverity] = useState<Severity>(initial.severity);
-
-  return (
-    <div className="mt-2 space-y-3 rounded-md border-l-2 border-neutral-400 bg-white p-3 shadow-card-1 dark:border-neutral-600 dark:bg-neutral-900">
-      <div className="flex gap-3 text-xs text-neutral-800 dark:text-neutral-200">
-        {(["keep_ai_version", "side_with_client", "edit"] as const).map((r) => (
-          <label key={r} className="flex items-center gap-1">
-            <input type="radio" name="resolution" checked={resolution === r} onChange={() => setResolution(r)} className="accent-accent" />
-            {r.replaceAll("_", " ")}
-          </label>
-        ))}
-      </div>
-      {resolution === "edit" && (
-        <>
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} />
-          <Textarea placeholder="Diagnosis" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} rows={2} />
-          <Textarea placeholder="Root cause" value={rootCause} onChange={(e) => setRootCause(e.target.value)} rows={2} />
-          <Textarea placeholder="Recommended action" value={recommendedAction} onChange={(e) => setRecommendedAction(e.target.value)} rows={2} />
-          <Select value={severity} onChange={(e) => setSeverity(e.target.value as Severity)} className="text-xs">
-            {(["critical", "high", "medium", "low"] as const).map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </Select>
-        </>
-      )}
-      <Input placeholder="Resolution reasoning (required)" value={notes} onChange={(e) => setNotes(e.target.value)} className="text-xs" />
-      <div className="flex gap-2">
-        <Button variant="secondary" className="px-2 py-1 text-xs" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button
-          disabled={!notes.trim()}
-          className="bg-accent px-2 py-1 text-xs text-white hover:bg-accent-hover"
-          onClick={() =>
-            onSave(
-              resolution,
-              notes,
-              resolution === "edit"
-                ? { title, diagnosis, rootCause, recommendedAction, severity, confidenceLevel: initial.confidenceLevel, goalRelevance: initial.goalRelevance }
-                : undefined,
-            )
-          }
-        >
-          Save resolution
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Prefilled with the AI-suggested resolution when one exists (confirmed
- * 2026-08-12) — same "AI drafts, reviewer edits or accepts as-is" pattern
- * as every EditForm in this app. An empty initialNotes (older conflicts,
- * or none was ever generated) falls back to the original blank-field
- * behavior, unchanged.
- */
-function ConflictResolutionForm({
-  initialNotes = "",
-  onCancel,
-  onSave,
-}: {
-  initialNotes?: string;
-  onCancel: () => void;
-  onSave: (notes: string) => void;
-}) {
-  const [notes, setNotes] = useState(initialNotes);
-  return (
-    <div className="space-y-2">
-      <Input placeholder="Which finding wins, or a merged explanation (required)" value={notes} onChange={(e) => setNotes(e.target.value)} className="text-xs" />
-      <div className="flex gap-2">
-        <Button variant="secondary" className="px-2 py-1 text-xs" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button disabled={!notes.trim()} className="bg-orange-600 px-2 py-1 text-xs text-white hover:bg-orange-700" onClick={() => onSave(notes)}>
-          Save resolution
-        </Button>
-      </div>
+      <SimilarPatternsSection similarPatterns={similarPatterns} />
     </div>
   );
 }
