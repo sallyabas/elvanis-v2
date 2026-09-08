@@ -70,9 +70,11 @@ test("Module payment gate: price shown, no analysis until paid, reviewer Mark Un
   const { count: findingCountBeforePayment } = await supabase.from("module_findings").select("id", { count: "exact", head: true }).eq("request_id", requestId);
   expect(findingCountBeforePayment).toBe(0);
 
-  // --- Client Dashboard: real "Submitted" status shown, before any reviewer action (unified flow, confirmed 2026-09-07) ---
+  // --- Client Dashboard: real "Awaiting Payment" status shown, before any
+  // reviewer action (final status-flow spec, confirmed 2026-09-08 — no
+  // more "Submitted" vs "Awaiting payment" split) ---
   await page.goto("/dashboard");
-  await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByText("Awaiting Payment", { exact: true })).toBeVisible();
   await step(page, testInfo, "12-module-payment-gate", "03-dashboard-awaiting-payment");
 
   // --- Reviewer: the request shows in the new "Module requests awaiting payment" section ---
@@ -83,22 +85,36 @@ test("Module payment gate: price shown, no analysis until paid, reviewer Mark Un
   await expect(queueRow).toBeVisible();
   await step(page, testInfo, "12-module-payment-gate", "04-reviewer-queue-awaiting-payment");
 
-  // --- Reviewer marks it unpaid first (a real, revisable outcome — not a dead end) ---
-  await queueRow.getByRole("button", { name: "Mark as unpaid" }).click();
-  await expect(queueRow.getByText("Unpaid")).toBeVisible({ timeout: 10_000 });
-  // Real design: once unpaid, "Mark as unpaid" is hidden (already unpaid), only "Mark as paid" remains.
-  await expect(queueRow.getByRole("button", { name: "Mark as unpaid" })).not.toBeVisible();
+  // --- Reviewer marks it "awaiting payment" (renamed from "unpaid",
+  // final status-flow spec confirmed 2026-09-08 — the underlying action/
+  // enum value/DB write are unchanged, only the display label) first, a
+  // real, revisable outcome, not a dead end ---
+  await queueRow.getByRole("button", { name: "Mark as awaiting payment" }).click();
+  await expect(queueRow.getByText("Awaiting Payment", { exact: true })).toBeVisible({ timeout: 10_000 });
+  // Real design, unchanged by the rename: once marked, "Mark as awaiting
+  // payment" is hidden (already recorded), only "Mark as paid" remains.
+  await expect(queueRow.getByRole("button", { name: "Mark as awaiting payment" })).not.toBeVisible();
   await step(page, testInfo, "12-module-payment-gate", "05-reviewer-marked-unpaid");
 
   const { data: rowAfterUnpaid } = await supabase.from("module_requests").select("status, payment_status").eq("id", requestId).single();
   expect(rowAfterUnpaid?.status).toBe("awaiting_payment");
+  // The underlying enum value is genuinely unchanged (confirmed
+  // 2026-09-08) — only its display label was renamed, not the DB write.
   expect(rowAfterUnpaid?.payment_status).toBe("unpaid");
 
-  // --- Client sees the real "Awaiting payment" status, not a stuck "Submitted" (unified flow, confirmed 2026-09-07) ---
+  // --- Client sees the real "Awaiting Payment" status, not a stuck
+  // "Submitted" — and, per the final status-flow spec, the exact same
+  // copy regardless of whether a reviewer has checked (no more
+  // "Your reviewer checked..." split) ---
   await loginAsTestUser(page, fixture.clientEmail);
   await page.goto("/dashboard");
-  await expect(page.getByText("Awaiting payment", { exact: true })).toBeVisible();
-  await expect(page.getByText("Your reviewer checked and hasn't received payment yet")).toBeVisible();
+  await expect(page.getByText("Awaiting Payment", { exact: true })).toBeVisible();
+  // This fixture's company isn't entry_path='ai_audit', so the module
+  // renders via the generic "Your active requests" tile, not the "AI
+  // Audit Status" section — confirmed by reading the actual rendered
+  // page rather than assumed; both share the same "one copy regardless
+  // of checked state" fix, just different exact wording.
+  await expect(page.getByText("No analysis has started yet — complete payment to begin.")).toBeVisible();
   await step(page, testInfo, "12-module-payment-gate", "06-client-sees-unpaid");
 
   // --- Reviewer changes their mind and marks it paid — the real, synchronous Groq call runs here ---

@@ -42,10 +42,12 @@ export default function ReviewerLoginPage() {
     if (result.success) {
       // router.refresh() removed, confirmed 2026-08-07 — same fix as
       // OnboardingWizard.tsx and client-login/page.tsx: redundant and
-      // racy immediately after push(). /queue is fully dynamic
+      // racy immediately after push(). /home is fully dynamic
       // (session-dependent), so push() alone already forces a fresh
-      // server render.
-      router.push("/queue");
+      // server render. Target changed from /queue to /home (confirmed
+      // 2026-09-08, final status-flow spec, item 7) — same reasoning as
+      // the magic-link redirect in actions.ts.
+      router.push("/home");
     } else {
       setVerifying(false);
       setVerifyError(result.error ?? "That code didn't match — check it and try again.");

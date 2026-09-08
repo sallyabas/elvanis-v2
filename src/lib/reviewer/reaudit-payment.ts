@@ -14,17 +14,18 @@ export interface MarkReaduitPaidResult {
  * the client's own "Submit now" fast-track
  * (claimPendingEvidenceSubmissionForImmediateAudit()).
  *
- * Deliberately NOT the same UI/mechanism as PaymentStatusRow/
- * ServiceStatusRow (confirmed with the founder before building) — those
- * are keyed to an ALREADY-EXISTING reports/module_request/etc. row, and at
- * the moment this fires, no `reports` row exists yet for this cycle
- * (that's the entire point of the gate — the audit hasn't run). Once the
- * audit DOES run below and a real report is created, the existing
- * PaymentStatusRow/ServiceStatusRow mechanism on /company/[companyId]
- * takes over for post-audit tracking exactly as it already does today
- * (and will now correctly apply, since Part 1 of this same feature links
- * rerun_of_report_id on this path) — this function only closes the
- * PRE-audit gate, it doesn't replace or duplicate that later tracking.
+ * Deliberately NOT the same UI/mechanism PaymentStatusRow/ServiceStatusRow
+ * used to be (confirmed with the founder before building; both were
+ * removed entirely 2026-09-08, final status-flow spec — see
+ * /company/[companyId]/page.tsx's own docblock) — those were keyed to an
+ * ALREADY-EXISTING reports/module_request/etc. row, and at the moment
+ * this fires, no `reports` row exists yet for this cycle (that's the
+ * entire point of the gate — the audit hasn't run). Once the audit DOES
+ * run below and a real report is created, its post-audit status is
+ * genuinely covered by computeDisplayStatus() against the real report's
+ * own status (unified-requests.ts), same as every other request type —
+ * this function only closes the PRE-audit gate, it never duplicated any
+ * later tracking.
  *
  * The single conditional UPDATE below — payment_status: 'pending' ->
  * 'paid' AND status: 'editing' -> 'audit_in_progress', in the SAME
@@ -47,7 +48,7 @@ export async function markReaduitPaid(pendingSubmissionId: string): Promise<Mark
   // mechanism either way.
   const { data, error } = await supabase
     .from("pending_evidence_submissions")
-    .update({ payment_status: "paid", status: "audit_in_progress", last_attempted_at: now })
+    .update({ payment_status: "paid", paid_at: now, status: "audit_in_progress", last_attempted_at: now })
     .eq("id", pendingSubmissionId)
     .eq("status", "editing")
     .in("payment_status", ["pending", "unpaid"])

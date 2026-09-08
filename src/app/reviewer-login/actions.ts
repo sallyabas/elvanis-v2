@@ -38,7 +38,11 @@ export async function requestReviewerMagicLink(email: string, origin: string): P
     // auth/callback/route.ts for the full root-cause this closes: the
     // shared callback's failure fallback used to be hardcoded to
     // /reviewer-login for every flow; each flow now names its own.
-    options: { emailRedirectTo: `${origin}/auth/callback?next=/queue&loginPath=/reviewer-login` },
+    // next=/home (confirmed 2026-09-08, final status-flow spec, item 7) —
+    // /home is now the real post-login reviewer landing page, replacing
+    // /queue as the redirect target; /queue itself is unchanged and still
+    // fully reachable from the sidebar.
+    options: { emailRedirectTo: `${origin}/auth/callback?next=/home&loginPath=/reviewer-login` },
   });
 
   if (error) return { sent: false, error: "Couldn't send the login link. Try again in a moment." };

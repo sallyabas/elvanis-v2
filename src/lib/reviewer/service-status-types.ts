@@ -3,9 +3,12 @@ import type { PaymentEntityType } from "@/lib/reviewer/payment-records";
 /**
  * Real gap found live (confirmed 2026-09-05) — a "use server" file can
  * only export async functions; SERVICE_STATUS_ORDER/SERVICE_STATUS_LABELS
- * are plain values a client component (ServiceStatusRow.tsx) needs to
- * import directly, so they live in their own, directive-free module
- * rather than inside service-status.ts.
+ * (and CONTACT_SALES_STATUS_ORDER/CONTACT_SALES_STATUS_LABELS below) are
+ * plain values a client component needs to import directly — originally
+ * ServiceStatusRow.tsx, since removed 2026-09-08 (final status-flow
+ * spec); ContactSalesStatusRow.tsx is the real remaining consumer now —
+ * so they live in their own, directive-free module rather than inside
+ * service-status.ts.
  */
 export type ServiceStatusValue = "requested" | "booked" | "scheduled" | "completed" | "canceled" | "refunded";
 

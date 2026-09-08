@@ -391,16 +391,12 @@ export default async function DashboardPage() {
   } else if (journeyStatus.stage === "queued_for_audit") {
     subtitleLine1 = "Your edit window has closed — your evidence is queued for analysis.";
   } else if (journeyStatus.stage === "awaiting_payment") {
-    // Re-audit payment gate (confirmed 2026-09-06, relabeled 2026-09-07
-    // for the unified flow) — a real, distinct stage from
-    // queued_for_audit above: the window has closed, but analysis is
-    // deliberately withheld until payment is confirmed. "Submitted" for
-    // "nothing checked yet" vs "Awaiting payment" for "reviewer confirmed
-    // unpaid" — same split as NextStepBanner.tsx.
-    subtitleLine1 =
-      journeyStatus.paymentStatus === "unpaid"
-        ? "We checked, and this re-audit hasn't been marked as paid yet — it's on hold until payment is confirmed."
-        : "Submitted — your edit window has closed and this re-audit is queued, waiting on payment confirmation.";
+    // Re-audit payment gate (confirmed 2026-09-06, final wording
+    // 2026-09-08) — a real, distinct stage from queued_for_audit above:
+    // the window has closed, but analysis is deliberately withheld until
+    // payment is confirmed. This used to split into two sentences
+    // depending on journeyStatus.paymentStatus — that split is gone.
+    subtitleLine1 = "Awaiting payment — your edit window has closed and this re-audit is queued until payment is confirmed.";
   } else if (journeyStatus.stage === "audit_in_progress") {
     subtitleLine1 = "Your evidence is being analyzed right now.";
   } else if (journeyStatus.stage === "in_review") {
@@ -622,15 +618,18 @@ export default async function DashboardPage() {
     scoped: "Your reviewer is drafting a real task breakdown for this — you'll see it once it's ready to start.",
     in_progress: "A bounded, paid implementation engagement fixing this one finding — track task progress on the sprint page.",
   };
-  function sprintStatusLabel(status: string, paymentStatus: string | null | undefined): string {
-    if (status === "awaiting_payment") return paymentStatus === "unpaid" ? "Awaiting payment" : "Submitted";
+  // Final status-flow spec (confirmed 2026-09-08) — 'awaiting_payment' no
+  // longer splits into "Submitted"/"Awaiting payment" depending on
+  // whether a reviewer has checked; it's genuinely one status now.
+  // `paymentStatus` stays a real parameter so every call site keeps
+  // compiling unchanged; nothing about display reads it anymore.
+  function sprintStatusLabel(status: string, _paymentStatus: string | null | undefined): string {
+    if (status === "awaiting_payment") return "Awaiting Payment";
     return SPRINT_STATUS_LABELS[status] ?? status;
   }
-  function sprintExplanation(status: string, paymentStatus: string | null | undefined): string {
+  function sprintExplanation(status: string, _paymentStatus: string | null | undefined): string {
     if (status === "awaiting_payment") {
-      return paymentStatus === "unpaid"
-        ? "We checked, and this hasn't been marked as paid yet — the plan is on hold until payment is confirmed."
-        : "No plan has been drafted yet — that starts once a finding is confirmed and payment is received.";
+      return "No plan has been drafted yet — that starts once a finding is confirmed and payment is received.";
     }
     return SPRINT_EXPLANATION[status] ?? "";
   }
@@ -680,10 +679,11 @@ export default async function DashboardPage() {
               {mostRecentModuleRequest.status === "sent" ? (
                 <LinkButton href={`/services/module/${mostRecentModuleRequest.id}`}>View your findings</LinkButton>
               ) : mostRecentModuleRequest.status === "awaiting_payment" ? (
+                // One copy regardless of checked state (confirmed
+                // 2026-09-08) — the "reviewer checked and hasn't received
+                // payment" vs "complete payment to start" split is gone.
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  {mostRecentModuleRequest.payment_status === "unpaid"
-                    ? "Your reviewer checked and hasn't received payment yet — complete payment to continue."
-                    : "Complete payment to start the real analysis — see your request below for the payment link."}
+                  Complete payment to start the real analysis — see your request below for the payment link.
                 </p>
               ) : (
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">You&apos;ll get an email the moment this is ready to view.</p>
@@ -1143,12 +1143,9 @@ export default async function DashboardPage() {
                 <div key={r.id as string} className="rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-card-1 dark:border-neutral-800 dark:bg-neutral-900">
                   <h3 className="mb-1 font-medium text-neutral-900 dark:text-neutral-50">{meta?.label ?? r.module_type}</h3>
                   <p className="mb-1 text-accent">{moduleClientStatusLabel(r.status as string, r.payment_status as string | null)}</p>
+                  {/* One copy regardless of checked state (confirmed 2026-09-08). */}
                   <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">
-                    {r.status === "awaiting_payment"
-                      ? r.payment_status === "unpaid"
-                        ? "Your reviewer checked and hasn't received payment yet — complete payment to continue."
-                        : "No analysis has started yet — complete payment to begin."
-                      : (MODULE_EXPLANATION[r.status as string] ?? "")}
+                    {r.status === "awaiting_payment" ? "No analysis has started yet — complete payment to begin." : (MODULE_EXPLANATION[r.status as string] ?? "")}
                   </p>
                   {r.status === "awaiting_payment" && meta && (
                     <a

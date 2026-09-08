@@ -11,16 +11,21 @@ import {
   addServiceStatusNoteAction,
   cancelContactSalesServiceAction,
   refundContactSalesServiceAction,
+  updateContactSalesPriceAction,
 } from "./actions";
 import { CONTACT_SALES_STATUS_ORDER, CONTACT_SALES_STATUS_LABELS, type ServiceStatusValue, type ServiceStatusRecord } from "@/lib/reviewer/service-status-types";
 
 /**
  * Contact Sales (Concierge/Training & Advisory) status flow (confirmed
  * 2026-09-07, final spec, replacing the generic ServiceStatusRow for
- * these two session types specifically — every other entity type/session
- * type keeps using ServiceStatusRow.tsx unchanged).
+ * these two session types specifically — ServiceStatusRow.tsx itself was
+ * later removed entirely, 2026-09-08, once every OTHER entity type/session
+ * type also stopped using it, per computeDisplayStatus() covering their
+ * real status instead; this component is the one survivor of that
+ * pattern, kept because Contact Sales genuinely has its own real flow no
+ * payment-gate column represents).
  *
- * Deliberate divergences from ServiceStatusRow.tsx, all confirmed:
+ * Deliberate divergences from what ServiceStatusRow used to do, all confirmed:
  * - Status dropdown restricted to Requested/Booked/Completed — no
  *   'Scheduled' step, and Canceled/Refunded are never reachable via this
  *   dropdown at all (only via their own dedicated actions below).
@@ -65,19 +70,81 @@ export function ContactSalesStatusRow({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noteAdded, setNoteAdded] = useState(false);
+  const [priceUpdated, setPriceUpdated] = useState(false);
 
-  // Terminal state — a canceled/refunded record renders as a plain
-  // summary, no controls (confirmed 2026-09-07: nothing moves on from
-  // either state).
-  if (persistedStatus === "canceled" || persistedStatus === "refunded") {
+  async function handleUpdatePrice() {
+    setPending(true);
+    setError(null);
+    setPriceUpdated(false);
+    try {
+      const priceValue = price.trim() === "" ? null : Number(price);
+      const result = await updateContactSalesPriceAction(companyId, entityId, priceValue, "GBP");
+      if (result.success) {
+        setPriceUpdated(true);
+      } else {
+        setError(result.error ?? "Something went wrong.");
+      }
+    } catch {
+      setError("Something went wrong reaching the server — please try again.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  // Fully terminal — canceled (confirmed 2026-09-07: only reachable
+  // before payment, so there's genuinely nothing to price or edit).
+  if (persistedStatus === "canceled") {
     return (
       <div className="mt-1 space-y-0.5">
-        <p className="text-xs font-medium text-neutral-700 dark:text-neutral-300">{CONTACT_SALES_STATUS_LABELS[persistedStatus]}</p>
+        <p className="text-xs font-medium text-neutral-700 dark:text-neutral-300">{CONTACT_SALES_STATUS_LABELS.canceled}</p>
         {record?.reason && <p className="text-xs italic text-neutral-500 dark:text-neutral-400">Reason: {record.reason}</p>}
       </div>
     );
   }
 
+  // Refunded (confirmed 2026-09-08, item 3) — status/cancel/refund
+  // controls are genuinely terminal here (nothing moves on from
+  // 'refunded'), but the price field is deliberately NOT — "the price
+  // field always represents the actual, current amount retained,"
+  // editable here specifically to record a partial refund (e.g. £500
+  // charged, £250 later kept). Uses handleUpdatePrice() (price-only,
+  // never touches status), not the shared status-update flow below.
+  if (persistedStatus === "refunded") {
+    return (
+      <div className="mt-1 space-y-1.5">
+        <p className="text-xs font-medium text-neutral-700 dark:text-neutral-300">{CONTACT_SALES_STATUS_LABELS.refunded}</p>
+        {record?.reason && <p className="text-xs italic text-neutral-500 dark:text-neutral-400">Reason: {record.reason}</p>}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Input
+            value={price}
+            onChange={(e) => {
+              setPrice(e.target.value);
+              setPriceUpdated(false);
+            }}
+            type="number"
+            placeholder="£ amount retained"
+            className="w-32 py-1 text-xs"
+          />
+          <Button type="button" variant="secondary" disabled={pending} onClick={handleUpdatePrice} className="px-2 py-1 text-xs">
+            Update price
+          </Button>
+          {priceUpdated && <span className="text-xs text-green-700 dark:text-green-400">Saved.</span>}
+        </div>
+        {error && (
+          <Alert variant="error" className="py-1 text-xs">
+            {error}
+          </Alert>
+        )}
+      </div>
+    );
+  }
+
+  // Editable once Booked or later (confirmed 2026-09-08, item 3) —
+  // "INACTIVE/disabled until status reaches 'Paid'/'Booked' — genuinely
+  // disabled and unusable, not just empty." Requested is the only status
+  // this component still renders past this point where price hasn't been
+  // confirmed yet.
+  const isPriceEditable = persistedStatus === "booked" || persistedStatus === "completed";
   const noteLocked = record?.noteLocked ?? false;
 
   async function handleUpdateStatus() {
@@ -152,7 +219,14 @@ export function ContactSalesStatusRow({
             </option>
           ))}
         </Select>
-        <Input value={price} onChange={(e) => setPrice(e.target.value)} type="number" placeholder="£ price" className="w-24 py-1 text-xs" />
+        <Input
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          type="number"
+          placeholder={isPriceEditable ? "£ price" : "Set once Booked"}
+          disabled={!isPriceEditable}
+          className="w-24 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+        />
         <Button type="button" variant="secondary" disabled={pending} onClick={handleUpdateStatus} className="px-2 py-1 text-xs">
           Update
         </Button>
@@ -188,8 +262,11 @@ export function ContactSalesStatusRow({
         </div>
       )}
 
-      {/* Refund — only from 'completed' ("if something needs undoing after the fact"). Reason optional, deliberately unlike Cancel. */}
-      {persistedStatus === "completed" && (
+      {/* Refund — from 'booked' OR 'completed' (widened 2026-09-08 — "if
+          something needs undoing after the fact" no longer requires
+          having reached Completed first). Reason optional, deliberately
+          unlike Cancel. */}
+      {(persistedStatus === "booked" || persistedStatus === "completed") && (
         <div className="flex flex-wrap items-end gap-1.5">
           <Input value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="Refund reason (optional)" className="w-64 py-1 text-xs" />
           <Button type="button" variant="secondary" disabled={pending} onClick={handleRefund} className="px-2 py-1 text-xs">

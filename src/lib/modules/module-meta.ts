@@ -83,7 +83,7 @@ export const MODULE_ORDER: ModuleType[] = ["tender_readiness", "ai_reliability",
  */
 export const MODULE_STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
-  awaiting_payment: "Submitted",
+  awaiting_payment: "Awaiting Payment",
   pending_review: "Under review",
   approved: "Reviewed — awaiting delivery",
   sent: "Delivered",
@@ -91,20 +91,17 @@ export const MODULE_STATUS_LABELS: Record<string, string> = {
 };
 
 /**
- * Client-facing status label, module payment gate (confirmed 2026-09-06,
- * relabeled 2026-09-07 for the unified flow) — `status: 'awaiting_payment'`
- * alone is ambiguous: it covers both "just submitted, nothing checked
- * yet" (payment_status 'pending' or 'processing') and "a reviewer checked
- * and it hasn't been paid" (payment_status 'unpaid'), which read back as
- * two different client-facing labels: "Submitted" vs "Awaiting payment".
- * `MODULE_STATUS_LABELS` alone can't express this — it's keyed on
- * `status` only — so this helper combines both fields, falling back to
- * the plain status map for every other status where payment_status is
- * irrelevant. Reviewer-facing views keep richer detail (distinguishing
- * "not yet checked" from "confirmed unpaid" at a glance) directly in
- * their own JSX rather than through this client-facing helper.
+ * Client-facing status label (confirmed 2026-09-06, final wording
+ * 2026-09-08) — `status: 'awaiting_payment'` used to split into
+ * "Submitted" vs "Awaiting payment" depending on whether a reviewer had
+ * checked payment (`payment_status`). That split is gone: this is now
+ * genuinely one status, always shown the same way regardless of whether
+ * "Mark as awaiting payment" (the renamed former "Mark as unpaid" action)
+ * has ever been clicked — see MODULE_STATUS_LABELS above, now the single
+ * source of that word. `paymentStatus` stays a real parameter so every
+ * call site keeps compiling unchanged; nothing about display reads it
+ * anymore.
  */
-export function moduleClientStatusLabel(status: string, paymentStatus: string | null | undefined): string {
-  if (status === "awaiting_payment" && paymentStatus === "unpaid") return "Awaiting payment";
+export function moduleClientStatusLabel(status: string, _paymentStatus: string | null | undefined): string {
   return MODULE_STATUS_LABELS[status] ?? status;
 }

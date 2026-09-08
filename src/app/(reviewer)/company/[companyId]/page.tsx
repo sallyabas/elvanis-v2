@@ -2,71 +2,130 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { loadActivePendingEvidenceSubmission } from "@/lib/evidence/pending-submission";
-import { loadPaymentRecords, type PaymentEntityType, type PaymentRecord } from "@/lib/reviewer/payment-records";
 import { loadServiceStatusRecords } from "@/lib/reviewer/service-status";
 import { isContactSalesSessionType, SESSION_TYPE_PRICING_KEY } from "@/lib/reviewer/service-status-types";
-import { listReviewerNotes } from "@/lib/reviewer/reviewer-notes";
+import { listReviewerNotes, type ReviewerNote } from "@/lib/reviewer/reviewer-notes";
 import { listPricing } from "@/lib/pricing";
+import { MODULE_META, type ModuleType } from "@/lib/modules/module-meta";
 import { GOAL_LABELS } from "@/lib/lenses/goals";
 import type { PrimaryGoal } from "@/lib/lenses/types";
+import type { PaymentEntityType } from "@/lib/reviewer/payment-records";
 import { TypeBadge, moduleTypeToItemType, sessionTypeToItemType } from "@/lib/item-type-badge";
 import { humanizeStatus, SESSION_STATUS_LABELS } from "@/lib/format";
 import { computeDisplayStatus } from "@/lib/reviewer/unified-requests";
 import { Card } from "@/app/_components/ui/Card";
-import { Input } from "@/app/_components/ui/Input";
-import { Select } from "@/app/_components/ui/Select";
 import { Button } from "@/app/_components/ui/Button";
-import { setPilotClientAction, setPaymentRecordAction, addManualReviewerNoteAction, editReviewerNoteAction, deleteReviewerNoteAction } from "./actions";
-import { ServiceStatusRow } from "./ServiceStatusRow";
+import { setPilotClientAction } from "./actions";
 import { ContactSalesStatusRow } from "./ContactSalesStatusRow";
 import { ReviewerNotesPanel } from "./ReviewerNotesPanel";
+import { RequestDetailsUnit } from "./RequestDetailsUnit";
 
 /**
- * One shared payment-status row, reused across every payable item on this
- * page (confirmed 2026-08-25, direct founder request) — see
- * payment-records.ts's own docblock for why this is one shared table, not
- * a column bolted onto four different tables.
+ * Reviewer company-context view (confirmed 2026-08-11, live testing pass;
+ * fully reorganized 2026-09-08, final status-flow spec, item 6). Real
+ * per-request grouping, not per-type flat lists — each individual real
+ * request (a Core Audit report, a re-audit, a module request, a Sprint, a
+ * session) renders as its own self-contained unit, carrying its own
+ * status, price (where applicable), reviewer notes, and (for reports/
+ * modules, which have real findings) finding feedback — all together,
+ * rather than four separate company-wide sections a reviewer had to
+ * mentally cross-reference. Auth/role gating handled entirely by
+ * (reviewer)/layout.tsx (this route sits inside that group).
+ *
+ * Three groups, confirmed structure:
+ *   1. Company Profile — unchanged (Business profile + Goal).
+ *   2. Activity & Requests — every real request, one self-contained unit
+ *      each. Terminal/historical requests (delivered/completed/canceled/
+ *      refunded) collapse into a closed <details> by default — real
+ *      client histories run 8+ requests deep (confirmed by reading real
+ *      data, not assumed), and rendering all of it always-expanded would
+ *      be the exact clutter this reorganization exists to fix. Active/
+ *      recent requests stay expanded.
+ *   3. General Reviewer Notes — only notes with no request association
+ *      (relatedEntityType/Id both null) — genuinely general observations,
+ *      not tied to any single request. Every note created before this
+ *      migration lands here by construction (no fabricated backfill).
+ *
+ * Pilot client kept as a small, compact toggle directly under the H1 —
+ * a company-level reviewer flag, not naturally part of any of the 3
+ * named groups; placement is a disclosed judgment call, not silently
+ * decided (see the 2026-09-08 build report for the full reasoning).
+ *
+ * payment_records/PaymentStatusRow removed entirely (2026-09-08, item 4);
+ * ServiceStatusRow removed from reports/sessions/sprints (item 5) — both
+ * superseded by the real payment-gate status + this reorganization's own
+ * per-request ReviewerNotesPanel instances, which is exactly the
+ * "completion-note replacement" that removal deferred to this pass.
+ *
+ * finding_feedback grouped by real parent request (2026-09-08) — that
+ * table only stores finding_source/finding_id, no direct report/request
+ * link; resolved here via two small, batched lookup queries
+ * (lens_findings.report_id / module_findings.request_id), no schema
+ * change needed.
  */
-function PaymentStatusRow({
+
+interface FeedbackRow {
+  id: string;
+  finding_source: string;
+  finding_title: string;
+  created_at: string;
+}
+
+/** service_type -> service_status_records status, defaulting to 'requested' for a row with no record yet (mirrors the old inline logic). */
+function isTerminal(kind: "report" | "reaudit" | "module" | "sprint" | "session", status: string): boolean {
+  switch (kind) {
+    case "report":
+    case "reaudit":
+      return status === "sent" || status === "canceled";
+    case "module":
+      return status === "sent" || status === "canceled";
+    case "sprint":
+      return status === "complete" || status === "canceled";
+    case "session":
+      return status === "completed" || status === "declined" || status === "refunded";
+  }
+}
+
+function NotesAndFeedback({
   companyId,
   entityType,
   entityId,
-  record,
+  notesByEntity,
+  feedbackByEntity,
 }: {
   companyId: string;
   entityType: PaymentEntityType;
   entityId: string;
-  record: PaymentRecord | undefined;
+  notesByEntity: Map<string, ReviewerNote[]>;
+  feedbackByEntity: Map<string, FeedbackRow[]>;
 }) {
+  const key = `${entityType}:${entityId}`;
+  const notes = notesByEntity.get(key) ?? [];
+  const feedback = feedbackByEntity.get(key) ?? [];
   return (
-    <form action={setPaymentRecordAction.bind(null, companyId, entityType, entityId)} className="mt-1 flex flex-wrap items-center gap-1.5">
-      <Select name="status" defaultValue={record?.status ?? "not_applicable"} className="w-28 py-1 text-xs">
-        <option value="not_applicable">N/A</option>
-        <option value="unpaid">Unpaid</option>
-        <option value="invoiced">Invoiced</option>
-        <option value="paid">Paid</option>
-      </Select>
-      <Input name="amount" type="number" placeholder="£ amount" defaultValue={record?.amount ?? ""} className="w-24 py-1 text-xs" />
-      <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
-        Update
-      </Button>
-    </form>
+    <div className="space-y-3">
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Reviewer notes for this request</p>
+        <ReviewerNotesPanel companyId={companyId} notes={notes} relatedEntityType={entityType} relatedEntityId={entityId} addLabel="+ Add a note about this request" />
+      </div>
+      {feedback.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+            &quot;Does this apply to us?&quot; feedback on this request&apos;s findings
+          </p>
+          <ul className="space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
+            {feedback.map((f) => (
+              <li key={f.id}>
+                {f.finding_title} · flagged {new Date(f.created_at).toLocaleDateString()}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
-// Real reviewer company-context view (confirmed 2026-08-11, live testing
-// pass) — closes a real gap found live: the Session Requests panel on
-// /queue showed only a company name and a date, with no way to see who
-// this actually is or what they've submitted before deciding whether/how
-// to follow up. Auth/role gating handled entirely by (reviewer)/layout.tsx
-// (this route sits inside that group), same pattern as every other
-// reviewer-only page — no redundant check needed here.
-//
-// Deliberately scoped small: this is a single-company detail view, not
-// the broader "browsable admin dashboard of everything" idea flagged
-// separately (see CLAUDE.md) — built because this specific need (context
-// for a session request) called for it, not as a first step toward that
-// bigger, not-yet-confirmed piece of scope.
 export default async function ReviewerCompanyPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
   const admin = createAdminClient();
@@ -98,18 +157,6 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
 
-  // All requests for this company (confirmed 2026-08-25, direct founder
-  // request) — sessions/Concierge and Execution Sprints, alongside the
-  // Core Audit reports and module requests already shown above.
-  //
-  // reviewer_notes added (confirmed 2026-09-07) — a real gap, not just a
-  // missed field: session_requests' own "Canceled" status is a reuse of
-  // the existing 'declined' value (confirmed design, one status not two),
-  // and reviewer_notes is where a decline reason actually lives on this
-  // table. unified-requests.ts's own docblock already claimed this page
-  // "already shows reviewer_notes alongside every other session detail" —
-  // that claim was false until this fix; the field was never selected or
-  // rendered here.
   const { data: sessionRequests } = await admin
     .from("session_requests")
     .select("id, session_type, status, requested_at, scheduled_at, completed_at, phone_snapshot, reviewer_notes")
@@ -122,58 +169,59 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
     .eq("company_id", companyId)
     .order("id", { ascending: false });
 
-  // Real basic visibility for "Does this apply to us?" feedback (confirmed
-  // 2026-09-03, direct founder request) — this data was genuinely
-  // write-only before now: submitFindingNotApplicableFeedback() inserts a
-  // row, and the only prior read (loadFlaggedFindingIds()) exists purely
-  // to re-render the SAME client's own button state on reload, never
-  // surfaced to any reviewer. finding_title is stored verbatim on the row
-  // itself (confirmed by reading the migration directly), so this is a
-  // single-table query — no join back to lens_findings/module_findings
-  // needed. Extended here rather than a new standalone page — genuinely
-  // low-volume data, same reasoning already applied to payment records
-  // and regulatory-content-review status living on existing pages instead
-  // of new ones.
-  const { data: findingFeedback } = await admin
+  // Real finding feedback, resolved to its real parent request (confirmed
+  // 2026-09-08) — finding_feedback only stores finding_source/finding_id,
+  // no direct link; resolved via two small, batched lookups, no schema
+  // change needed. See this file's own top docblock.
+  const { data: rawFeedback } = await admin
     .from("finding_feedback")
-    .select("id, finding_source, finding_title, created_at")
+    .select("id, finding_source, finding_id, finding_title, created_at")
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
+  const lensFeedbackIds = (rawFeedback ?? []).filter((f) => f.finding_source === "lens_finding").map((f) => f.finding_id as string);
+  const moduleFeedbackIds = (rawFeedback ?? []).filter((f) => f.finding_source === "module_finding").map((f) => f.finding_id as string);
+  const [{ data: lensFindingsForFeedback }, { data: moduleFindingsForFeedback }] = await Promise.all([
+    lensFeedbackIds.length > 0
+      ? admin.from("lens_findings").select("id, report_id").in("id", lensFeedbackIds)
+      : Promise.resolve({ data: [] as { id: string; report_id: string }[] }),
+    moduleFeedbackIds.length > 0
+      ? admin.from("module_findings").select("id, request_id").in("id", moduleFeedbackIds)
+      : Promise.resolve({ data: [] as { id: string; request_id: string }[] }),
+  ]);
+  const reportIdByFindingId = new Map((lensFindingsForFeedback ?? []).map((f) => [f.id, f.report_id]));
+  const moduleRequestIdByFindingId = new Map((moduleFindingsForFeedback ?? []).map((f) => [f.id, f.request_id]));
+  const feedbackByEntity = new Map<string, FeedbackRow[]>();
+  for (const f of rawFeedback ?? []) {
+    const isLens = f.finding_source === "lens_finding";
+    const parentId = isLens ? reportIdByFindingId.get(f.finding_id as string) : moduleRequestIdByFindingId.get(f.finding_id as string);
+    if (!parentId) continue; // orphaned feedback (parent finding/report since deleted) — skip gracefully, don't crash the page over stale data.
+    const key = `${isLens ? "report" : "module_request"}:${parentId}`;
+    feedbackByEntity.set(key, [...(feedbackByEntity.get(key) ?? []), f as FeedbackRow]);
+  }
 
-  // Payment status (confirmed 2026-08-25) — only paid re-audits carry a
-  // real payment record among reports; module requests, sessions, and
-  // sprints are all real, priced items regardless.
-  const paidReportIds = (reports ?? []).filter((r) => r.rerun_of_report_id !== null).map((r) => r.id as string);
-  const [reportPayments, modulePayments, sessionPayments, sprintPayments, reportServiceStatus, sessionServiceStatus, sprintServiceStatus, pricing, reviewerNotes] =
-    await Promise.all([
-      loadPaymentRecords("report", paidReportIds),
-      loadPaymentRecords("module_request", (moduleRequests ?? []).map((m) => m.id as string)),
-      loadPaymentRecords("session_request", (sessionRequests ?? []).map((s) => s.id as string)),
-      loadPaymentRecords("execution_sprint", (executionSprints ?? []).map((s) => s.id as string)),
-      // Service status (confirmed 2026-09-05) — same batching pattern as
-      // payment records above, kept in the same Promise.all rather than a
-      // second round-trip. module_request removed here (confirmed
-      // 2026-09-07) — ServiceStatusRow no longer renders for modules.
-      loadServiceStatusRecords("report", paidReportIds),
-      loadServiceStatusRecords("session_request", (sessionRequests ?? []).map((s) => s.id as string)),
-      loadServiceStatusRecords("execution_sprint", (executionSprints ?? []).map((s) => s.id as string)),
-      listPricing(),
-      listReviewerNotes(companyId),
-    ]);
+  // Service status (Contact Sales' own real flow) and pricing — unchanged from before this reorganization.
+  const [sessionServiceStatus, pricing, allReviewerNotes] = await Promise.all([
+    loadServiceStatusRecords("session_request", (sessionRequests ?? []).map((s) => s.id as string)),
+    listPricing(),
+    listReviewerNotes(companyId),
+  ]);
   const pricingByKey = new Map(pricing.map((p) => [p.itemKey, p.priceAmount]));
 
-  const activePendingSubmission = await loadActivePendingEvidenceSubmission(companyId);
+  // Real per-request note grouping (confirmed 2026-09-08) — general notes
+  // (relatedEntityType/Id both null) go to Group 3; every other note is
+  // keyed by its own real association for Group 2's per-unit panels.
+  const notesByEntity = new Map<string, ReviewerNote[]>();
+  const generalNotes: ReviewerNote[] = [];
+  for (const n of allReviewerNotes) {
+    if (n.relatedEntityType && n.relatedEntityId) {
+      const key = `${n.relatedEntityType}:${n.relatedEntityId}`;
+      notesByEntity.set(key, [...(notesByEntity.get(key) ?? []), n]);
+    } else {
+      generalNotes.push(n);
+    }
+  }
 
-  // Canceled re-audit request history (confirmed 2026-09-07) — a real gap
-  // found while wiring this up: loadActivePendingEvidenceSubmission()
-  // deliberately excludes 'canceled' rows (they're not "active" — see
-  // that function's own docblock), but unified-requests.ts's new
-  // reaudit_pending row type links a canceled re-audit request straight
-  // to THIS page. Without this query, that link would land a reviewer on
-  // a page with zero trace of the very request they clicked through to
-  // see. Scoped to 'canceled' specifically — completed/active rows are
-  // already covered by the Core Audit reports card and the "Current
-  // evidence status" card above, respectively.
+  const activePendingSubmission = await loadActivePendingEvidenceSubmission(companyId);
   const { data: canceledReaudits } = await admin
     .from("pending_evidence_submissions")
     .select("id, submitted_at, cancellation_reason")
@@ -181,346 +229,282 @@ export default async function ReviewerCompanyPage({ params }: { params: Promise<
     .eq("status", "canceled")
     .order("submitted_at", { ascending: false });
 
+  function fmt(d: string | null | undefined): string {
+    return d ? new Date(d).toLocaleDateString() : "—";
+  }
+
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <Link href="/queue" className="mb-4 inline-block text-sm text-neutral-500 hover:text-neutral-700 hover:underline dark:text-neutral-400 dark:hover:text-neutral-200">
         ← Back to queue
       </Link>
-      <h1 className="mb-6 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">{company.name}</h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">{company.name}</h1>
+        {/* Pilot client — a company-level reviewer flag, kept compact,
+            placed here rather than inside any of the 3 named groups
+            (disclosed judgment call, see this file's own top docblock). */}
+        <form action={setPilotClientAction.bind(null, company.id as string, !company.is_pilot_client)}>
+          <Button variant="secondary" className="px-2 py-1 text-xs">
+            {company.is_pilot_client ? "★ Pilot client (unmark)" : "☆ Mark as pilot client"}
+          </Button>
+        </form>
+      </div>
 
-      <div className="space-y-6">
-        {/* Real, reviewer-set flag (confirmed 2026-08-24) — feeds the
-            automated pilot testimonial/referral ask on delivery. Not
-            auto-derived (see the migration's own docblock for why). */}
-        <Card title="Pilot client">
-          <p className="mb-2 text-sm text-neutral-600 dark:text-neutral-400">
-            {company.is_pilot_client
-              ? "Marked as a pilot client — testimonial/referral asks fire on every delivery for this company."
-              : "Not marked as a pilot client — only the general feedback ask fires on delivery."}
-          </p>
-          <form action={setPilotClientAction.bind(null, company.id as string, !company.is_pilot_client)}>
-            <Button variant="secondary" className="px-2 py-1 text-xs">
-              {company.is_pilot_client ? "Unmark as pilot client" : "Mark as pilot client"}
-            </Button>
-          </form>
-        </Card>
-
-        {/* Reviewer Notes — per-company structured list (confirmed
-            2026-09-05, direct founder decision). See reviewer_notes'
-            own migration docblock for the two-way-creation/one-way-
-            editing design shared with the Service status fields below. */}
-        <Card title="Reviewer notes">
-          <ReviewerNotesPanel companyId={companyId} notes={reviewerNotes} />
-        </Card>
-
-        <Card title="Business profile">
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            {(
-              [
-                ["Industry", company.industry],
-                ["Business model", company.business_model],
-                ["Stage", company.stage],
-                ["Employee count", company.employee_count],
-                ["Revenue band", company.revenue_range_band],
-                ["Customer type", company.customer_type],
-                ["Website", company.website_url],
-                ["Registration country", company.registration_country],
-                ["UAE free zone", company.uae_free_zone],
-                ["Customer markets", (company.customer_market_countries as string[] | null)?.join(", ")],
-              ] as const
-            ).map(([label, value]) => (
-              <div key={label}>
-                <dt className="text-neutral-500 dark:text-neutral-400">{label}</dt>
-                <dd className={value ? "text-neutral-800 dark:text-neutral-200" : "italic text-neutral-400"}>{value || "Not provided"}</dd>
-              </div>
-            ))}
-            {company.team_structure_summary && (
-              <div className="sm:col-span-2">
-                <dt className="text-neutral-500 dark:text-neutral-400">Team structure</dt>
-                <dd className="text-neutral-800 dark:text-neutral-200">{company.team_structure_summary}</dd>
+      <div className="space-y-8">
+        {/* ── Group 1: Company Profile ── */}
+        <section className="space-y-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Company Profile</h2>
+          <Card title="Business profile">
+            <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              {(
+                [
+                  ["Industry", company.industry],
+                  ["Business model", company.business_model],
+                  ["Stage", company.stage],
+                  ["Employee count", company.employee_count],
+                  ["Revenue band", company.revenue_range_band],
+                  ["Customer type", company.customer_type],
+                  ["Website", company.website_url],
+                  ["Registration country", company.registration_country],
+                  ["UAE free zone", company.uae_free_zone],
+                  ["Customer markets", (company.customer_market_countries as string[] | null)?.join(", ")],
+                ] as const
+              ).map(([label, value]) => (
+                <div key={label}>
+                  <dt className="text-neutral-500 dark:text-neutral-400">{label}</dt>
+                  <dd className={value ? "text-neutral-800 dark:text-neutral-200" : "italic text-neutral-400"}>{value || "Not provided"}</dd>
+                </div>
+              ))}
+              {company.team_structure_summary && (
+                <div className="sm:col-span-2">
+                  <dt className="text-neutral-500 dark:text-neutral-400">Team structure</dt>
+                  <dd className="text-neutral-800 dark:text-neutral-200">{company.team_structure_summary}</dd>
+                </div>
+              )}
+            </dl>
+            {company.difc_stable_arrangements && (
+              <div className={`mt-3 rounded-md p-2 text-xs ${company.difc_stable_arrangements === "not_sure" ? "bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200" : "text-neutral-500 dark:text-neutral-400"}`}>
+                DIFC stable arrangements: <span className="font-medium">{company.difc_stable_arrangements === "not_sure" ? "Not sure — flagged for follow-up" : company.difc_stable_arrangements}</span>
               </div>
             )}
-          </dl>
-          {/* DIFC "stable arrangements" reviewer flag (confirmed
-              2026-09-04, items 6+7) — "not sure" is the one answer that
-              needs reviewer attention, so it gets a distinct visual flag
-              rather than blending in with the neutral dl above. */}
-          {company.difc_stable_arrangements && (
-            <div className={`mt-3 rounded-md p-2 text-xs ${company.difc_stable_arrangements === "not_sure" ? "bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200" : "text-neutral-500 dark:text-neutral-400"}`}>
-              DIFC stable arrangements: <span className="font-medium">{company.difc_stable_arrangements === "not_sure" ? "Not sure — flagged for follow-up" : company.difc_stable_arrangements}</span>
-            </div>
-          )}
-        </Card>
+          </Card>
 
-        <Card title="Goal">
-          {goals && goals.length > 0 ? (
-            <ul className="space-y-2 text-sm">
-              {goals.map((g) => (
-                <li key={g.id} className="text-neutral-800 dark:text-neutral-200">
-                  <span className="font-medium">{GOAL_LABELS[g.primary_goal as PrimaryGoal] ?? g.primary_goal}</span>
-                  {g.secondary_goal && (
-                    <span className="text-neutral-500 dark:text-neutral-400"> · also: {GOAL_LABELS[g.secondary_goal as PrimaryGoal] ?? g.secondary_goal}</span>
-                  )}
-                  {g.urgency_level && <span className="text-neutral-500 dark:text-neutral-400"> · urgency: {g.urgency_level}</span>}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">No goal set yet.</p>
-          )}
-        </Card>
-
-        <Card title="Current evidence status">
-          {activePendingSubmission ? (
-            <p className="text-sm text-neutral-800 dark:text-neutral-200">
-              {/* Payment-aware label (confirmed 2026-09-07) — replaces the
-                  flat SUBMISSION_STAGE_LABELS lookup, which showed
-                  "Awaiting payment" for a paid re-audit's window-closed
-                  state regardless of whether a reviewer had actually
-                  checked payment yet. computeDisplayStatus() produces the
-                  identical string to SUBMISSION_STAGE_LABELS for every
-                  other stage (verified: humanizeStatus's sentence-case
-                  transform matches that map's own hand-written casing
-                  exactly), so this is a pure fix, not a wording change
-                  anywhere but the one ambiguous case. */}
-              {computeDisplayStatus(activePendingSubmission.stage, activePendingSubmission.paymentStatus)}
-              {activePendingSubmission.stage === "editing" && (
-                <span className="text-neutral-500 dark:text-neutral-400"> · edit window closes {new Date(activePendingSubmission.editWindowClosesAt).toLocaleString()}</span>
-              )}
-            </p>
-          ) : (
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">No evidence submission currently in progress.</p>
-          )}
-          {/* Canceled re-audit request history (confirmed 2026-09-07) —
-              see the canceledReaudits query above for why this is a
-              separate query from the "active" one, not folded into it. */}
-          {canceledReaudits && canceledReaudits.length > 0 && (
-            <ul className="mt-3 space-y-1 border-t border-neutral-100 pt-2 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
-              {canceledReaudits.map((c) => (
-                <li key={c.id}>
-                  Canceled re-audit request (submitted {c.submitted_at ? new Date(c.submitted_at as string).toLocaleDateString() : "—"})
-                  {c.cancellation_reason && <> — reason: {c.cancellation_reason as string}</>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card title="Core Audit reports">
-          {reports && reports.length > 0 ? (
-            <ul className="space-y-2 text-sm">
-              {reports.map((r) => {
-                const isPaidReAudit = r.rerun_of_report_id !== null;
-                return (
-                  <li key={r.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0 dark:border-neutral-800">
-                    <div className="flex items-center justify-between">
-                      <span className="flex flex-wrap items-center gap-2 text-neutral-800 dark:text-neutral-200">
-                        <TypeBadge type="core_audit" />
-                        {humanizeStatus(r.status as string)} · submitted {r.submitted_at ? new Date(r.submitted_at).toLocaleDateString() : "—"}
-                        {r.delivered_at && <> · delivered {new Date(r.delivered_at).toLocaleDateString()}</>}
-                        {isPaidReAudit && <span className="text-xs text-neutral-500 dark:text-neutral-400">(paid re-audit)</span>}
-                      </span>
-                      <Link href={`/review/${r.id}`} className="text-xs font-medium text-accent hover:underline">
-                        Open
-                      </Link>
-                    </div>
-                    {/* Only paid re-audits carry a real payment record — a
-                        first, free audit has nothing to pay. */}
-                    {isPaidReAudit && (
-                      <>
-                        <PaymentStatusRow companyId={companyId} entityType="report" entityId={r.id as string} record={reportPayments.get(r.id as string)} />
-                        <ServiceStatusRow
-                          companyId={companyId}
-                          entityType="report"
-                          entityId={r.id as string}
-                          defaultPrice={null}
-                          record={reportServiceStatus.get(r.id as string)}
-                        />
-                      </>
+          <Card title="Goal">
+            {goals && goals.length > 0 ? (
+              <ul className="space-y-2 text-sm">
+                {goals.map((g) => (
+                  <li key={g.id} className="text-neutral-800 dark:text-neutral-200">
+                    <span className="font-medium">{GOAL_LABELS[g.primary_goal as PrimaryGoal] ?? g.primary_goal}</span>
+                    {g.secondary_goal && (
+                      <span className="text-neutral-500 dark:text-neutral-400"> · also: {GOAL_LABELS[g.secondary_goal as PrimaryGoal] ?? g.secondary_goal}</span>
                     )}
+                    {g.urgency_level && <span className="text-neutral-500 dark:text-neutral-400"> · urgency: {g.urgency_level}</span>}
                   </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">No reports yet.</p>
-          )}
-        </Card>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">No goal set yet.</p>
+            )}
+          </Card>
+        </section>
 
-        <Card title="Module requests">
-          {moduleRequests && moduleRequests.length > 0 ? (
-            <ul className="space-y-2 text-sm">
-              {moduleRequests.map((m) => (
-                <li key={m.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0 dark:border-neutral-800">
-                  <div className="flex items-center justify-between">
-                    <span className="flex flex-wrap items-center gap-2 text-neutral-800 dark:text-neutral-200">
-                      <TypeBadge type={moduleTypeToItemType(m.module_type as string)} />
-                      {/* Payment-aware label (confirmed 2026-09-07) —
-                          replaces the old plain humanizeStatus(m.status),
-                          which showed "Awaiting Payment" regardless of
-                          whether a reviewer had actually checked yet. */}
-                      {computeDisplayStatus(m.status as string, m.payment_status as string | null)} ·{" "}
-                      {m.created_at ? new Date(m.created_at).toLocaleDateString() : "—"}
-                    </span>
-                    <Link href={`/review-module/${m.id}`} className="text-xs font-medium text-accent hover:underline">
-                      Open
-                    </Link>
-                  </div>
-                  {m.cancellation_reason && (
-                    <p className="mt-0.5 text-xs italic text-neutral-500 dark:text-neutral-400">Cancellation reason: {m.cancellation_reason as string}</p>
-                  )}
-                  {/* ServiceStatusRow removed from module requests specifically
-                      (confirmed 2026-09-07) — modules now have their own real,
-                      automated payment-gate + mandatory review pipeline
-                      (status/payment_status columns, cancelModuleRequest());
-                      the generic manual Requested/Booked/Scheduled/Completed/
-                      Canceled overlay was redundant tracking of the same
-                      thing. PaymentStatusRow (a genuinely different, older
-                      manual invoicing tracker) stays untouched here. */}
-                  <PaymentStatusRow companyId={companyId} entityType="module_request" entityId={m.id as string} record={modulePayments.get(m.id as string)} />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">No module requests yet.</p>
-          )}
-        </Card>
+        {/* ── Group 2: Activity & Requests, one self-contained unit per real request ── */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Activity &amp; Requests</h2>
 
-        {/* Sessions & Concierge requests, and Execution Sprints (confirmed
-            2026-08-25, direct founder request) — closes the real gap: this
-            page previously only showed Core Audit reports and module
-            requests, not the full picture of every request type for this
-            company. */}
-        <Card title="Sessions & Concierge requests">
-          {sessionRequests && sessionRequests.length > 0 ? (
-            <ul className="space-y-2 text-sm">
-              {sessionRequests.map((s) => {
-                const isContactSales = isContactSalesSessionType(s.session_type as string);
-                return (
-                  <li key={s.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0 dark:border-neutral-800">
-                    {isContactSales ? (
-                      // Contact Sales (Concierge/Training & Advisory), confirmed
-                      // 2026-09-07 — service_status_records is now the ONE,
-                      // authoritative status source for these two types.
-                      // session_requests.status is intentionally left
-                      // untouched/frozen at 'requested' going forward (its own
-                      // Schedule/Complete/Decline mechanism no longer applies
-                      // here — see /queue's own Session requests panel, which
-                      // now excludes these two types for the same reason), so
-                      // it's deliberately NOT shown here anymore — the real
-                      // status lives entirely in ContactSalesStatusRow below.
-                      <span className="flex flex-wrap items-center gap-2 text-neutral-800 dark:text-neutral-200">
-                        <TypeBadge type={sessionTypeToItemType(s.session_type as string)} />
-                        requested {s.requested_at ? new Date(s.requested_at).toLocaleDateString() : "—"}
-                      </span>
-                    ) : (
-                      <span className="flex flex-wrap items-center gap-2 text-neutral-800 dark:text-neutral-200">
-                        <TypeBadge type={sessionTypeToItemType(s.session_type as string)} />
-                        {SESSION_STATUS_LABELS[s.status as string] ?? humanizeStatus(s.status as string)} · requested{" "}
-                        {s.requested_at ? new Date(s.requested_at).toLocaleDateString() : "—"}
-                        {s.scheduled_at && <> · scheduled {new Date(s.scheduled_at).toLocaleString()}</>}
-                        {s.completed_at && <> · completed {new Date(s.completed_at).toLocaleDateString()}</>}
-                      </span>
-                    )}
-                    {/* Phone snapshot (confirmed 2026-09-03) — the number on file at request time, not a live profile reference. */}
-                    {s.phone_snapshot && <p className="text-xs text-neutral-500 dark:text-neutral-400">Phone: {s.phone_snapshot as string}</p>}
-                    {!isContactSales && s.reviewer_notes && (
-                      <p className="text-xs italic text-neutral-500 dark:text-neutral-400">
-                        {s.status === "declined" ? "Cancellation reason" : "Reviewer notes"}: {s.reviewer_notes as string}
-                      </p>
-                    )}
-                    {isContactSales ? (
-                      <ContactSalesStatusRow
-                        companyId={companyId}
-                        entityId={s.id as string}
-                        defaultPrice={
-                          SESSION_TYPE_PRICING_KEY[s.session_type as string] ? (pricingByKey.get(SESSION_TYPE_PRICING_KEY[s.session_type as string]) ?? null) : null
-                        }
-                        record={sessionServiceStatus.get(s.id as string)}
-                      />
-                    ) : (
-                      <>
-                        <PaymentStatusRow companyId={companyId} entityType="session_request" entityId={s.id as string} record={sessionPayments.get(s.id as string)} />
-                        <ServiceStatusRow
-                          companyId={companyId}
-                          entityType="session_request"
-                          entityId={s.id as string}
-                          defaultPrice={
-                            SESSION_TYPE_PRICING_KEY[s.session_type as string] ? (pricingByKey.get(SESSION_TYPE_PRICING_KEY[s.session_type as string]) ?? null) : null
-                          }
-                          record={sessionServiceStatus.get(s.id as string)}
-                        />
-                      </>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">No session or Concierge requests yet.</p>
-          )}
-        </Card>
-
-        {/* Real basic visibility for "Does this apply to us?" feedback
-            (confirmed 2026-09-03) — see the finding_feedback query above
-            for the full "this was write-only before now" context. */}
-        <Card title="Finding feedback" subtitle={'Client-flagged "Does this apply to us?" responses.'}>
-          {findingFeedback && findingFeedback.length > 0 ? (
-            <ul className="space-y-2 text-sm">
-              {findingFeedback.map((row) => (
-                <li key={row.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0 dark:border-neutral-800">
-                  <span className="text-neutral-800 dark:text-neutral-200">{row.finding_title as string}</span>
-                  <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">
-                    ({row.finding_source === "module_finding" ? "module finding" : "core audit finding"}) · flagged{" "}
-                    {new Date(row.created_at as string).toLocaleDateString()}
+          {/* In-flight re-audit, pre-payment — no reports row exists yet, so no notes/feedback section (nothing real to attach them to). Always expanded — it's inherently active if it exists at all. */}
+          {activePendingSubmission && (
+            <RequestDetailsUnit
+              expanded
+              summary={
+                <span className="flex flex-wrap items-center gap-2">
+                  <TypeBadge type="core_audit" />
+                  <span className="font-medium text-neutral-800 dark:text-neutral-200">
+                    {computeDisplayStatus(activePendingSubmission.stage, activePendingSubmission.paymentStatus)}
                   </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">No findings flagged &quot;doesn&apos;t apply&quot; yet.</p>
-          )}
-        </Card>
-
-        <Card title="Execution Sprints">
-          {executionSprints && executionSprints.length > 0 ? (
-            <ul className="space-y-2 text-sm">
-              {executionSprints.map((s) => (
-                <li key={s.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0 dark:border-neutral-800">
-                  <div className="flex items-center justify-between">
-                    <span className="flex flex-wrap items-center gap-2 text-neutral-800 dark:text-neutral-200">
-                      <TypeBadge type="execution_sprint" />
-                      {/* Payment-aware label (confirmed 2026-09-07) — same
-                          "awaiting_payment is ambiguous" fix as modules
-                          above; sprint_status also gained a genuine
-                          'awaiting_payment' value (2026-09-07, unified flow
-                          spec) alongside the pre-existing 'canceled'. */}
-                      {computeDisplayStatus(s.status as string, s.payment_status as string | null)}
-                      {s.start_date && <> · started {s.start_date}</>}
-                      {s.target_end_date && <> · target end {s.target_end_date}</>}
-                    </span>
-                    <Link href={`/review-sprint/${s.id}`} className="text-xs font-medium text-accent hover:underline">
-                      Open
-                    </Link>
-                  </div>
-                  {s.cancellation_reason && (
-                    <p className="mt-0.5 text-xs italic text-neutral-500 dark:text-neutral-400">Cancellation reason: {s.cancellation_reason as string}</p>
+                  {activePendingSubmission.stage === "editing" && (
+                    <span className="text-neutral-500 dark:text-neutral-400">· edit window closes {new Date(activePendingSubmission.editWindowClosesAt).toLocaleString()}</span>
                   )}
-                  <PaymentStatusRow companyId={companyId} entityType="execution_sprint" entityId={s.id as string} record={sprintPayments.get(s.id as string)} />
-                  <ServiceStatusRow
-                    companyId={companyId}
-                    entityType="execution_sprint"
-                    entityId={s.id as string}
-                    defaultPrice={pricingByKey.get("execution_sprint") ?? null}
-                    record={sprintServiceStatus.get(s.id as string)}
-                  />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">No Execution Sprints yet.</p>
+                </span>
+              }
+            >
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">No reviewer-note or feedback section yet — this re-audit hasn&apos;t produced a real report to attach either to.</p>
+            </RequestDetailsUnit>
           )}
-        </Card>
+          {canceledReaudits?.map((c) => (
+            <RequestDetailsUnit
+              key={c.id}
+              expanded={false}
+              summary={
+                <span className="flex flex-wrap items-center gap-2">
+                  <TypeBadge type="core_audit" />
+                  <span className="font-medium text-neutral-800 dark:text-neutral-200">Canceled re-audit request</span>
+                  <span className="text-neutral-500 dark:text-neutral-400">· submitted {fmt(c.submitted_at as string)}</span>
+                </span>
+              }
+            >
+              {c.cancellation_reason && <p className="text-xs italic text-neutral-500 dark:text-neutral-400">Reason: {c.cancellation_reason as string}</p>}
+            </RequestDetailsUnit>
+          ))}
+
+          {/* Core Audit reports + re-audits — same `reports` table, distinguished by rerun_of_report_id. */}
+          {(reports ?? []).map((r) => {
+            const isPaidReAudit = r.rerun_of_report_id !== null;
+            const kind = isPaidReAudit ? "reaudit" : "report";
+            return (
+              <RequestDetailsUnit
+                key={r.id}
+                expanded={!isTerminal(kind === "reaudit" ? "reaudit" : "report", r.status as string)}
+                summary={
+                  <span className="flex flex-wrap items-center gap-2">
+                    <TypeBadge type="core_audit" />
+                    <span className="font-medium text-neutral-800 dark:text-neutral-200">{isPaidReAudit ? "Re-audit" : "Core Audit"}</span>
+                    <span className="text-neutral-500 dark:text-neutral-400">
+                      {humanizeStatus(r.status as string)} · submitted {fmt(r.submitted_at as string)}
+                      {r.delivered_at && <> · delivered {fmt(r.delivered_at as string)}</>}
+                    </span>
+                    <Link href={`/review/${r.id}`} className="ml-auto text-xs font-medium text-accent hover:underline">
+                      Open →
+                    </Link>
+                  </span>
+                }
+              >
+                <NotesAndFeedback companyId={companyId} entityType="report" entityId={r.id as string} notesByEntity={notesByEntity} feedbackByEntity={feedbackByEntity} />
+              </RequestDetailsUnit>
+            );
+          })}
+
+          {/* Module requests (Tender Readiness / AI Reliability / Data Protection). */}
+          {(moduleRequests ?? []).map((m) => {
+            const meta = MODULE_META[m.module_type as ModuleType];
+            const price = meta ? pricingByKey.get(meta.pricingKey) : undefined;
+            return (
+              <RequestDetailsUnit
+                key={m.id}
+                expanded={!isTerminal("module", m.status as string)}
+                summary={
+                  <span className="flex flex-wrap items-center gap-2">
+                    <TypeBadge type={moduleTypeToItemType(m.module_type as string)} />
+                    <span className="font-medium text-neutral-800 dark:text-neutral-200">{meta?.label ?? m.module_type}</span>
+                    <span className="text-neutral-500 dark:text-neutral-400">
+                      {computeDisplayStatus(m.status as string, m.payment_status as string | null)} · {fmt(m.created_at as string)}
+                      {price != null && <> · £{price.toLocaleString()}</>}
+                    </span>
+                    <Link href={`/review-module/${m.id}`} className="ml-auto text-xs font-medium text-accent hover:underline">
+                      Open →
+                    </Link>
+                  </span>
+                }
+              >
+                {m.cancellation_reason && <p className="text-xs italic text-neutral-500 dark:text-neutral-400">Cancellation reason: {m.cancellation_reason as string}</p>}
+                <NotesAndFeedback companyId={companyId} entityType="module_request" entityId={m.id as string} notesByEntity={notesByEntity} feedbackByEntity={feedbackByEntity} />
+              </RequestDetailsUnit>
+            );
+          })}
+
+          {/* Execution Sprints — findings don't apply here (no lens/module findings tied to a sprint), so no feedback section, just status/price/notes. */}
+          {(executionSprints ?? []).map((s) => (
+            <RequestDetailsUnit
+              key={s.id}
+              expanded={!isTerminal("sprint", s.status as string)}
+              summary={
+                <span className="flex flex-wrap items-center gap-2">
+                  <TypeBadge type="execution_sprint" />
+                  <span className="font-medium text-neutral-800 dark:text-neutral-200">Execution Sprint</span>
+                  <span className="text-neutral-500 dark:text-neutral-400">
+                    {computeDisplayStatus(s.status as string, s.payment_status as string | null)}
+                    {s.start_date && <> · started {s.start_date}</>}
+                    {s.target_end_date && <> · target end {s.target_end_date}</>}
+                    {pricingByKey.get("execution_sprint") != null && <> · £{pricingByKey.get("execution_sprint")!.toLocaleString()}</>}
+                  </span>
+                  <Link href={`/review-sprint/${s.id}`} className="ml-auto text-xs font-medium text-accent hover:underline">
+                    Open →
+                  </Link>
+                </span>
+              }
+            >
+              {s.cancellation_reason && <p className="text-xs italic text-neutral-500 dark:text-neutral-400">Cancellation reason: {s.cancellation_reason as string}</p>}
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Reviewer notes for this request</p>
+                <ReviewerNotesPanel
+                  companyId={companyId}
+                  notes={notesByEntity.get(`execution_sprint:${s.id}`) ?? []}
+                  relatedEntityType="execution_sprint"
+                  relatedEntityId={s.id as string}
+                  addLabel="+ Add a note about this request"
+                />
+              </div>
+            </RequestDetailsUnit>
+          ))}
+
+          {/* Sessions & Concierge/Training & Advisory requests. Contact Sales keeps its own real ContactSalesStatusRow (status/price/cancel/refund); non-Contact-Sales sessions render their own plain status line (no real price for a genuinely free session type). */}
+          {(sessionRequests ?? []).map((s) => {
+            const isContactSales = isContactSalesSessionType(s.session_type as string);
+            const csRecord = sessionServiceStatus.get(s.id as string);
+            const terminal = isContactSales ? isTerminal("session", csRecord?.status ?? "requested") : isTerminal("session", s.status as string);
+            const label = sessionTypeToItemType(s.session_type as string);
+            return (
+              <RequestDetailsUnit
+                key={s.id}
+                expanded={!terminal}
+                summary={
+                  <span className="flex flex-wrap items-center gap-2">
+                    <TypeBadge type={label} />
+                    {isContactSales ? (
+                      <span className="text-neutral-500 dark:text-neutral-400">requested {fmt(s.requested_at as string)}</span>
+                    ) : (
+                      <span className="text-neutral-500 dark:text-neutral-400">
+                        {SESSION_STATUS_LABELS[s.status as string] ?? humanizeStatus(s.status as string)} · requested {fmt(s.requested_at as string)}
+                        {s.scheduled_at && <> · scheduled {new Date(s.scheduled_at as string).toLocaleString()}</>}
+                        {s.completed_at && <> · completed {fmt(s.completed_at as string)}</>}
+                      </span>
+                    )}
+                  </span>
+                }
+              >
+                {s.phone_snapshot && <p className="text-xs text-neutral-500 dark:text-neutral-400">Phone: {s.phone_snapshot as string}</p>}
+                {!isContactSales && s.reviewer_notes && (
+                  <p className="text-xs italic text-neutral-500 dark:text-neutral-400">
+                    {s.status === "declined" ? "Cancellation reason" : "Reviewer notes"}: {s.reviewer_notes as string}
+                  </p>
+                )}
+                {isContactSales && (
+                  <ContactSalesStatusRow
+                    companyId={companyId}
+                    entityId={s.id as string}
+                    defaultPrice={SESSION_TYPE_PRICING_KEY[s.session_type as string] ? (pricingByKey.get(SESSION_TYPE_PRICING_KEY[s.session_type as string]) ?? null) : null}
+                    record={csRecord}
+                  />
+                )}
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">Reviewer notes for this request</p>
+                  <ReviewerNotesPanel
+                    companyId={companyId}
+                    notes={notesByEntity.get(`session_request:${s.id}`) ?? []}
+                    relatedEntityType="session_request"
+                    relatedEntityId={s.id as string}
+                    addLabel="+ Add a note about this request"
+                  />
+                </div>
+              </RequestDetailsUnit>
+            );
+          })}
+
+          {!activePendingSubmission &&
+            (canceledReaudits?.length ?? 0) === 0 &&
+            (reports?.length ?? 0) === 0 &&
+            (moduleRequests?.length ?? 0) === 0 &&
+            (executionSprints?.length ?? 0) === 0 &&
+            (sessionRequests?.length ?? 0) === 0 && <p className="text-sm text-neutral-500 dark:text-neutral-400">No requests yet.</p>}
+        </section>
+
+        {/* ── Group 3: General Reviewer Notes — no request association ── */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">General Reviewer Notes</h2>
+          <Card subtitle="Genuinely general observations about this client — not tied to any single request. Notes tied to a specific request appear under that request above.">
+            <ReviewerNotesPanel companyId={companyId} notes={generalNotes} />
+          </Card>
+        </section>
       </div>
     </div>
   );

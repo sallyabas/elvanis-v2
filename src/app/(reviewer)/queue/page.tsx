@@ -8,6 +8,7 @@ import { listDeliveryFeedback } from "@/lib/reviewer/delivery-feedback";
 import { listOpenContactRequests } from "@/lib/reviewer/contact-requests";
 import { computeSubmissionDisplayStage, SUBMISSION_STAGE_LABELS } from "@/lib/evidence/submission-status";
 import { getSettingNumber } from "@/lib/app-settings";
+import { AWAITING_PAYMENT_LABEL } from "@/lib/reviewer/unified-requests";
 import { type ItemType, TypeBadge, moduleTypeToItemType, sessionTypeToItemType } from "@/lib/item-type-badge";
 import { SESSION_STATUS_LABELS } from "@/lib/format";
 import {
@@ -817,10 +818,16 @@ export default async function ReviewerQueuePage() {
                         flow spec) — distinguishes "nothing checked yet" from
                         "confirmed unpaid" at a glance; the client's own
                         Dashboard shows the simpler three-word vocabulary. */}
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isUnpaid ? "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300" : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"}`}
-                    >
-                      {isUnpaid ? "Unpaid" : "Not yet checked"}
+                    {/* One label regardless of checked state (confirmed
+                        2026-09-08, final status-flow spec) — the earlier
+                        "Not yet checked"/"Unpaid" split is gone; this is
+                        now genuinely one status, always shown the same
+                        way. The "Mark as awaiting payment" action below
+                        (renamed from "Mark as unpaid") still exists and
+                        still writes payment_status:'unpaid' internally —
+                        only its DISPLAY no longer changes anything. */}
+                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                      {AWAITING_PAYMENT_LABEL}
                     </span>
                     <span className="text-neutral-500 dark:text-neutral-400">· submitted {new Date(p.submittedAt).toLocaleString()}</span>
                   </span>
@@ -833,7 +840,7 @@ export default async function ReviewerQueuePage() {
                     {!isUnpaid && (
                       <form action={markReaduitUnpaidAction.bind(null, p.id)}>
                         <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
-                          Mark as unpaid
+                          Mark as awaiting payment
                         </Button>
                       </form>
                     )}
@@ -893,10 +900,16 @@ export default async function ReviewerQueuePage() {
                     {/* Reviewer-facing detail (confirmed 2026-09-07, unified
                         flow spec) — distinguishes "nothing checked yet"
                         from "confirmed unpaid" at a glance. */}
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isUnpaid ? "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300" : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"}`}
-                    >
-                      {isUnpaid ? "Unpaid" : "Not yet checked"}
+                    {/* One label regardless of checked state (confirmed
+                        2026-09-08, final status-flow spec) — the earlier
+                        "Not yet checked"/"Unpaid" split is gone; this is
+                        now genuinely one status, always shown the same
+                        way. The "Mark as awaiting payment" action below
+                        (renamed from "Mark as unpaid") still exists and
+                        still writes payment_status:'unpaid' internally —
+                        only its DISPLAY no longer changes anything. */}
+                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                      {AWAITING_PAYMENT_LABEL}
                     </span>
                     <span className="text-neutral-500 dark:text-neutral-400">
                       · submitted {new Date(r.created_at as string).toLocaleString()}
@@ -911,7 +924,7 @@ export default async function ReviewerQueuePage() {
                     {!isUnpaid && (
                       <form action={markModuleUnpaidAction.bind(null, r.id as string)}>
                         <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
-                          Mark as unpaid
+                          Mark as awaiting payment
                         </Button>
                       </form>
                     )}
@@ -968,11 +981,12 @@ export default async function ReviewerQueuePage() {
                     <span className="text-xs text-neutral-500 dark:text-neutral-400">
                       {s.choice_mode === "elvanis_chooses" ? "Let Elvanis decide" : s.choice_mode === "client_chosen" ? "Client chose the finding" : "Reviewer-proposed"}
                     </span>
+                    {/* One label regardless of checked state (confirmed
+                        2026-09-08) — see the re-audit/module blocks above
+                        for the full reasoning. */}
                     {!needsFinding && (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isUnpaid ? "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300" : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"}`}
-                      >
-                        {isUnpaid ? "Unpaid" : "Not yet checked"}
+                      <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                        {AWAITING_PAYMENT_LABEL}
                       </span>
                     )}
                     <span className="text-neutral-500 dark:text-neutral-400">
@@ -993,7 +1007,7 @@ export default async function ReviewerQueuePage() {
                       {!isUnpaid && (
                         <form action={markSprintUnpaidAction.bind(null, s.id as string)}>
                           <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
-                            Mark as unpaid
+                            Mark as awaiting payment
                           </Button>
                         </form>
                       )}

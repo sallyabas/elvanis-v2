@@ -43,16 +43,15 @@ const COPY: Record<JourneyStatus["stage"], { title: string; body: string; ctaLab
     ctaLabel: "Check status",
     href: () => "/evidence-intake",
   },
-  // Re-audit payment gate (confirmed 2026-09-06, relabeled 2026-09-07 for
-  // the unified flow) — a real, distinct stage from queued_for_audit
-  // above: the window has closed, but analysis is deliberately withheld
-  // until payment is confirmed. This default entry covers the "nothing
-  // checked yet" case ("Submitted") — the "reviewer confirmed unpaid"
-  // case ("Awaiting payment") is a real override applied in the component
-  // body below, reading journeyStatus.paymentStatus, same treatment as
-  // "editing"'s own live countdown override.
+  // Re-audit payment gate (confirmed 2026-09-06, final wording 2026-09-08)
+  // — a real, distinct stage from queued_for_audit above: the window has
+  // closed, but analysis is deliberately withheld until payment is
+  // confirmed. This used to split into "Submitted"/"Awaiting payment"
+  // depending on whether a reviewer had checked payment
+  // (journeyStatus.paymentStatus) — that split is gone; this is now one
+  // status, shown identically either way.
   awaiting_payment: {
-    title: "Submitted",
+    title: "Awaiting Payment",
     body: "This re-audit is queued, waiting on payment confirmation — pay via the link on the evidence page, and we'll start analyzing it once it's confirmed.",
     ctaLabel: "Check status",
     href: () => "/evidence-intake",
@@ -95,20 +94,11 @@ const COPY: Record<JourneyStatus["stage"], { title: string; body: string; ctaLab
 };
 
 export function NextStepBanner({ journeyStatus }: { journeyStatus: JourneyStatus }) {
-  // Unified flow label split (confirmed 2026-09-07) — 'awaiting_payment'
-  // alone is ambiguous between "nothing checked yet" and "reviewer
-  // confirmed unpaid," which read back as two different titles
-  // ("Submitted" vs "Awaiting payment"), same split already built for
-  // modules via moduleClientStatusLabel(). journeyStatus.paymentStatus is
-  // only ever set when stage is 'awaiting_payment'.
-  const copy =
-    journeyStatus.stage === "awaiting_payment" && journeyStatus.paymentStatus === "unpaid"
-      ? {
-          ...COPY.awaiting_payment,
-          title: "Awaiting payment",
-          body: "We checked, and this re-audit hasn't been marked as paid yet — pay via the link on the evidence page, and we'll start analyzing it once it's confirmed.",
-        }
-      : COPY[journeyStatus.stage];
+  // Final status-flow spec (confirmed 2026-09-08) — 'awaiting_payment' no
+  // longer splits into two titles depending on journeyStatus.paymentStatus
+  // ("Submitted" vs "Awaiting payment"); it's genuinely one status now,
+  // always the same copy regardless of whether a reviewer has checked.
+  const copy = COPY[journeyStatus.stage];
   // Real live countdown (confirmed 2026-08-10, live testing pass) — closes
   // a real gap: this banner previously showed a one-time static message
   // with no ongoing indication of how much of the edit window was left.

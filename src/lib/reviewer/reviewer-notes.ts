@@ -1,6 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { PaymentEntityType } from "@/lib/reviewer/payment-records";
 
 /**
  * Reviewer Notes — per-company structured list (confirmed 2026-09-05,
@@ -9,6 +10,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * a person's name), and a Description. See reviewer_notes' own migration
  * docblock for the full two-way-creation/one-way-editing design shared
  * with service-status.ts.
+ *
+ * Real per-request association (confirmed 2026-09-08, item 6 of the
+ * final status-flow spec) — relatedEntityType/relatedEntityId, both
+ * nullable, added to the underlying table alongside this build. Null
+ * means "general" (Group 3 of the reorganized company page); a real pair
+ * means "tied to this specific request" (shown inline under it, Group
+ * 2). Every note created before this migration is null, genuinely —
+ * no fabricated backfill.
  */
 export interface ReviewerNote {
   id: string;
@@ -17,6 +26,8 @@ export interface ReviewerNote {
   name: string;
   description: string;
   source: "manual" | "service_status";
+  relatedEntityType: PaymentEntityType | null;
+  relatedEntityId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -28,6 +39,8 @@ interface ReviewerNoteRow {
   name: string;
   description: string;
   source: "manual" | "service_status";
+  related_entity_type: PaymentEntityType | null;
+  related_entity_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -40,6 +53,8 @@ function mapRow(row: ReviewerNoteRow): ReviewerNote {
     name: row.name,
     description: row.description,
     source: row.source,
+    relatedEntityType: row.related_entity_type,
+    relatedEntityId: row.related_entity_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -58,8 +73,20 @@ export async function listReviewerNotes(companyId: string): Promise<ReviewerNote
  * manually add new entries myself, anytime" path. entryDate defaults to
  * now when not given, since a reviewer adding a note about something
  * that just happened doesn't need to type today's date every time.
+ *
+ * relatedEntityType/relatedEntityId (confirmed 2026-09-08) — optional,
+ * both undefined means a genuinely general note (Group 3); passing both
+ * ties it to one specific request (Group 2's own per-unit note UI is the
+ * real caller for that case).
  */
-export async function addManualReviewerNote(companyId: string, name: string, description: string, entryDate?: string): Promise<void> {
+export async function addManualReviewerNote(
+  companyId: string,
+  name: string,
+  description: string,
+  entryDate?: string,
+  relatedEntityType?: PaymentEntityType,
+  relatedEntityId?: string,
+): Promise<void> {
   if (!name.trim()) throw new Error("Name is required.");
   const admin = createAdminClient();
   const { error } = await admin.from("reviewer_notes").insert({
@@ -68,6 +95,8 @@ export async function addManualReviewerNote(companyId: string, name: string, des
     name: name.trim(),
     description: description.trim(),
     source: "manual",
+    related_entity_type: relatedEntityType ?? null,
+    related_entity_id: relatedEntityId ?? null,
   });
   if (error) throw new Error(`addManualReviewerNote: ${error.message}`);
 }
@@ -76,7 +105,9 @@ export async function addManualReviewerNote(companyId: string, name: string, des
  * The one-way-editing side (confirmed 2026-09-05) — once an entry exists
  * (whether auto-created from a service-status note or added manually),
  * further changes to ITS content happen here, never by re-editing the
- * original service record that may have created it.
+ * original service record that may have created it. Deliberately doesn't
+ * touch relatedEntityType/relatedEntityId — an entry's request
+ * association is set once, at creation, same as its `source`.
  */
 export async function editReviewerNote(id: string, name: string, description: string, entryDate: string): Promise<void> {
   if (!name.trim()) throw new Error("Name is required.");
@@ -103,8 +134,21 @@ export async function deleteReviewerNote(id: string): Promise<void> {
  * trigger point" discipline, matching how every other cross-cutting
  * auto-creation elsewhere here (case_library, notifications) has exactly
  * one real call site.
+ *
+ * relatedEntityType/relatedEntityId (confirmed 2026-09-08) — both
+ * callers in service-status.ts already have the real entity in scope at
+ * the exact moment they call this; previously discarded, now threaded
+ * through so an auto-created "X — completed" note lands directly under
+ * its own request in Group 2, not floating in the general list.
  */
-export async function addServiceStatusReviewerNote(companyId: string, name: string, description: string, entryDate: string): Promise<void> {
+export async function addServiceStatusReviewerNote(
+  companyId: string,
+  name: string,
+  description: string,
+  entryDate: string,
+  relatedEntityType: PaymentEntityType,
+  relatedEntityId: string,
+): Promise<void> {
   const admin = createAdminClient();
   const { error } = await admin.from("reviewer_notes").insert({
     company_id: companyId,
@@ -112,6 +156,8 @@ export async function addServiceStatusReviewerNote(companyId: string, name: stri
     name,
     description,
     source: "service_status",
+    related_entity_type: relatedEntityType,
+    related_entity_id: relatedEntityId,
   });
   if (error) throw new Error(`addServiceStatusReviewerNote: ${error.message}`);
 }

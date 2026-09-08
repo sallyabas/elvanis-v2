@@ -39,7 +39,7 @@ export async function runAiReliabilityAnalysisAfterPayment(requestId: string, ra
 
   const { error: updateError } = await supabase
     .from("module_requests")
-    .update({ status: "pending_review", payment_status: "paid" })
+    .update({ status: "pending_review", payment_status: "paid", paid_at: new Date().toISOString() })
     .eq("id", requestId)
     .eq("payment_status", "processing");
   if (updateError) throw new Error(`runAiReliabilityAnalysisAfterPayment: failed to finalize request: ${updateError.message}`);

@@ -65,39 +65,33 @@ export interface UnifiedRequestRow {
 }
 
 /**
- * Shared reviewer-facing label split (confirmed 2026-09-07, wording
- * corrected same day per direct follow-up) - the awaiting_payment status
- * is ambiguous on its own: it covers both "just submitted, nothing
- * checked yet" and "a reviewer checked and it's confirmed unpaid".
- * `pending_review` gets the matching "Under review" treatment; every
- * other status (approved/sent/scoped/in_progress/complete/canceled/
- * requested/scheduled/completed/declined/not_required) falls back to the
- * existing generic humanizer, deliberately not given new bespoke copy
- * beyond what was actually asked for.
+ * ONE label, both audiences (confirmed 2026-09-08, final status-flow
+ * spec, superseding the 2026-09-07 "Not yet checked"/"Unpaid" split
+ * documented in this function's own prior history) - the whole
+ * "awaiting_payment" state is now genuinely one thing, shown identically
+ * whether or not a reviewer has ever clicked "Mark as awaiting payment"
+ * (the renamed former "Mark as unpaid" action - see module-payment-gate.ts/
+ * execution-sprint/payment-gate.ts/reaudit-payment.ts's own docblocks).
+ * The underlying `payment_status` enum still genuinely distinguishes
+ * pending/processing/unpaid at the DB level (that mechanism was
+ * explicitly NOT removed, only its display collapsed to one word) -
+ * `paymentStatus` stays a real parameter here so every existing call site
+ * keeps compiling unchanged, but it's deliberately unused inside this
+ * function now; nothing about display depends on it anymore.
  *
- * Wording, corrected 2026-09-07: initially built with the simpler
- * client-facing three-word vocabulary ("Submitted"/"Awaiting payment"),
- * same as modules' moduleClientStatusLabel() - but /requests, /company/
- * [companyId], and /queue are ALL reviewer-only pages, and /queue's own
- * awaiting-payment sections already use richer wording ("Not yet
- * checked"/"Unpaid", see queue/page.tsx's own `isUnpaid` checks) to
- * distinguish the same two sub-states. Direct follow-up confirmed:
- * consistency across all three reviewer-only pages is worth more than
- * this one function staying "simple" - so this now matches /queue's
- * exact vocabulary instead of inventing a third phrasing. Client-facing
- * labels (moduleClientStatusLabel(), SUBMISSION_STAGE_LABELS, Dashboard's
- * own subtitle logic) are separate functions, deliberately untouched -
- * they still show clients the simpler "Submitted"/"Awaiting payment"
- * pair; "Not yet checked"/"Unpaid" is internal reviewer-process language,
- * never shown to a client.
+ * Reading applied, flagged explicitly per the founder's own request to
+ * surface ambiguity rather than guess silently: this collapses the
+ * REVIEWER-facing label too, not just the client-facing one - "every
+ * instance of 'Unpaid' becomes 'Awaiting Payment'" read as one universal
+ * word for both audiences, not a second distinct admin-only word.
  *
- * Exported so /company/[companyId] can reuse the identical split instead
- * of a third, independently-drifting copy - that page's own module/
- * sprint/re-audit sections needed the exact same "awaiting_payment is
- * ambiguous" fix.
+ * `pending_review` still gets its own "Under review" treatment; every
+ * other status falls back to the existing generic humanizer.
  */
-export function computeDisplayStatus(rawStatus: string, paymentStatus: string | null): string {
-  if (rawStatus === "awaiting_payment") return paymentStatus === "unpaid" ? "Unpaid" : "Not yet checked";
+export const AWAITING_PAYMENT_LABEL = "Awaiting Payment";
+
+export function computeDisplayStatus(rawStatus: string, _paymentStatus: string | null): string {
+  if (rawStatus === "awaiting_payment") return AWAITING_PAYMENT_LABEL;
   if (rawStatus === "pending_review") return "Under review";
   return humanizeStatus(rawStatus);
 }

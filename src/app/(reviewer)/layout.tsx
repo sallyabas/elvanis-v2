@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "./sign-out-button";
 import { ReviewerSidebar } from "@/app/_components/ReviewerSidebar";
 import { formatDisplayName } from "@/lib/format-display-name";
-import { summarizeRegulatoryFrameworkStatus } from "@/lib/reviewer/regulatory-frameworks";
 
 // Internal-only reviewer area (Reviewer Queue + Reviewer Workspace) —
 // confirmed 2026-08-01, a fifth internal area alongside the four
@@ -43,11 +42,6 @@ export default async function ReviewerLayout({ children }: { children: React.Rea
     );
   }
 
-  // Regulatory tracker sidebar summary (confirmed 2026-09-07) — fetched
-  // only past the role gate above (never on the denial path), a single
-  // lightweight query rendered on every reviewer page via the sidebar.
-  const regulatorySummary = await summarizeRegulatoryFrameworkStatus();
-
   return (
     <div>
       {/* "v2" briefing-document redesign (confirmed 2026-08-31) — same
@@ -56,8 +50,11 @@ export default async function ReviewerLayout({ children }: { children: React.Rea
           internal reviewer tooling reads as the same product, not a
           visually separate admin panel. Responsive margin (confirmed
           2026-09-02) mirrors the client layout's own fix exactly — see
-          that layout's comment for the full reasoning. */}
-      <ReviewerSidebar displayName={formatDisplayName(profile?.name as string | null, user.email)} regulatorySummary={regulatorySummary} />
+          that layout's comment for the full reasoning.
+          Regulatory tracker summary no longer fetched/passed here
+          (confirmed 2026-09-08) — moved entirely onto /home, its own real
+          landing page, not duplicated in the sidebar anymore. */}
+      <ReviewerSidebar displayName={formatDisplayName(profile?.name as string | null, user.email)} />
       <div className="min-h-screen bg-[#f9f9f9] pt-14 lg:ml-[200px] lg:pt-0">{children}</div>
     </div>
   );

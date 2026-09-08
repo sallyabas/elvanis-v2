@@ -7,6 +7,7 @@ import { Button } from "@/app/_components/ui/Button";
 import { Alert } from "@/app/_components/ui/Alert";
 import { addManualReviewerNoteAction, editReviewerNoteAction, deleteReviewerNoteAction } from "./actions";
 import type { ReviewerNote } from "@/lib/reviewer/reviewer-notes";
+import type { PaymentEntityType } from "@/lib/reviewer/payment-records";
 
 /**
  * Reviewer Notes — per-company structured list (confirmed 2026-09-05,
@@ -115,7 +116,28 @@ function NoteRow({ companyId, note }: { companyId: string; note: ReviewerNote })
   );
 }
 
-export function ReviewerNotesPanel({ companyId, notes }: { companyId: string; notes: ReviewerNote[] }) {
+/**
+ * relatedEntityType/relatedEntityId (confirmed 2026-09-08, item 6) —
+ * optional. When passed (Group 2's own per-request instance of this same
+ * panel), every note added here is scoped to that one request. When
+ * omitted (Group 3's general instance), notes are genuinely general —
+ * this is the ONLY place that distinction is made; `notes` itself is
+ * always caller-filtered, this component never re-filters what it's
+ * given.
+ */
+export function ReviewerNotesPanel({
+  companyId,
+  notes,
+  relatedEntityType,
+  relatedEntityId,
+  addLabel = "+ Add entry",
+}: {
+  companyId: string;
+  notes: ReviewerNote[];
+  relatedEntityType?: PaymentEntityType;
+  relatedEntityId?: string;
+  addLabel?: string;
+}) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -131,7 +153,7 @@ export function ReviewerNotesPanel({ companyId, notes }: { companyId: string; no
     setPending(true);
     setError(null);
     try {
-      await addManualReviewerNoteAction(companyId, name, description, new Date(date).toISOString());
+      await addManualReviewerNoteAction(companyId, name, description, new Date(date).toISOString(), relatedEntityType, relatedEntityId);
       setName("");
       setDescription("");
       setAdding(false);
@@ -175,7 +197,7 @@ export function ReviewerNotesPanel({ companyId, notes }: { companyId: string; no
         </div>
       ) : (
         <Button type="button" variant="secondary" className="px-2 py-1 text-xs" onClick={() => setAdding(true)}>
-          + Add entry
+          {addLabel}
         </Button>
       )}
     </div>

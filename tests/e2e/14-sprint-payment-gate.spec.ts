@@ -85,7 +85,9 @@ test("Execution Sprint: client 'I'll choose the finding myself' request -> revie
   await expect(page.getByRole("heading", { name: "Execution Sprint requests awaiting payment" })).toBeVisible();
   const sprintQueueRow = page.locator("li", { hasText: fixture.companyName }).filter({ hasText: "Client chose the finding" });
   await expect(sprintQueueRow).toBeVisible();
-  await expect(sprintQueueRow.getByText("Not yet checked")).toBeVisible();
+  // Final status-flow spec (confirmed 2026-09-08) — "Not yet checked" is
+  // gone, always "Awaiting Payment" regardless of checked state.
+  await expect(sprintQueueRow.getByText("Awaiting Payment", { exact: true })).toBeVisible();
   await step(page, testInfo, "14-sprint-payment-gate", "03-reviewer-queue-awaiting-payment");
 
   // --- Reviewer marks it paid — a real, synchronous Groq call drafts the plan here ---

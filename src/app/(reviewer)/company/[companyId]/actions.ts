@@ -3,8 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { setPaymentRecord, type PaymentEntityType, type PaymentStatusValue } from "@/lib/reviewer/payment-records";
-import { updateServiceStatus, addServiceStatusNote, updateContactSalesStatus, cancelContactSalesService, refundContactSalesService, type ServiceStatusValue } from "@/lib/reviewer/service-status";
+import type { PaymentEntityType } from "@/lib/reviewer/payment-records";
+import {
+  addServiceStatusNote,
+  updateContactSalesStatus,
+  cancelContactSalesService,
+  refundContactSalesService,
+  updateContactSalesPrice,
+} from "@/lib/reviewer/service-status";
 import { addManualReviewerNote, editReviewerNote, deleteReviewerNote } from "@/lib/reviewer/reviewer-notes";
 
 // Same independent session+role re-check as every other reviewer Server
@@ -19,44 +25,12 @@ async function assertReviewer(): Promise<void> {
   if (profile?.role !== "reviewer") throw new Error("Not authorized as a reviewer.");
 }
 
-/**
- * Payment status (confirmed 2026-08-25, direct founder request) — one
- * shared table across every payable item, see payment-records.ts's own
- * docblock. FormData, not bound args, since this carries real
- * user-entered values (status, an optional amount/notes), not just a
- * fixed identifier.
- */
-export async function setPaymentRecordAction(companyId: string, entityType: PaymentEntityType, entityId: string, formData: FormData) {
-  await assertReviewer();
-  const status = String(formData.get("status") ?? "not_applicable") as PaymentStatusValue;
-  const amountRaw = formData.get("amount");
-  const amount = amountRaw && String(amountRaw).trim() !== "" ? Number(amountRaw) : null;
-  const notesRaw = formData.get("notes");
-  const notes = notesRaw ? String(notesRaw).trim() || null : null;
-  await setPaymentRecord(entityType, entityId, status, amount, notes);
-  revalidatePath(`/company/${companyId}`);
-}
-
-/**
- * Service status (confirmed 2026-09-05, direct founder decision) — one
- * unified flow for every service type, see service-status.ts's own
- * docblock. Plain status/price update; reaching "completed" this way
- * still triggers the real Reviewer Notes auto-entry (a service can be
- * completed with no note — "not a hard block").
- */
-export async function updateServiceStatusAction(
-  companyId: string,
-  entityType: PaymentEntityType,
-  entityId: string,
-  defaultPrice: number | null,
-  status: ServiceStatusValue,
-  price: number | null,
-  currency: string,
-): Promise<void> {
-  await assertReviewer();
-  await updateServiceStatus(entityType, entityId, status, price, currency, defaultPrice);
-  revalidatePath(`/company/${companyId}`);
-}
+// setPaymentRecordAction/updateServiceStatusAction both removed (confirmed
+// 2026-09-08, final status-flow spec, items 4/5) — their only real callers
+// (PaymentStatusRow.tsx and ServiceStatusRow.tsx) were themselves deleted,
+// having become genuinely redundant with the real, automated payment-gate
+// status/ContactSalesStatusRow flow. See /company/[companyId]/page.tsx's
+// own top docblock for the full reasoning.
 
 /**
  * The note-add path (confirmed 2026-09-05) — "adding a note automatically
@@ -88,9 +62,23 @@ export async function addServiceStatusNoteAction(
 }
 
 /** Reviewer Notes — manual entry (confirmed 2026-09-05): "I can also manually add new entries myself, anytime." */
-export async function addManualReviewerNoteAction(companyId: string, name: string, description: string, entryDate: string): Promise<void> {
+/**
+ * relatedEntityType/relatedEntityId (confirmed 2026-09-08, item 6 of the
+ * final status-flow spec) — optional; when both are present, the note is
+ * scoped to that one specific request (Group 2's own per-unit "add a
+ * note" mini-form is the real caller for that case) rather than general
+ * (Group 3, the ReviewerNotesPanel instance with neither passed).
+ */
+export async function addManualReviewerNoteAction(
+  companyId: string,
+  name: string,
+  description: string,
+  entryDate: string,
+  relatedEntityType?: PaymentEntityType,
+  relatedEntityId?: string,
+): Promise<void> {
   await assertReviewer();
-  await addManualReviewerNote(companyId, name, description, entryDate);
+  await addManualReviewerNote(companyId, name, description, entryDate, relatedEntityType, relatedEntityId);
   revalidatePath(`/company/${companyId}`);
 }
 
@@ -158,6 +146,18 @@ export async function cancelContactSalesServiceAction(companyId: string, entityI
 export async function refundContactSalesServiceAction(companyId: string, entityId: string, reason: string | null): Promise<{ success: boolean; error?: string }> {
   await assertReviewer();
   const result = await refundContactSalesService(entityId, reason);
+  if (result.success) {
+    revalidatePath(`/company/${companyId}`);
+    revalidatePath(`/dashboard`);
+    revalidatePath(`/reports`);
+  }
+  return result;
+}
+
+/** Price-only edit, refunded state (confirmed 2026-09-08) — see updateContactSalesPrice()'s own docblock for why this is separate from updateContactSalesStatusAction above. */
+export async function updateContactSalesPriceAction(companyId: string, entityId: string, price: number | null, currency: string): Promise<{ success: boolean; error?: string }> {
+  await assertReviewer();
+  const result = await updateContactSalesPrice(entityId, price, currency);
   if (result.success) {
     revalidatePath(`/company/${companyId}`);
     revalidatePath(`/dashboard`);

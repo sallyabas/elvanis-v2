@@ -65,6 +65,7 @@ export async function runTenderReadinessAnalysisAfterPayment(requestId: string, 
     .update({
       status: "pending_review",
       payment_status: "paid",
+      paid_at: new Date().toISOString(),
       intake_data: { ...input, applicability: result.applicability },
     })
     .eq("id", requestId)

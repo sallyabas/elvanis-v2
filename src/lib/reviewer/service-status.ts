@@ -151,6 +151,8 @@ export async function updateServiceStatus(
         `${context.label} — completed`,
         existing.note ?? "(no note added)",
         (update.completed_at as string) ?? new Date().toISOString(),
+        entityType,
+        entityId,
       );
     }
   }
@@ -190,7 +192,7 @@ export async function addServiceStatusNote(
 
   const context = await resolveEntityContext(entityType, entityId);
   if (context) {
-    await addServiceStatusReviewerNote(context.companyId, `${context.label} — completed`, note.trim(), completedAt);
+    await addServiceStatusReviewerNote(context.companyId, `${context.label} — completed`, note.trim(), completedAt, entityType, entityId);
   }
 
   return { success: true };
@@ -277,12 +279,12 @@ export async function cancelContactSalesService(entityId: string, reason: string
 }
 
 /**
- * Refund — only reachable from 'completed' ("if something needs undoing
- * after the fact", confirmed 2026-09-07). Reason is optional here,
- * deliberately unlike Cancel — a real, confirmed difference: something
- * that already happened and is being unwound doesn't always need a
- * documented reason the way declining upfront does. A real client-facing
- * email fires either way.
+ * Refund — reachable from 'booked' OR 'completed' (widened 2026-09-08,
+ * final status-flow spec — was 'completed' only). Reason is optional
+ * here, deliberately unlike Cancel — a real, confirmed difference:
+ * something that already happened and is being unwound doesn't always
+ * need a documented reason the way declining upfront does. A real
+ * client-facing email fires either way.
  */
 export async function refundContactSalesService(entityId: string, reason: string | null): Promise<ContactSalesActionResult> {
   const admin = createAdminClient();
@@ -292,11 +294,11 @@ export async function refundContactSalesService(entityId: string, reason: string
     .update({ status: "refunded", reason: trimmedReason, updated_at: new Date().toISOString() })
     .eq("entity_type", "session_request")
     .eq("entity_id", entityId)
-    .eq("status", "completed")
+    .in("status", ["booked", "completed"])
     .select("id")
     .maybeSingle();
   if (error) return { success: false, error: error.message };
-  if (!data) return { success: false, error: "This request isn't at 'Completed' right now — it can only be refunded from there." };
+  if (!data) return { success: false, error: "This request isn't at 'Booked' or 'Completed' right now — it can only be refunded from one of those." };
 
   const owner = await loadSessionRequestOwner(entityId);
   if (owner?.userId) {
@@ -311,6 +313,37 @@ export async function refundContactSalesService(entityId: string, reason: string
     if (notifError) throw new Error(`refundContactSalesService: failed to log notification: ${notifError.message}`);
   }
 
+  return { success: true };
+}
+
+/**
+ * Price-only edit, refunded state (confirmed 2026-09-08, item 3 of the
+ * final status-flow spec) — "the price field always represents the
+ * actual, current amount retained... can be edited after payment,
+ * specifically to reflect a partial refund." Deliberately its own
+ * function, not a reuse of updateContactSalesStatus() — that helper
+ * always writes `status` unconditionally alongside price, and the
+ * client component's local `status` state is typed to
+ * requested/booked/completed only (it has no representation of
+ * 'refunded' at all), so reusing it here would silently overwrite the
+ * real terminal 'refunded' status back to whatever stale value local
+ * state last held. This function touches price/currency only, and is
+ * server-side gated to the record already being 'refunded' — not just a
+ * client-side UI convenience — so it can never be misused to backdoor a
+ * price change on a request that hasn't actually been refunded.
+ */
+export async function updateContactSalesPrice(entityId: string, price: number | null, currency: string): Promise<ContactSalesActionResult> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("service_status_records")
+    .update({ price, currency, updated_at: new Date().toISOString() })
+    .eq("entity_type", "session_request")
+    .eq("entity_id", entityId)
+    .eq("status", "refunded")
+    .select("id")
+    .maybeSingle();
+  if (error) return { success: false, error: error.message };
+  if (!data) return { success: false, error: "This request isn't 'Refunded' right now — the price can only be edited afterward, to record what was actually kept." };
   return { success: true };
 }
 

@@ -40,11 +40,30 @@ const SEVERITY_ORDER = ["critical", "high", "medium", "low"] as const;
 // — sessions/Core-Audit-reports never have one, correctly excluded from
 // the option list and handled via a real "Not applicable" choice, same
 // pattern as the existing Severity filter's own "none" option.
+/**
+ * Filterable payment-status bucket (real fix, found and closed 2026-09-08
+ * while sweeping every "Unpaid"/checked-state display for the final
+ * status-flow spec — not one of that batch's own named items, but
+ * directly required by two rules already confirmed there). The raw
+ * `payment_status` column still genuinely distinguishes pending/
+ * processing/unpaid at the DB level (that mechanism is unchanged) — but
+ * none of that distinction is shown to a reviewer anywhere else anymore
+ * (see unified-requests.ts's AWAITING_PAYMENT_LABEL), so filtering by the
+ * raw value here would resurface exactly the distinction removed
+ * everywhere else. Worse, this dropdown was previously showing
+ * "Processing" as a real, selectable option — a direct violation of the
+ * separately-confirmed rule that 'processing' (the real concurrency-
+ * safety claim lock) must never be surfaced in any UI at all. Both are
+ * fixed the same way: bucket pending/processing/unpaid into one
+ * "Awaiting Payment" filter option; 'paid' stays its own.
+ */
+function paymentStatusBucket(raw: string): "awaiting_payment" | "paid" {
+  return raw === "paid" ? "paid" : "awaiting_payment";
+}
+
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
-  pending: "Pending (not yet checked)",
-  processing: "Processing",
+  awaiting_payment: "Awaiting Payment",
   paid: "Paid",
-  unpaid: "Unpaid",
 };
 
 export function RequestsFilterClient({ rows }: { rows: UnifiedRequestRow[] }) {
@@ -57,14 +76,17 @@ export function RequestsFilterClient({ rows }: { rows: UnifiedRequestRow[] }) {
   const [dateTo, setDateTo] = useState("");
 
   const statusOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.status))).sort(), [rows]);
-  const paymentStatusOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.paymentStatus).filter((p): p is string => p !== null))).sort(), [rows]);
+  const paymentStatusOptions = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.paymentStatus).filter((p): p is string => p !== null).map(paymentStatusBucket))).sort(),
+    [rows],
+  );
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       if (typeFilter !== "all" && r.type !== typeFilter) return false;
       if (statusFilter !== "all" && r.status !== statusFilter) return false;
       if (paymentStatusFilter === "none" && r.paymentStatus !== null) return false;
-      if (paymentStatusFilter !== "all" && paymentStatusFilter !== "none" && r.paymentStatus !== paymentStatusFilter) return false;
+      if (paymentStatusFilter !== "all" && paymentStatusFilter !== "none" && (r.paymentStatus === null || paymentStatusBucket(r.paymentStatus) !== paymentStatusFilter)) return false;
       if (severityFilter === "none" && r.severity !== null) return false;
       if (severityFilter !== "all" && severityFilter !== "none" && r.severity !== severityFilter) return false;
       if (companySearch.trim() && !r.companyName.toLowerCase().includes(companySearch.trim().toLowerCase())) return false;

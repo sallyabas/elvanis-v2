@@ -108,7 +108,11 @@ export async function markSprintPaidAndDraftTasks(sprintId: string): Promise<Spr
 
   try {
     await runSprintTaskDraftingAfterPayment(sprintId);
-    const { error: updateError } = await supabase.from("execution_sprints").update({ payment_status: "paid" }).eq("id", sprintId).eq("payment_status", "processing");
+    const { error: updateError } = await supabase
+      .from("execution_sprints")
+      .update({ payment_status: "paid", paid_at: new Date().toISOString() })
+      .eq("id", sprintId)
+      .eq("payment_status", "processing");
     if (updateError) throw new Error(updateError.message);
 
     const recipientReviewers = await supabase.from("users").select("id").eq("role", "reviewer");

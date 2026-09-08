@@ -42,6 +42,7 @@ export async function runDataProtectionAnalysisAfterPayment(requestId: string, r
     .update({
       status: "pending_review",
       payment_status: "paid",
+      paid_at: new Date().toISOString(),
       intake_data: { ...input, applicability: result.applicability },
     })
     .eq("id", requestId)

@@ -142,10 +142,17 @@ test("Session requests: Discovery (schedule->complete), Delivery (decline), Conc
 
   // Concierge: real Contact Sales flow (confirmed 2026-09-07), driven via
   // ContactSalesStatusRow on /company/[companyId], not /queue.
+  // "details", not "li" (confirmed 2026-09-08, item 6's reorganization —
+  // every request on this page is now a <details> unit, not a flat <li>).
   await page.goto(`/company/${fixtures.companyId}`);
-  const conciergeRow = page.locator("li", { hasText: "Concierge Inquiry" });
+  const conciergeRow = page.locator("details", { hasText: "Concierge Inquiry" });
   const conciergeStatusSelect = conciergeRow.locator("select").first();
   await expect(conciergeStatusSelect).toHaveValue("requested");
+  // Price field, item 3 of the final status-flow spec (confirmed
+  // 2026-09-08) — "INACTIVE/disabled until status reaches 'Paid'/
+  // 'Booked' — genuinely disabled and unusable, not just empty."
+  const conciergePriceField = conciergeRow.getByPlaceholder("Set once Booked");
+  await expect(conciergePriceField).toBeDisabled();
 
   // Requested -> Booked, plain status update (no note involved yet).
   // Checked via the select's own persisted value, not getByText("Booked")
@@ -161,6 +168,8 @@ test("Session requests: Discovery (schedule->complete), Delivery (decline), Conc
   await page.waitForTimeout(500);
   await page.reload();
   await expect(conciergeStatusSelect).toHaveValue("booked", { timeout: 10_000 });
+  // Once Booked, the price field becomes active/editable (item 3).
+  await expect(conciergeRow.getByPlaceholder("£ price")).toBeEnabled();
   await step(page, testInfo, "08-session-lifecycle", "07a-concierge-booked");
 
   // Note field UX Option A (confirmed 2026-09-07, item 5) — disabled/
