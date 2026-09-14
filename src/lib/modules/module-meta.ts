@@ -36,8 +36,24 @@ export interface ModuleMeta {
    * agreed." This is the same idea, just a real, always-visible link on
    * the Services page rather than something a reviewer has to remember to
    * send by hand for these three fixed-price modules.
+   *
+   * Type stays `string | null` (confirmed 2026-09-14, real bug found
+   * during a full go-live re-verification pass) even though every module
+   * has a real link again — real, deliberate defensive plumbing, not
+   * dead weight. The `ai_reliability` link was found live-charging
+   * £2,500 instead of the app's own displayed £2,000 (wired to the
+   * wrong Payoneer token from the start, confirmed via git history —
+   * never a regression), was pulled `null` from every consuming site
+   * (Services card, Dashboard's "Continue to payment" tile, and all
+   * three intake forms' post-submission notice) until a correctly-priced
+   * link could be generated in the real Payoneer dashboard (an
+   * authenticated action outside this codebase), and a real £2,000 link
+   * was wired back in the same day. Keeping the type nullable means any
+   * future link problem (expired, wrong amount again) can be fixed the
+   * same safe way — null it here — without touching every consuming
+   * site's conditional-rendering logic again.
    */
-  paymentLink: string;
+  paymentLink: string | null;
 }
 
 export const MODULE_META: Record<ModuleType, ModuleMeta> = {
@@ -57,7 +73,10 @@ export const MODULE_META: Record<ModuleType, ModuleMeta> = {
     pricingKey: "ai_reliability_audit",
     description: "Adversarial testing against documented real-world AI failure patterns — invented policy, data leakage, bias, prompt injection.",
     requestButtonLabel: "Request AI Reliability Audit",
-    paymentLink: "https://link.payoneer.com/Token?t=DA239AC7FF0C4A4D8A94672F574CB542&src=tpl",
+    // Corrected 2026-09-14 — a real, live-verified £2,000 link (the
+    // previous one, pulled the same day, was wired to a token charging
+    // £2,500 from the start; see the docblock above).
+    paymentLink: "https://link.payoneer.com/Token?t=9356D719E50C4C9389741C9F0E18631E&src=pl",
   },
   data_protection: {
     moduleType: "data_protection",

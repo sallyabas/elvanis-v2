@@ -1147,7 +1147,10 @@ export default async function DashboardPage() {
                   <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">
                     {r.status === "awaiting_payment" ? "No analysis has started yet — complete payment to begin." : (MODULE_EXPLANATION[r.status as string] ?? "")}
                   </p>
-                  {r.status === "awaiting_payment" && meta && (
+                  {/* meta.paymentLink is nullable (confirmed 2026-09-14) —
+                      see module-meta.ts's own docblock; hidden here too
+                      rather than showing a link charging the wrong amount. */}
+                  {r.status === "awaiting_payment" && meta && meta.paymentLink && (
                     <a
                       href={meta.paymentLink}
                       target="_blank"

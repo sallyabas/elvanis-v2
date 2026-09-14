@@ -116,10 +116,15 @@ export default async function ServicesPage() {
                         payment is still confirmed manually/externally, no
                         in-app checkout; this is just a real, always-visible
                         way to pay once you're ready, alongside the request
-                        button rather than replacing it. */}
-                    <a href={meta.paymentLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-accent hover:underline">
-                      Pay via Payoneer ↗
-                    </a>
+                        button rather than replacing it. Nullable (confirmed
+                        2026-09-14) — see module-meta.ts's own docblock; the
+                        link is pulled here too whenever it's null, rather
+                        than showing a link that charges the wrong amount. */}
+                    {meta.paymentLink && (
+                      <a href={meta.paymentLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-accent hover:underline">
+                        Pay via Payoneer ↗
+                      </a>
+                    )}
                   </div>
                 </Card>
               );

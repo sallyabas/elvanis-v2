@@ -45,7 +45,7 @@ export function TenderReadinessIntakeForm({
   companyId: string;
   jurisdictionInput: CompanyJurisdictionInput;
   priceLabel?: string;
-  paymentLink: string;
+  paymentLink: string | null;
 }) {
   const [aiUseCaseInventory, setAiUseCaseInventory] = useState("");
   const [existingDocumentation, setExistingDocumentation] = useState("");

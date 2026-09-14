@@ -21,7 +21,7 @@ export function AiReliabilityIntakeForm({
 }: {
   companyId: string;
   priceLabel?: string;
-  paymentLink: string;
+  paymentLink: string | null;
 }) {
   const [systemType, setSystemType] = useState<AiReliabilitySystemType | null>(null);
   const [responses, setResponses] = useState<Record<number, string>>({});

@@ -23,10 +23,16 @@ export default function PrivacyPolicyPage() {
 
       <section className="mb-6">
         <h2 className="mb-2 text-base font-medium">How your evidence is analyzed</h2>
-        <p>
+        <p className="mb-3">
           The evidence you submit is sent to Groq, our AI provider, to generate draft findings for each lens. Groq
-          processes this data to produce the analysis and does not use it to train its models. We do not share your
-          evidence or findings with any other third party.
+          processes this data to produce the analysis and does not use it to train its models.
+        </p>
+        <p>
+          In some cases, limited data may also be shared with other trusted third-party service providers to help
+          generate or independently verify findings — for example, an additional AI processing service used to
+          double-check a finding&apos;s quality before it reaches your reviewer, or a research tool used to look up
+          publicly available market and competitor information relevant to your analysis. Each provider only
+          receives the specific data needed for that purpose.
         </p>
       </section>
 

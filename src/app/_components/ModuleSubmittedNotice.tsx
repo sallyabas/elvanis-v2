@@ -19,10 +19,18 @@ import Link from "next/link";
  *
  * No in-app checkout exists anywhere in this codebase (same disclosed
  * design as Execution Sprint/Concierge) — the real Payoneer link is
- * already live and working for all three modules (see module-meta.ts),
- * so this links straight to it rather than a placeholder.
+ * live and working for two of the three modules (see module-meta.ts).
+ *
+ * `paymentLink` is nullable (confirmed 2026-09-14) — the AI Reliability
+ * Audit link was found live-charging the wrong amount (£2,500 instead
+ * of £2,000) during a go-live re-verification pass, and was pulled from
+ * every live surface rather than left charging incorrectly while a
+ * correctly-priced link is generated. `null` here renders an honest
+ * "we'll follow up directly" message instead of a payment button, so a
+ * client submitting AI Reliability Audit is never shown a link to the
+ * wrong amount.
  */
-export function ModuleSubmittedNotice({ paymentLink, priceLabel }: { paymentLink: string; priceLabel?: string }) {
+export function ModuleSubmittedNotice({ paymentLink, priceLabel }: { paymentLink: string | null; priceLabel?: string }) {
   return (
     <div className="space-y-4">
       <p className="rounded-md border border-green-300 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
@@ -33,14 +41,21 @@ export function ModuleSubmittedNotice({ paymentLink, priceLabel }: { paymentLink
           No analysis has started yet — your reviewer confirms payment before the real work begins. Once you&apos;ve paid, we&apos;ll
           take it from there.
         </p>
-        <a
-          href={paymentLink}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-4 inline-flex items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover"
-        >
-          Continue to payment{priceLabel ? ` — ${priceLabel}` : ""}
-        </a>
+        {paymentLink ? (
+          <a
+            href={paymentLink}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 inline-flex items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+          >
+            Continue to payment{priceLabel ? ` — ${priceLabel}` : ""}
+          </a>
+        ) : (
+          <p className="mt-4 text-sm text-neutral-600">
+            We&apos;ll follow up directly with how to pay{priceLabel ? ` (${priceLabel})` : ""} — no payment link is available here right
+            now.
+          </p>
+        )}
       </div>
       <p className="text-sm text-neutral-500 dark:text-neutral-400">
         Questions about this request?{" "}

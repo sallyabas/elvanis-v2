@@ -72,7 +72,7 @@ export function DataProtectionIntakeForm({
   companyId: string;
   jurisdictionInput: CompanyJurisdictionInput;
   priceLabel?: string;
-  paymentLink: string;
+  paymentLink: string | null;
 }) {
   const [values, setValues] = useState<Record<string, string>>({
     consentFlow: "",
