@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { runSprintTaskDraftingAfterPayment } from "./workspace";
+import { loadNotifiableReviewers } from "@/lib/reviewer/notifiable-reviewers";
 
 /**
  * Execution Sprint payment gate (confirmed 2026-09-07, unified flow spec)
@@ -115,10 +116,10 @@ export async function markSprintPaidAndDraftTasks(sprintId: string): Promise<Spr
       .eq("payment_status", "processing");
     if (updateError) throw new Error(updateError.message);
 
-    const recipientReviewers = await supabase.from("users").select("id").eq("role", "reviewer");
-    if ((recipientReviewers.data ?? []).length > 0) {
+    const recipientReviewers = await loadNotifiableReviewers(supabase);
+    if (recipientReviewers.length > 0) {
       await supabase.from("notifications").insert(
-        (recipientReviewers.data ?? []).map((reviewer) => ({
+        recipientReviewers.map((reviewer) => ({
           recipient_type: "reviewer",
           recipient_id: reviewer.id,
           event_type: "sprint_tasks_ready_for_review",

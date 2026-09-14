@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettingNumber } from "@/lib/app-settings";
+import { loadNotifiableReviewers } from "@/lib/reviewer/notifiable-reviewers";
 
 /**
  * Periodic regulatory-content-review flag (spec §1.8b, confirmed
@@ -54,8 +55,7 @@ export async function checkRegulatoryContentReviewDue(): Promise<RegulatoryConte
   });
   if (due.length === 0) return [];
 
-  const { data: reviewers, error: reviewersError } = await supabase.from("users").select("id").eq("role", "reviewer");
-  if (reviewersError) throw new Error(`checkRegulatoryContentReviewDue: failed to load reviewers: ${reviewersError.message}`);
+  const reviewers = await loadNotifiableReviewers(supabase);
 
   const notifiedAt = new Date().toISOString();
 

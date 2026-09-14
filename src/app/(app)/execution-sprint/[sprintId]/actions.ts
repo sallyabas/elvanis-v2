@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettingNumber } from "@/lib/app-settings";
 import { createSprintQueueItem, confirmSprintFinding } from "@/lib/execution-sprint/workspace";
+import { loadNotifiableReviewers } from "@/lib/reviewer/notifiable-reviewers";
 
 /**
  * Client-facing Execution Sprint actions (confirmed 2026-08-06). The
@@ -148,7 +149,7 @@ export async function signOffSprintAction(sprintId: string): Promise<{ success: 
 
     // Real perf fix (confirmed 2026-09-05, code-quality audit) — batched
     // insert instead of one per reviewer.
-    const { data: reviewers } = await admin.from("users").select("id").eq("role", "reviewer");
+    const reviewers = await loadNotifiableReviewers(admin);
     if ((reviewers ?? []).length > 0) {
       await admin.from("notifications").insert(
         (reviewers ?? []).map((reviewer) => ({

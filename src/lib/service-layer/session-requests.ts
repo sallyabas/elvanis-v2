@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getPricingItem } from "@/lib/pricing";
 import { isContactSalesSessionType, CONTACT_SALES_SESSION_TYPES, SESSION_TYPE_PRICING_KEY } from "@/lib/reviewer/service-status-types";
 import { ensureContactSalesStatusRecord } from "@/lib/reviewer/service-status";
+import { loadNotifiableReviewers } from "@/lib/reviewer/notifiable-reviewers";
 
 /**
  * Service Layer: Discovery/Delivery Session, F2F Workshop request handling
@@ -175,7 +176,7 @@ export async function requestSession(
   // Real perf fix (confirmed 2026-09-05, code-quality audit) — batched
   // insert instead of one per reviewer.
   const admin = createAdminClient();
-  const { data: reviewers } = await admin.from("users").select("id").eq("role", "reviewer");
+  const reviewers = await loadNotifiableReviewers(admin);
   if ((reviewers ?? []).length > 0) {
     await admin.from("notifications").insert(
       (reviewers ?? []).map((reviewer) => ({

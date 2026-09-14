@@ -4,6 +4,7 @@ import { renderEmail } from "@/lib/notifications/email-template";
 import { isOptedOut, type NotificationPreferences } from "@/lib/notifications/preferences";
 import { draftSprintTasks } from "./draft-tasks";
 import { loadCompanyProfileForLens, loadGoalContext } from "@/lib/audit/load-profile";
+import { loadNotifiableReviewers } from "@/lib/reviewer/notifiable-reviewers";
 import type { LensFinding } from "@/lib/lenses/types";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
@@ -335,7 +336,7 @@ export async function requestSprintLetElvanisChoose(reportId: string): Promise<P
 }
 
 async function notifyReviewersOfSprintRequested(supabase: ReturnType<typeof createAdminClient>): Promise<void> {
-  const { data: reviewers } = await supabase.from("users").select("id").eq("role", "reviewer");
+  const reviewers = await loadNotifiableReviewers(supabase);
   if ((reviewers ?? []).length > 0) {
     await supabase.from("notifications").insert(
       (reviewers ?? []).map((reviewer) => ({
@@ -485,7 +486,7 @@ export async function createSprintQueueItem(
 
   // Real perf fix (confirmed 2026-09-05, code-quality audit) — batched
   // insert instead of one per reviewer.
-  const { data: reviewers } = await supabase.from("users").select("id").eq("role", "reviewer");
+  const reviewers = await loadNotifiableReviewers(supabase);
   if ((reviewers ?? []).length > 0) {
     await supabase.from("notifications").insert(
       (reviewers ?? []).map((reviewer) => ({

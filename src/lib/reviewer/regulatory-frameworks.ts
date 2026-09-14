@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { loadNotifiableReviewers } from "@/lib/reviewer/notifiable-reviewers";
 
 /**
  * Regulatory Freshness Tracker (confirmed 2026-09-05, build brief +
@@ -174,8 +175,7 @@ export async function checkRegulatoryFrameworksDue(): Promise<{ shortCode: strin
   });
   if (due.length === 0) return [];
 
-  const { data: reviewers, error: reviewersError } = await admin.from("users").select("id").eq("role", "reviewer");
-  if (reviewersError) throw new Error(`checkRegulatoryFrameworksDue: failed to load reviewers: ${reviewersError.message}`);
+  const reviewers = await loadNotifiableReviewers(admin);
 
   if ((reviewers ?? []).length > 0) {
     const notificationRows = due.flatMap((row) =>

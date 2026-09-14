@@ -1,6 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { loadNotifiableReviewers } from "@/lib/reviewer/notifiable-reviewers";
 
 /**
  * "Having trouble? Contact us" (confirmed 2026-09-05, direct founder
@@ -41,7 +42,7 @@ export async function submitContactRequest(
     .single();
   if (insertError) return { success: false, error: `Couldn't submit: ${insertError.message}` };
 
-  const { data: reviewers } = await admin.from("users").select("id").eq("role", "reviewer");
+  const reviewers = await loadNotifiableReviewers(admin);
   if ((reviewers ?? []).length > 0) {
     await admin.from("notifications").insert(
       (reviewers ?? []).map((reviewer) => ({

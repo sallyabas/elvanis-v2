@@ -128,6 +128,22 @@ export default defineConfig({
           // key from .env.local through instead, for genuine live-call
           // corner-case tests.
           ANTHROPIC_API_KEY: process.env.E2E_ALLOW_PAID_AI_CALLS === "true" ? (process.env.ANTHROPIC_API_KEY ?? "") : "",
+          // Real bug found and fixed (confirmed 2026-09-14) — every
+          // reviewer-notification fan-out in this codebase queries
+          // `role='reviewer'` across the whole DB, which this suite runs
+          // against directly (there is no separate test project — see
+          // NEXT_PUBLIC_SUPABASE_URL in .env.local). That query always
+          // matched the founder's own real, permanent reviewer account
+          // alongside each test run's disposable ones, so every E2E run
+          // was inserting real `notifications` rows addressed to the
+          // founder's real inbox — later drained and genuinely emailed by
+          // the production cron, unaware of where they came from.
+          // src/lib/reviewer/notifiable-reviewers.ts is now the one place
+          // that fan-out query is allowed to run, and it drops any
+          // recipient whose email appears here. Same pattern as
+          // ANTHROPIC_API_KEY above — a real value here, empty/unset in
+          // real production, so this changes nothing outside a test run.
+          TEST_EXCLUDE_REVIEWER_EMAILS: process.env.TEST_EXCLUDE_REVIEWER_EMAILS ?? "msally.abas@gmail.com",
         },
       }
     : undefined,

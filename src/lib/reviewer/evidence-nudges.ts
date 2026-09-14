@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettingNumber } from "@/lib/app-settings";
+import { loadNotifiableReviewers } from "@/lib/reviewer/notifiable-reviewers";
 
 /**
  * Evidence-completeness nudges (confirmed 2026-08-02): a `pending`
@@ -37,8 +38,7 @@ export async function checkEvidenceCompletenessNudges(): Promise<EvidenceNudgeFi
     .eq("status", "pending");
   if (error) throw new Error(`checkEvidenceCompletenessNudges: failed to load submissions: ${error.message}`);
 
-  const { data: reviewers, error: reviewersError } = await supabase.from("users").select("id").eq("role", "reviewer");
-  if (reviewersError) throw new Error(`checkEvidenceCompletenessNudges: failed to load reviewers: ${reviewersError.message}`);
+  const reviewers = await loadNotifiableReviewers(supabase);
 
   const fired: EvidenceNudgeFired[] = [];
 

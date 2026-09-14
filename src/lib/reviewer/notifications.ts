@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { loadNotifiableReviewers } from "@/lib/reviewer/notifiable-reviewers";
 
 /**
  * Shared reviewer fan-out (confirmed 2026-08-10, delayed-execution
@@ -12,8 +13,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * the same loop.
  */
 export async function notifyReviewersOfNewSubmission(supabase: SupabaseClient, reportId: string): Promise<void> {
-  const { data: reviewers, error: reviewersError } = await supabase.from("users").select("id").eq("role", "reviewer");
-  if (reviewersError) throw new Error(`notifyReviewersOfNewSubmission: failed to load reviewers: ${reviewersError.message}`);
+  const reviewers = await loadNotifiableReviewers(supabase);
 
   // Real perf fix (confirmed 2026-09-05, code-quality audit) — one INSERT
   // per reviewer in a loop, instead of a single batched array insert.
@@ -53,8 +53,7 @@ export async function notifyReviewersOfNewSubmission(supabase: SupabaseClient, r
  * to share.
  */
 export async function notifyReviewersOfNewModuleRequest(supabase: SupabaseClient): Promise<void> {
-  const { data: reviewers, error: reviewersError } = await supabase.from("users").select("id").eq("role", "reviewer");
-  if (reviewersError) throw new Error(`notifyReviewersOfNewModuleRequest: failed to load reviewers: ${reviewersError.message}`);
+  const reviewers = await loadNotifiableReviewers(supabase);
 
   // Real perf fix (confirmed 2026-09-05, code-quality audit) — batched
   // insert, same reasoning as notifyReviewersOfNewSubmission() above.
@@ -83,8 +82,7 @@ export async function notifyReviewersOfNewModuleRequest(supabase: SupabaseClient
  * so dispatch.ts can look up the real company name.
  */
 export async function notifyReviewersOfAwaitingPayment(supabase: SupabaseClient, pendingSubmissionId: string): Promise<void> {
-  const { data: reviewers, error: reviewersError } = await supabase.from("users").select("id").eq("role", "reviewer");
-  if (reviewersError) throw new Error(`notifyReviewersOfAwaitingPayment: failed to load reviewers: ${reviewersError.message}`);
+  const reviewers = await loadNotifiableReviewers(supabase);
 
   if ((reviewers ?? []).length > 0) {
     const { error: notifError } = await supabase.from("notifications").insert(
@@ -110,8 +108,7 @@ export async function notifyReviewersOfAwaitingPayment(supabase: SupabaseClient,
  * discovery.
  */
 export async function notifyReviewersOfModuleAwaitingPayment(supabase: SupabaseClient, requestId: string): Promise<void> {
-  const { data: reviewers, error: reviewersError } = await supabase.from("users").select("id").eq("role", "reviewer");
-  if (reviewersError) throw new Error(`notifyReviewersOfModuleAwaitingPayment: failed to load reviewers: ${reviewersError.message}`);
+  const reviewers = await loadNotifiableReviewers(supabase);
 
   if ((reviewers ?? []).length > 0) {
     const { error: notifError } = await supabase.from("notifications").insert(
