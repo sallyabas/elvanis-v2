@@ -713,7 +713,7 @@ export default async function LandingPage() {
               },
               {
                 q: "Is my data safe?",
-                a: "Your evidence is sent to Groq, our named AI provider, to draft findings — it's never used to train any model, and we never share it with any other third party. Everything is stored in Supabase, access-restricted to your account and the human reviewers on your review. You can request deletion of your account and data at any time. Full detail in our Privacy Policy.",
+                a: "Your evidence is sent to Groq, our named AI provider, to draft findings — it's never used to train any model. In some cases, limited data may also be shared with other trusted third-party providers to help generate or independently verify findings — for example, an additional AI processing service or a research tool — and each only receives what's needed for that specific purpose. Everything is stored in Supabase, access-restricted to your account and the human reviewers on your review. You can request deletion of your account and data at any time. Full detail in our Privacy Policy.",
               },
               {
                 q: "How long does it actually take?",

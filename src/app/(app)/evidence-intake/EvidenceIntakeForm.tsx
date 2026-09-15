@@ -595,11 +595,17 @@ export function EvidenceIntakeForm({
         </div>
       )}
 
-      {/* Upload-point micro-copy (spec §1.8, confirmed 2026-08-03) — shown right where evidence is entered, not buried in a footer link. */}
+      {/* Upload-point micro-copy (spec §1.8, confirmed 2026-08-03) — shown right where evidence is entered, not buried in a footer link.
+          Corrected 2026-09-15 (same false claim found and fixed on /privacy and the landing page FAQ the same day) — this dropped the
+          "we never share this with any other third party" line, which was untrue: Anthropic (second-opinion feature) and Tavily
+          (Commercial-lens research) are both real, active recipients of finding/company data. Replaced with the same general,
+          no-vendor-named wording already approved for /privacy. */}
       <p className="rounded-md border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
         What you submit here is analyzed by Groq, our AI provider, to draft findings — every finding is reviewed by a
-        human before you see it. We never share this with any other third party, and it&apos;s never used to train
-        any AI model.
+        human before you see it, and it&apos;s never used to train any AI model. In some cases, limited data may also
+        be shared with other trusted third-party providers to help generate or independently verify findings (for
+        example, additional AI processing or research tools) — each only receives what&apos;s needed for that
+        purpose.
       </p>
 
       {FIELD_SETS.map((set) => (

@@ -2574,6 +2574,18 @@ The live privacy policy's "How your evidence is analyzed" section said *"We do n
 
 **Deliberately not built this pass, per explicit instruction**: the data-deletion process remains flagged, not implemented — a real open decision for the founder (build a real automated mechanism, or rewrite the policy's "Requesting deletion" section to honestly describe the current manual-only reality) still pending.
 
+## Same false third-party-sharing claim found on two more live surfaces, fixed (confirmed 2026-09-15)
+
+Direct founder finding, following the 2026-09-14 privacy-policy fix above: the landing page's own FAQ ("Is my data safe?") still carried the exact same false claim just fixed on `/privacy` — "we never share it with any other third party." Investigated for any other live instance before fixing just the one flagged, per this codebase's own standing discipline — grepped every `.ts`/`.tsx` file for the phrase and found a **second, unreported instance**: [EvidenceIntakeForm.tsx](<src/app/(app)/evidence-intake/EvidenceIntakeForm.tsx>)'s own upload-point micro-copy ("What you submit here is analyzed by Groq... We never share this with any other third party..."), rendered directly on the real evidence-submission form — arguably the more important of the two, since it's shown at the exact moment a client is submitting real evidence.
+
+**Both fixed with the same, already-approved general wording** (no vendor named, consistent with `/privacy`'s 2026-09-14 correction): the landing page FAQ ([page.tsx](src/app/page.tsx)) and the Evidence Intake micro-copy both now read a version of *"In some cases, limited data may also be shared with other trusted third-party providers to help generate or independently verify findings (for example, additional AI processing or research tools) — each only receives what's needed for that purpose,"* condensed appropriately for each surface's own format.
+
+**A full sweep confirmed no fourth instance exists** — grepped every "third party"/"third-party" occurrence across `src/`; every remaining hit is either the two now-corrected surfaces' own new copy, the already-correct `/privacy` text, or genuinely unrelated content (the ideas-backlog source-type label, `ai-governance-framework.ts`'s own lens content about vendor risk, `procurement-categories.ts`'s own procurement question text).
+
+**Verified live, all three surfaces, real accounts, not assumed from the diff alone**: `/privacy` re-confirmed still correct; the landing page FAQ's "Is my data safe?" `<details>` opened and the exact corrected text confirmed present; the Evidence Intake micro-copy confirmed via a genuinely fresh, disposable test account with zero prior reports/submissions (needed specifically to bypass the re-audit payment gate and the "audit under review" lock, both of which hide the plain form on any account with real history) — the corrected text renders, the old false claim genuinely gone. Disposable test account deleted afterward.
+
+`tsc --noEmit`, `eslint src/ --quiet`, and a full `npm run build` all clean. Temporary `/api/debug-set-session` route created and deleted, never committed — confirmed via `git status --short` before this writeup.
+
 ## Working style
 
 
